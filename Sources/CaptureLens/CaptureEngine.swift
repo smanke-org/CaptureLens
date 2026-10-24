@@ -155,13 +155,13 @@ final class CaptureEngine {
         if copy, let png = Flattener.png(item) { Clipboard.copy(png: png) }
         // Holding ⌥ while picking the area or window opens this one in the library, whatever
         // the settings. (Not ⌥ held now: the default shortcuts include it.)
-        let after = optionHeld ? .openLibrary : preset?.afterCapture ?? prefs.afterCapture
+        let chosen = preset?.afterCapture ?? prefs.afterCapture
+        let after = optionHeld ? chosen.openingLibrary : chosen
         optionHeld = false
-        switch after {
-        case .preview: CapturePreview.shared.show(item, near: frame, copied: copy)
-        case .openLibrary: LibraryWindow.shared.show(select: item.id)
-        case .nothing: if copy { Notice.shared.show("Saved and copied", symbol: "camera.viewfinder", near: frame) }
-        }
+        if after.opensLibrary { LibraryWindow.shared.show(select: item.id) }
+        // After the library, so the preview floats over it.
+        if after.showsPreview { CapturePreview.shared.show(item, near: frame, copied: copy) }
+        if after == .nothing && copy { Notice.shared.show("Saved and copied", symbol: "camera.viewfinder", near: frame) }
     }
 }
 

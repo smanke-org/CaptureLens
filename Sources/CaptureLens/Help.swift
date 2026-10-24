@@ -98,7 +98,7 @@ enum Help {
             ]),
             .heading("What happens next"),
             .text("The capture goes into the library, and, if you like, onto the clipboard (Settings › Capture). A preview slides into the corner of the screen: click it to open the capture, or drag it straight into another app."),
-            .text("To have every capture open in the library right away instead, choose \"Open Captures in Library\" in the menu bar menu (or \"After capturing\" in Settings › Capture). A preset can choose for itself, and holding ⌥ as you click or finish dragging opens just that one."),
+            .text("To have every capture open in the library right away as well, choose \"Open Captures in Library\" in the menu bar menu, or pick in Settings › Capture › After capturing: a preview, a preview and the library, the library alone, or nothing. A preset can choose for itself, and holding ⌥ as you click or finish dragging opens just that one in the library."),
             .heading("The pointer"),
             .text("The mouse pointer is kept as a separate layer instead of being drawn into the picture. In the library, show or hide it, drag it somewhere else, or make it bigger. It's added when you copy, drag or save the capture."),
             .heading("Delayed and exact-size captures"),

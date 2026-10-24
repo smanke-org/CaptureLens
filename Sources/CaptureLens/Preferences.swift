@@ -5,15 +5,22 @@ import SwiftUI
 
 /// What happens on screen once a capture is saved.
 enum AfterCapture: String, Codable, CaseIterable {
-    case preview, openLibrary, nothing
+    case preview, previewAndLibrary, openLibrary, nothing
 
     var title: String {
         switch self {
         case .preview: "Show a preview in the corner"
+        case .previewAndLibrary: "Show a preview and open it in the library"
         case .openLibrary: "Open it in the library"
         case .nothing: "Nothing (just play the sound)"
         }
     }
+
+    var showsPreview: Bool { self == .preview || self == .previewAndLibrary }
+    var opensLibrary: Bool { self == .openLibrary || self == .previewAndLibrary }
+
+    /// The same choice with the library opening too (holding ⌥), keeping a preview if it had one.
+    var openingLibrary: AfterCapture { showsPreview ? .previewAndLibrary : .openLibrary }
 }
 
 /// Where the library syncs through. The same on every Mac (a synced setting), so a capture
@@ -125,6 +132,7 @@ struct CapturePreset: Codable, Identifiable, Equatable {
         }
         switch afterCapture {
         case .openLibrary: parts.append("opens in library")
+        case .previewAndLibrary: parts.append("preview + library")
         case .preview: parts.append("shows preview")
         case .nothing: parts.append("no preview")
         case nil: break

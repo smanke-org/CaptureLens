@@ -239,7 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(item("Import Pictures…", #selector(importPictures)))
         menu.addItem(toggle("Copy Captures to Clipboard", prefs.copyToClipboard, #selector(toggleClipboard)))
-        menu.addItem(toggle("Open Captures in Library", prefs.afterCapture == .openLibrary, #selector(toggleOpenInLibrary)))
+        menu.addItem(toggle("Open Captures in Library", prefs.afterCapture.opensLibrary, #selector(toggleOpenInLibrary)))
 
         menu.addItem(.separator())
         let helpEntry = NSMenuItem(title: "CaptureLens Help", action: #selector(showHelp), keyEquivalent: "")
@@ -339,7 +339,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func toggleClipboard() { Preferences.shared.copyToClipboard.toggle() }
     @objc func toggleOpenInLibrary() {
         let prefs = Preferences.shared
-        prefs.afterCapture = prefs.afterCapture == .openLibrary ? .preview : .openLibrary
+        // Keeps the preview as it was: on with the preview, the preview stays too.
+        switch prefs.afterCapture {
+        case .preview: prefs.afterCapture = .previewAndLibrary
+        case .previewAndLibrary, .openLibrary: prefs.afterCapture = .preview
+        case .nothing: prefs.afterCapture = .openLibrary
+        }
     }
     @objc func allowScreenRecording() {
         if !ScreenAccess.request() { ScreenAccess.openSettings() }

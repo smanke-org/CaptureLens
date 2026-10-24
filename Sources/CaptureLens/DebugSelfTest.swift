@@ -104,6 +104,8 @@ enum DebugSelfTest {
     /// Settings that sync survive the trip through a sealed record; per-Mac ones stay out.
     private static func settingsSyncRoundTrip(_ note: (String) -> Void) {
         let prefs = Preferences.shared
+        let originalAfter = prefs.afterCapture
+        defer { prefs.afterCapture = originalAfter }
         prefs.copyToClipboard = false
         prefs.afterCapture = .openLibrary
         var first = prefs.presets[0]
