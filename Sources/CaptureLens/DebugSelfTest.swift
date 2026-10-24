@@ -69,6 +69,11 @@ enum DebugSelfTest {
 
             let window = LibraryWindow.shared
             window.show(select: store.items.last?.id)
+            // `CAPTURELENS_DEBUG_WINDOW_WIDTH` renders the library at that width (narrow layouts).
+            if let width = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_WINDOW_WIDTH"].flatMap(Double.init),
+               let win = window.window {
+                win.setFrame(CGRect(x: 100, y: 100, width: width, height: 820), display: true)
+            }
             try? await Task.sleep(for: .seconds(2))
             render(window.window, to: out.appending(path: "library.png"))
             window.state.filter.tags = ["work"]

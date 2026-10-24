@@ -161,7 +161,7 @@ enum Help {
             .heading("Filters"),
             .text("The buttons above the captures narrow the list by date, type, tags, app and website; click × on one to clear it. The sidebar has quick lists for favorites, the last 7 days, captures with notes, and each tag, app and website."),
             .heading("Tags and notes"),
-            .text("Type a tag and press Return to add it (commas add several). Right-click a tag in the sidebar to rename it everywhere. More Info holds notes of any length; they're searchable too."),
+            .text("Type a tag and press Return to add it, or click one of your existing tags listed below the field; typing narrows the list (commas add several at once). Right-click a tag in the sidebar to rename it everywhere. More Info holds notes of any length; they're searchable too."),
             .heading("Text in a capture"),
             .text("Select text right in the picture and copy it, as in Preview. \"Text in the capture\" in the details lists all of it."),
             .keys([
