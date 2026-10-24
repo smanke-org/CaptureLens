@@ -160,6 +160,28 @@ enum DebugSelfTest {
         note("zoom: fitted \(String(format: "%.2f", fitted)), set 2 → \(two), step in → \(up), two steps out → \(zoom.magnification)")
         try? await Task.sleep(for: .milliseconds(400))
         render(window.window, to: out.appending(path: "zoomed.png"))
+        func findZoomer(_ view: NSView?) -> ZoomingScrollView? {
+            guard let view else { return nil }
+            if let hit = view as? ZoomingScrollView { return hit }
+            for sub in view.subviews { if let hit = findZoomer(sub) { return hit } }
+            return nil
+        }
+        if let zoomer = findZoomer(window.window?.contentView) {
+            func wheel(_ lines: Int32, precise: Bool = false, shift: Bool = false) {
+                guard let cg = CGEvent(scrollWheelEvent2Source: nil, units: precise ? .pixel : .line, wheelCount: 1, wheel1: lines, wheel2: 0, wheel3: 0) else { return }
+                if shift { cg.flags = .maskShift }
+                if let event = NSEvent(cgEvent: cg) { zoomer.scrollWheel(with: event) }
+            }
+            let start = zoomer.magnification
+            wheel(3); let up = zoomer.magnification
+            wheel(-3); wheel(-3); let down = zoomer.magnification
+            wheel(5, shift: true); let shifted = zoomer.magnification
+            wheel(40, precise: true); let pad = zoomer.magnification
+            note(String(format: "scroll zoom: start %.2f, wheel up %.2f, wheel down twice %.2f, shift-scroll %.2f (unchanged), trackpad %.2f, slider follows %.2f",
+                        start, up, down, shifted, pad, CanvasZoom.shared.magnification))
+        } else {
+            note("scroll zoom: no zooming scroll view found")
+        }
 
         // Drive the layer as a person would.
         func find(_ view: NSView?) -> AnnotationLayerView? {
