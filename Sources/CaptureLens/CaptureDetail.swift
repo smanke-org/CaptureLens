@@ -49,8 +49,12 @@ private struct SingleCaptureView: View {
                 } else {
                     AnnotationToolbar()
                     Divider()
-                    CaptureCanvas(item: item, fitRequest: zoomToFit, editor: editorState)
-                        .frame(minHeight: 200)
+                    HStack(spacing: 0) {
+                        ToolPalette()
+                        Divider()
+                        CaptureCanvas(item: item, fitRequest: zoomToFit, editor: editorState)
+                    }
+                    .frame(minHeight: 200)
                 }
                 HStack(spacing: 12) {
                     Picker("", selection: $editor.showResult) {
