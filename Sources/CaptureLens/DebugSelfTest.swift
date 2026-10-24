@@ -933,7 +933,9 @@ private protocol NSHostingViewProtocol {}
 extension NSHostingView: NSHostingViewProtocol {}
 /// Short test movies: colored frames with their number written on them.
 enum DebugMovie {
-    static func write(to url: URL, seconds: Double, startFrame: Int, size: CGSize = CGSize(width: 640, height: 360)) async -> Bool {
+    /// With `background`, each frame shows that picture with a pointer gliding across it.
+    static func write(to url: URL, seconds: Double, startFrame: Int, size: CGSize = CGSize(width: 640, height: 360),
+                      background: CGImage? = nil) async -> Bool {
         try? FileManager.default.removeItem(at: url)
         guard let writer = try? AVAssetWriter(outputURL: url, fileType: .mp4) else { return false }
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
@@ -959,6 +961,18 @@ enum DebugMovie {
                                    space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                    bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) {
                 let n = startFrame + i
+                if let background {
+                    ctx.draw(background, in: CGRect(origin: .zero, size: size))
+                    let t = CGFloat(i) / CGFloat(max(count - 1, 1))
+                    let p = CGPoint(x: size.width * (0.15 + 0.7 * t), y: size.height * (0.75 - 0.45 * sin(t * .pi)))
+                    ctx.setFillColor(NSColor.systemYellow.withAlphaComponent(0.35).cgColor)
+                    ctx.fillEllipse(in: CGRect(x: p.x - 22, y: p.y - 22, width: 44, height: 44))
+                    ctx.setFillColor(NSColor.black.cgColor)
+                    ctx.fillEllipse(in: CGRect(x: p.x - 6, y: p.y - 6, width: 12, height: 12))
+                    CVPixelBufferUnlockBaseAddress(buffer, [])
+                    adaptor.append(buffer, withPresentationTime: CMTime(value: CMTimeValue(i), timescale: 30))
+                    continue
+                }
                 let hue = CGFloat(n % 120) / 120
                 ctx.setFillColor(NSColor(hue: hue, saturation: 0.35, brightness: 0.95, alpha: 1).cgColor)
                 ctx.fill(CGRect(origin: .zero, size: size))

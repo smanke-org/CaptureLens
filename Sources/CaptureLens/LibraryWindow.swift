@@ -279,11 +279,43 @@ struct LibraryToolbar: ToolbarContent {
 
 // MARK: - Sidebar
 
+/// A sidebar heading that folds its list away or opens it again: click anywhere on it.
+/// Folded, it says how many entries are hidden.
+private struct FoldingHeader: View {
+    let title: String
+    let count: Int
+    @Binding var open: Bool
+
+    var body: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) { open.toggle() }
+        } label: {
+            HStack(spacing: 4) {
+                Text(title)
+                if !open { Text("\(count)").foregroundStyle(.tertiary).monospacedDigit() }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .rotationEffect(.degrees(open ? 90 : 0))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(open ? "Hide the \(title.lowercased()) list" : "Show the \(title.lowercased()) list")
+        .accessibilityLabel("\(title), \(open ? "expanded" : "collapsed")")
+    }
+}
+
 struct LibrarySidebar: View {
     @Bindable var state: LibraryState
     @State private var store = LibraryStore.shared
     @State private var renamingTag: String?
     @State private var newTagName = ""
+    /// Each list can be folded away from its heading; they start open.
+    @AppStorage("library.sidebar.tagsOpen", store: AppDefaults.store) private var tagsOpen = true
+    @AppStorage("library.sidebar.appsOpen", store: AppDefaults.store) private var appsOpen = true
+    @AppStorage("library.sidebar.sitesOpen", store: AppDefaults.store) private var sitesOpen = true
 
     var body: some View {
         let items = store.items
@@ -296,8 +328,8 @@ struct LibrarySidebar: View {
             }
             let tags = LibraryQuery.tagCounts(items)
             if !tags.isEmpty {
-                Section("Tags") {
-                    ForEach(tags, id: \.tag) { entry in
+                Section {
+                    if tagsOpen { ForEach(tags, id: \.tag) { entry in
                         row(entry.tag, "tag", entry.count)
                             .tag(LibraryState.Section.tag(entry.tag))
                             .contextMenu {
@@ -306,28 +338,34 @@ struct LibrarySidebar: View {
                                     store.setTags(Set(items.map(\.id)), remove: [entry.tag])
                                 }
                             }
-                    }
+                    } }
+                } header: {
+                    FoldingHeader(title: "Tags", count: tags.count, open: $tagsOpen)
                 }
             }
             let apps = LibraryQuery.appCounts(items)
             if !apps.isEmpty {
-                Section("Apps") {
-                    ForEach(apps.prefix(30), id: \.key) { app in
+                Section {
+                    if appsOpen { ForEach(apps.prefix(30), id: \.key) { app in
                         Label {
                             HStack { Text(app.name); Spacer(); Text("\(app.count)").foregroundStyle(.secondary).monospacedDigit() }
                         } icon: {
                             AppIcon(bundleID: app.key)
                         }
                         .tag(LibraryState.Section.app(app.key))
-                    }
+                    } }
+                } header: {
+                    FoldingHeader(title: "Apps", count: apps.count, open: $appsOpen)
                 }
             }
             let sites = LibraryQuery.websiteCounts(items)
             if !sites.isEmpty {
-                Section("Websites") {
-                    ForEach(sites.prefix(30), id: \.site) { site in
+                Section {
+                    if sitesOpen { ForEach(sites.prefix(30), id: \.site) { site in
                         row(site.site, "globe", site.count).tag(LibraryState.Section.site(site.site))
-                    }
+                    } }
+                } header: {
+                    FoldingHeader(title: "Websites", count: sites.count, open: $sitesOpen)
                 }
             }
         }

@@ -46,6 +46,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DebugHelpTest.run(snapshot: snapshot, delegate: self)
             return
         }
+        if let out = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SHOTS"] {
+            DebugShots.run(out: URL(fileURLWithPath: out))
+            return
+        }
         if let out = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SNAGIT_EVAL"] {
             DebugSelfTest.snagitEval(out: URL(fileURLWithPath: out))
             return

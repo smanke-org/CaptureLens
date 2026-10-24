@@ -546,9 +546,21 @@ struct CaptureCanvas: NSViewRepresentable {
         }
 
         /// Zooms so the whole picture shows, never past 100%.
+        private var fitTries = 0
+
         func fit() {
             guard let scroll, canvas.bounds.width > 0 else { return }
             let available = scroll.contentSize
+            // Just shown, the view may not have its size yet; fitting then would shrink the
+            // picture to almost nothing. Wait for it.
+            guard available.width > 80, available.height > 80 else {
+                if fitTries < 20 {
+                    fitTries += 1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.fit() }
+                }
+                return
+            }
+            fitTries = 0
             let factor = min(1, min((available.width - 24) / canvas.bounds.width, (available.height - 24) / canvas.bounds.height))
             scroll.magnification = max(scroll.minMagnification, factor)
         }

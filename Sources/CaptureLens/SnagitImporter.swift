@@ -78,6 +78,21 @@ final class SnagitImporter {
 
     func remove(_ url: URL) { folders.removeAll { $0.url == url } }
 
+    /// "~/Pictures/Snagit/…", for showing.
+    static func shortPath(_ url: URL) -> String {
+        var path = url.path
+        #if DEBUG
+        // The screenshots' made-up folders read like real ones.
+        if let fake = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SHOTS"].flatMap({ _ in path.range(of: "CaptureLens Shot Snagit/") }) {
+            path = NSHomeDirectory() + "/" + path[fake.upperBound...].replacingOccurrences(of: "OneDrive/", with: "Library/CloudStorage/OneDrive-Personal/")
+        }
+        if ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SHOTS"] != nil, path.contains("CaptureLens Shot Videos") {
+            path = NSHomeDirectory() + "/Movies/CaptureLens Imports"
+        }
+        #endif
+        return path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+    }
+
     #if DEBUG
     /// Exactly these folders, counted now, for the self-test.
     func debugUse(_ urls: [URL], videoFolder: URL) {
@@ -427,7 +442,9 @@ final class SnagitImportWindow: NSObject {
                                   backing: .buffered, defer: false)
             window.title = "Import from Snagit"
             window.isReleasedWhenClosed = false
-            window.contentViewController = NSHostingController(rootView: SnagitImportView())
+            let hosting = NSHostingController(rootView: SnagitImportView())
+            hosting.sizingOptions = [.preferredContentSize]
+            window.contentViewController = hosting
             window.center()
             self.window = window
         }
@@ -459,10 +476,10 @@ private struct SnagitImportView: View {
             case .done:
                 done
             }
-            Spacer(minLength: 0)
         }
         .padding(20)
-        .frame(width: 560, height: 520, alignment: .topLeading)
+        .frame(width: 560, alignment: .topLeading)
+        .frame(minHeight: 200, alignment: .top)
     }
 
     @ViewBuilder private var ready: some View {
@@ -475,8 +492,8 @@ private struct SnagitImportView: View {
                     HStack {
                         Image(systemName: "folder")
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(folder.url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")).lineLimit(1).truncationMode(.middle)
-                            Text("\(folder.captures) capture files\(folder.videos > 0 ? ", \(folder.videos) videos" : "")")
+                            Text(SnagitImporter.shortPath(folder.url)).lineLimit(1).truncationMode(.middle)
+                            Text("\(folder.captures) capture file\(folder.captures == 1 ? "" : "s")\(folder.videos > 0 ? ", \(folder.videos) video\(folder.videos == 1 ? "" : "s")" : "")")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -492,8 +509,8 @@ private struct SnagitImportView: View {
         if videos > 0 {
             Toggle(isOn: $importer.includeVideos) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Bring in \(videos) videos (\(ByteCountFormatter.string(fromByteCount: videoBytes, countStyle: .file)))")
-                    Text("Copied to \(importer.videoFolder.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")). They play in the library but stay on this Mac: they never sync. On the same disk, copies take no extra room.")
+                    Text("Bring in \(videos) video\(videos == 1 ? "" : "s") (\(ByteCountFormatter.string(fromByteCount: videoBytes, countStyle: .file)))")
+                    Text("Copied to \(SnagitImporter.shortPath(importer.videoFolder)). They play in the library but stay on this Mac: they never sync. On the same disk, copies take no extra room.")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
