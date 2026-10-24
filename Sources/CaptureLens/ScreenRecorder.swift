@@ -47,7 +47,17 @@ final class ScreenRecorder: NSObject {
     @ObservationIgnored private var outline: NSWindow?
     @ObservationIgnored private var finished: CheckedContinuation<Void, Never>?
     @ObservationIgnored private var started: CheckedContinuation<Bool, Never>?
+    /// The current piece said it started. It can say so before `startCapture` even returns,
+    /// so it's kept rather than only passed to whoever is waiting.
+    @ObservationIgnored private var didStart = false
     @ObservationIgnored private var failure: String?
+    /// Frames are written by the recording output; this takes them too, so ScreenCaptureKit
+    /// doesn't log every one as dropped.
+    @ObservationIgnored private let sink = FrameSink()
+    #if DEBUG
+    /// The self-test's own window, kept in its recording.
+    @ObservationIgnored var debugKeepWindow: Int?
+    #endif
     let overlay = RecordingOverlay()
     let camera = CameraBubble()
 
@@ -138,7 +148,11 @@ final class ScreenRecorder: NSObject {
             }
             // CaptureLens's own windows stay out, except the camera bubble and the click rings.
             let own = content.applications.filter { $0.processID == getpid() }
-            let shown = Set([overlay.windowNumber, camera.windowNumber].compactMap { $0 }.map { CGWindowID($0) })
+            var numbers = [overlay.windowNumber, camera.windowNumber]
+            #if DEBUG
+            numbers.append(debugKeepWindow)
+            #endif
+            let shown = Set(numbers.compactMap { $0 }.map { CGWindowID($0) })
             let keep = content.windows.filter { shown.contains($0.windowID) }
             let filter = SCContentFilter(display: display, excludingApplications: own, exceptingWindows: keep)
 
@@ -163,6 +177,7 @@ final class ScreenRecorder: NSObject {
             }
             let stream = SCStream(filter: filter, configuration: config, delegate: self)
             self.stream = stream
+            try stream.addStreamOutput(sink, type: .screen, sampleHandlerQueue: FrameSink.queue)
             try addSegment()
             try await stream.startCapture()
             guard await awaitStart() else { throw GrabError(message: failure ?? "The recording didn't start.") }
@@ -188,6 +203,8 @@ final class ScreenRecorder: NSObject {
         config.outputFileType = .mp4
         config.videoCodecType = .h264
         let output = SCRecordingOutput(configuration: config, delegate: self)
+        didStart = false
+        failure = nil
         try stream.addRecordingOutput(output)
         self.output = output
         segments.append(url)
@@ -195,7 +212,8 @@ final class ScreenRecorder: NSObject {
     }
 
     private func awaitStart() async -> Bool {
-        await withCheckedContinuation { continuation in
+        if didStart { return true }
+        return await withCheckedContinuation { continuation in
             started = continuation
             // Give up if nothing is heard (no frames, a stuck stream).
             DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
@@ -401,6 +419,25 @@ final class ScreenRecorder: NSObject {
     }
 
     func debugReset() async { await tearDown(discard: true) }
+
+    /// Records `frame` (global coordinates, on the main screen) for `seconds`, as Record would
+    /// after the countdown, and saves it. False if it didn't start.
+    func debugRecord(frame: CGRect, seconds: Double) async -> Bool {
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(frame) }) else { return false }
+        region = ScreenRegion(displayID: screen.displayID,
+                              rect: CGRect(x: frame.minX - screen.frame.minX, y: screen.frame.maxY - frame.maxY, width: frame.width, height: frame.height))
+        self.frame = frame
+        windows = []
+        pickedWindow = nil
+        preset = CapturePreset(name: "Test", mode: .recording, afterCapture: .nothing)
+        phase = .countingDown
+        await startStream()
+        guard phase == .recording else { return false }
+        try? await Task.sleep(for: .seconds(seconds))
+        stop()
+        for _ in 0..<80 where phase != .idle { try? await Task.sleep(for: .milliseconds(250)) }
+        return true
+    }
     #endif
 
     private final class DashedFrame: NSView {
@@ -417,6 +454,7 @@ final class ScreenRecorder: NSObject {
 extension ScreenRecorder: SCRecordingOutputDelegate, SCStreamDelegate {
     nonisolated func recordingOutputDidStartRecording(_ recordingOutput: SCRecordingOutput) {
         Task { @MainActor in
+            self.didStart = true
             guard let waiting = self.started else { return }
             self.started = nil
             waiting.resume(returning: true)
@@ -451,6 +489,12 @@ extension ScreenRecorder: SCRecordingOutputDelegate, SCStreamDelegate {
 
 private extension CGRect {
     var area: CGFloat { isNull ? 0 : width * height }
+}
+
+/// Takes the stream's frames and lets them go; the recording output is what saves them.
+private final class FrameSink: NSObject, SCStreamOutput {
+    static let queue = DispatchQueue(label: "CaptureLens.FrameSink", qos: .utility)
+    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {}
 }
 
 // MARK: - The control bar

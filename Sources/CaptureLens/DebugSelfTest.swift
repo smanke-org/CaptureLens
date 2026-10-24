@@ -454,6 +454,41 @@ enum DebugSelfTest {
         }
         note("keys shown: ⌘⇧4 → \(key("4", 21, [.command, .shift]) ?? "nil"), a → \(key("a", 0, []) ?? "nil"), Return → \(key("\r", 36, []) ?? "nil"), ⌥← → \(key("", 123, [.option]) ?? "nil")")
 
+        // A real recording, of nothing but this test's own window on top of everything, with no
+        // sound: only when this copy already may record the screen (no prompt).
+        if CGPreflightScreenCaptureAccess(), let screen = NSScreen.main {
+            Preferences.shared.recordSystemAudio = false
+            Preferences.shared.recordMicrophone = false
+            Preferences.shared.recordCamera = false
+            let frame = CGRect(x: screen.frame.midX - 240, y: screen.frame.midY - 135, width: 480, height: 270)
+            let test = NSWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+            test.level = .screenSaver
+            test.isOpaque = true
+            test.backgroundColor = .systemTeal
+            test.collectionBehavior = [.canJoinAllSpaces, .stationary]
+            let label = NSTextField(labelWithString: "CaptureLens recording test")
+            label.font = .systemFont(ofSize: 28, weight: .bold)
+            label.frame = CGRect(x: 30, y: 110, width: 420, height: 40)
+            test.contentView?.addSubview(label)
+            test.orderFrontRegardless()
+            var tick = 0
+            let timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { _ in
+                tick += 1
+                MainActor.assumeIsolated { test.backgroundColor = tick % 2 == 0 ? .systemTeal : .systemOrange }
+            }
+            ScreenRecorder.shared.debugKeepWindow = test.windowNumber
+            let before = Set(store.items.map(\.id))
+            let started = await ScreenRecorder.shared.debugRecord(frame: frame, seconds: 2)
+            timer.invalidate()
+            test.orderOut(nil)
+            ScreenRecorder.shared.debugKeepWindow = nil
+            let made = store.items.first { !before.contains($0.id) && $0.kind == .video }
+            note("live recording: started \(started), saved \(made != nil), \(String(format: "%.1f", made?.video?.duration ?? 0)) s, \(made.map { "\($0.pixelWidth)×\($0.pixelHeight)" } ?? "-")")
+            if let made, let png = store.pngData(made.id) { try? png.write(to: out.appending(path: "live-recording.png")) }
+        } else {
+            note("live recording: skipped (this copy may not record the screen)")
+        }
+
         if let bar = ScreenRecorder.shared.debugShowBar(over: CGRect(x: 200, y: 300, width: 640, height: 360)) {
             try? await Task.sleep(for: .seconds(1))
             render(bar, to: out.appending(path: "record-bar.png"))
