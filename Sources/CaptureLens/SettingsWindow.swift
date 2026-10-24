@@ -677,7 +677,7 @@ struct SyncPassphraseForm: View {
                 }
                 reset(to: .change)
             } catch {
-                self.error = error.localizedDescription
+                self.error = CloudSync.message(for: error)
                 if case SettingsSync.SyncError.alreadySetUp = error { reset(to: .enter); self.error = error.localizedDescription }
             }
         }

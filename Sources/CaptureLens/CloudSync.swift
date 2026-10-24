@@ -473,12 +473,22 @@ final class CloudSync: CKSyncEngineDelegate {
     }
 
     private func note(_ error: Error) {
-        guard let error = error as? CKError else { return }
+        guard error is CKError else { return }
+        lastError = Self.message(for: error)
+    }
+
+    /// An iCloud error in words for Settings.
+    static func message(for error: Error) -> String {
+        guard let error = error as? CKError else { return error.localizedDescription }
+        // Seen only before a new record type is published to the Production environment.
+        if error.localizedDescription.contains("production schema") {
+            return "iCloud isn't set up for CaptureLens yet: its record types haven't been published to Production in the CloudKit Console. Once they are, try again."
+        }
         switch error.code {
-        case .quotaExceeded: lastError = "Your iCloud storage is full, so CaptureLens can't sync."
-        case .notAuthenticated: lastError = "Sign in to iCloud in System Settings to sync."
-        case .networkFailure, .networkUnavailable: lastError = "Can't reach iCloud right now. CaptureLens will try again."
-        default: lastError = error.localizedDescription
+        case .quotaExceeded: return "Your iCloud storage is full, so CaptureLens can't sync."
+        case .notAuthenticated: return "Sign in to iCloud in System Settings to sync."
+        case .networkFailure, .networkUnavailable: return "Can't reach iCloud right now. CaptureLens will try again."
+        default: return error.localizedDescription
         }
     }
 
