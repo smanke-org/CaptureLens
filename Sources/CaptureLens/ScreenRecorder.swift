@@ -400,7 +400,7 @@ final class ScreenRecorder: NSObject {
     }
 
     private func showPanel() {
-        let panel = FloatingPanel(title: "Record", size: CGSize(width: 380, height: 120), resizable: false)
+        let panel = FloatingPanel(title: "Record", size: CGSize(width: 480, height: 120), resizable: false)
         panel.host(RecordingBar())
         panel.place(near: frame)
         panel.orderFrontRegardless()
@@ -515,6 +515,22 @@ private struct RecordingBar: View {
                            help: "Show the camera in a round bubble; drag it where you like")
                     toggle("Clicks", "cursorarrow.click", $prefs.showClicks, help: "Show a ring wherever you click")
                     toggle("Keys", "command", $prefs.showKeys, help: "Show the shortcuts and special keys you press (not what you type)")
+                    Menu {
+                        Picker("Frame Rate", selection: $prefs.recordFrameRate) {
+                            ForEach(Preferences.frameRates, id: \.rate) { Text($0.title).tag($0.rate) }
+                        }
+                        .pickerStyle(.inline)
+                    } label: {
+                        VStack(spacing: 3) {
+                            Text("\(prefs.recordFrameRate)").font(.system(size: 15, weight: .semibold)).monospacedDigit()
+                            Text("fps").font(.caption2)
+                        }
+                        .frame(width: 44, height: 40)
+                    }
+                    .menuStyle(.button)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("Frames a second: fewer make a smaller video")
                 }
                 HStack {
                     Button("Cancel") { recorder.cancel() }.keyboardShortcut(.cancelAction)
@@ -552,7 +568,7 @@ private struct RecordingBar: View {
             }
         }
         .padding(14)
-        .frame(width: 380)
+        .frame(width: 480)
     }
 
     private func toggle(_ title: String, _ symbol: String, _ value: Binding<Bool>, help: String) -> some View {

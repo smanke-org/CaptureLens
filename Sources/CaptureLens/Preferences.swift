@@ -215,6 +215,14 @@ final class Preferences {
     /// Keyboard shortcuts and special keys pressed, shown at the bottom of the recording.
     var showKeys = false { didSet { save(showKeys, "showKeys") } }
     var recordFrameRate = 30 { didSet { save(recordFrameRate, "recordFrameRate") } }
+    /// The frame rates offered, with what each is good for. Fewer frames make smaller videos.
+    static let frameRates: [(rate: Int, title: String)] = [
+        (10, "10 frames a second (smallest; fine for apps and documents)"),
+        (15, "15 frames a second"),
+        (24, "24 frames a second"),
+        (30, "30 frames a second"),
+        (60, "60 frames a second (smoothest; largest)"),
+    ]
     /// Movie files go to other Macs too (their details always do).
     var syncVideos = false { didSet { save(syncVideos, "syncVideos"); if syncVideos != oldValue { syncVideosChanged() } } }
 
@@ -343,8 +351,8 @@ final class Preferences {
         recordWebAddress = bool("recordWebAddress", true)
         librarySync = bool("librarySync", true)
         libraryBackend = LibraryBackend(rawValue: string("libraryBackend")) ?? .iCloud
-        annotationStyle = codable("annotationStyle", AnnotationStyle.standard)
-        quickStyles = codable("quickStyles", AnnotationStyle.quickDefaults)
+        annotationStyle = codable("annotationStyle", AnnotationStyle.standard).drawable
+        quickStyles = codable("quickStyles", AnnotationStyle.quickDefaults).map(\.drawable)
         presets = codable("presets", CapturePreset.defaults)
         libraryHotKey = codable("libraryHotKey", Defaults.libraryHotKey)
         captureAgainHotKey = codable("captureAgainHotKey", nil as HotKey?)

@@ -351,6 +351,20 @@ enum DebugSelfTest {
         note("undo brings it back: \(editor.edits.cuts.count == 1)")
         editor.commitEdits(.none, action: "Reset")
 
+        // Selecting a black-out box must not leave the drawing style without a line: the next
+        // arrow drew as just a tip.
+        editor.style.lineWidth = 6
+        let cover = Annotation(kind: .redact, rect: CGRect(x: 400, y: 20, width: 60, height: 30), style: AnnotationStyle(color: .black, lineWidth: 0, shadow: false))
+        editor.commit(editor.annotations + [cover], action: "Test")
+        editor.select(cover.id)
+        editor.pick(.draw(.arrow))
+        send(.leftMouseDown, CGPoint(x: 120, y: 260)); send(.leftMouseDragged, CGPoint(x: 260, y: 200)); send(.leftMouseUp, CGPoint(x: 260, y: 200))
+        let drawnArrow = editor.annotations.last { $0.kind == .arrow }
+        note("arrow after selecting a cover: line width \(drawnArrow.map { "\($0.style.lineWidth)" } ?? "none")")
+        note("saved style with no line repaired: \(AnnotationStyle(color: .red, lineWidth: 0, shadow: false).drawable.lineWidth)")
+        editor.pick(.select)
+        editor.commit([], action: "Reset")
+
         // Smart Redact on a capture full of things to hide.
         if let image = DebugImage.make(text: "Contact jane.doe@example.com\nCard 4111 1111 1111 1111\nServer 10.0.0.12", size: CGSize(width: 900, height: 300)),
            let item = store.add(image: image, kind: .region, scale: 2, source: .init(appName: "DebugHook"), cursor: nil) {
@@ -591,6 +605,7 @@ enum DebugSelfTest {
         // sound: only when this copy already may record the screen (no prompt).
         if CGPreflightScreenCaptureAccess(), let screen = NSScreen.main {
             Preferences.shared.recordSystemAudio = false
+            Preferences.shared.recordFrameRate = 10
             Preferences.shared.recordMicrophone = false
             Preferences.shared.recordCamera = false
             let frame = CGRect(x: screen.frame.midX - 240, y: screen.frame.midY - 135, width: 480, height: 270)
@@ -618,6 +633,12 @@ enum DebugSelfTest {
             let made = store.items.first { !before.contains($0.id) && $0.kind == .video }
             note("live recording: started \(started), saved \(made != nil), \(String(format: "%.1f", made?.video?.duration ?? 0)) s, \(made.map { "\($0.pixelWidth)×\($0.pixelHeight)" } ?? "-")")
             if let made, let png = store.pngData(made.id) { try? png.write(to: out.appending(path: "live-recording.png")) }
+            if let made, let url = await VideoStore.shared.playableURL(made.id),
+               let track = try? await AVURLAsset(url: url).loadTracks(withMediaType: .video).first,
+               let rate = try? await track.load(.nominalFrameRate) {
+                let bytes = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+                note("live recording at 10 fps setting: \(String(format: "%.1f", rate)) fps, \(bytes / 1024) KB")
+            }
         } else {
             note("live recording: skipped (this copy may not record the screen)")
         }

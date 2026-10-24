@@ -67,6 +67,11 @@ public struct Annotation: Codable, Identifiable, Equatable, Sendable {
         /// Hides what's under it.
         public var hides: Bool { self == .blur || self == .pixelate || self == .redact }
 
+        /// Its style is a drawing style (a color, a line width…) worth picking up when it's
+        /// selected. Covers and smart-tool marks have stand-in styles (no line at all), which
+        /// would leave the next box or arrow without one.
+        public var hasDrawingStyle: Bool { !hides && self != .move && self != .simplify }
+
         /// Drawn from one point to another rather than as a box.
         public var isLinear: Bool { self == .line || self == .arrow }
         /// Drawn freehand.
@@ -274,6 +279,16 @@ public struct AnnotationStyle: Codable, Equatable, Hashable, Sendable {
     }
 
     public static let standard = AnnotationStyle(color: .red)
+
+    /// This style, with a line that can be seen (a style saved with no line, from a cover
+    /// selected in an earlier version, drew arrows as just a tip).
+    public var drawable: AnnotationStyle {
+        guard lineWidth < 1 else { return self }
+        var copy = self
+        copy.lineWidth = AnnotationStyle.standard.lineWidth
+        copy.shadow = AnnotationStyle.standard.shadow
+        return copy
+    }
 
     /// The colors offered in the toolbar.
     public static let palette: [RGBA] = [.red, .orange, .yellow, .green, .blue, .purple, .black, .white]

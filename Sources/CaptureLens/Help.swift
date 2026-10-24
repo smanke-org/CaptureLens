@@ -171,6 +171,7 @@ enum Help {
                 ("Camera", "You, in a round bubble over the recording; drag it anywhere before or while recording"),
                 ("Clicks", "A yellow ring wherever you click (blue for a right-click)"),
                 ("Keys", "The shortcuts and keys like Return and the arrows you press, at the bottom of the video. What you type is never shown, so passwords stay out of recordings"),
+                ("fps", "Frames a second, from 10 to 60. Fewer make a smaller video: 10 or 15 suits apps, documents and web pages; 30 or 60 suits video and animation"),
             ]),
             .text("Pause and Resume leave out the time in between. The bar, the red outline and CaptureLens's other windows are never in the video."),
             .heading("In the library"),

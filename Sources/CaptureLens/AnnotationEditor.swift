@@ -160,7 +160,7 @@ final class AnnotationEditor {
     /// Selecting a mark shows its style in the toolbar, so changes apply to it.
     func select(_ id: UUID?) {
         selection = id
-        if let mark = selected, mark.style != style {
+        if let mark = selected, mark.kind.hasDrawingStyle, mark.style != style {
             // Set without restyling: it's already this mark's style.
             let keep = selection
             selection = nil

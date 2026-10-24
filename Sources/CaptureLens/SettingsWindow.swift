@@ -207,13 +207,12 @@ struct CaptureSettings: View {
                 Toggle("Show a ring where you click", isOn: $prefs.showClicks)
                 Toggle("Show shortcuts you press", isOn: $prefs.showKeys)
                 Picker("Frame rate", selection: $prefs.recordFrameRate) {
-                    Text("30 frames a second").tag(30)
-                    Text("60 frames a second").tag(60)
+                    ForEach(Preferences.frameRates, id: \.rate) { Text($0.title).tag($0.rate) }
                 }
             } header: {
                 Text("Video recording")
             } footer: {
-                Text("These are also buttons in the bar that appears before you record (the Record Video preset, {hotkey:record}). Only shortcuts and keys like Return or the arrows are shown, never what you type. The camera, microphone and shown keys need your permission the first time; macOS asks.".replacingOccurrences(of: "{hotkey:record}", with: Preferences.shared.presets.first { $0.mode == .recording }?.hotKey?.display ?? "no shortcut set"))
+                Text("These are also buttons in the bar that appears before you record (the Record Video preset, {hotkey:record}). A lower frame rate makes smaller videos: 10 or 15 is plenty for apps, documents and web pages, while video and animation look smoother at 30 or 60. Only shortcuts and keys like Return or the arrows are shown, never what you type. The camera, microphone and shown keys need your permission the first time; macOS asks.".replacingOccurrences(of: "{hotkey:record}", with: Preferences.shared.presets.first { $0.mode == .recording }?.hotKey?.display ?? "no shortcut set"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Feedback") {
