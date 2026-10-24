@@ -9,6 +9,9 @@ CaptureLens also:
 - **Captures** the whole screen, one window (even where others cover it), an area you drag out, or a frame of an
   exact size, now or after a countdown, each from its own preset and shortcut.
 - **Keeps the pointer separate**, so you can show, hide, move or resize it after the capture.
+- **Marks captures up** with boxes, arrows, text, callouts, numbered steps, a pen, a highlighter, a spotlight, a
+  magnifier and stamps, in any color and size. The marks stay separate from the picture, so they can be moved,
+  resized or edited any time, and copying or saving draws them in.
 - **Lets you select and copy text** right in the picture, with macOS's own Live Text.
 - **Organizes** with tags, favorites and notes ("More Info"), and filters by date, type, tag, app or website in
   one click.

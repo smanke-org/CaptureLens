@@ -116,6 +116,26 @@ enum Help {
             .text("Click a shortcut, then press the new keys. Delete clears it; shortcuts need ⌘, ⌥ or ⌃. Right-click a preset to duplicate, delete or try it."),
         ]),
 
+        HelpTopic(id: "annotate", title: "Annotating", symbol: "pencil.and.outline", blocks: [
+            .text("Select a capture in the library and mark it up right on the picture: boxes, ellipses, arrows, lines, text, callouts, numbered steps, a pen, a highlighter, a spotlight, a magnifier and stamps. Marks stay separate from the picture, so you can move, resize, restyle or delete them any time, and the original is never changed."),
+            .keys([
+                ("V", "Select: click a mark to select it, drag to move it, drag its handles to resize it"),
+                ("R  O  A  L", "Box, ellipse, arrow, line: drag to draw (hold ⇧ for squares, circles and 45° lines)"),
+                ("T  C", "Text and callout: click (or drag a box) and type; double-click or press Return to edit later"),
+                ("S", "Numbered step: click; steps number themselves in the order you add them"),
+                ("P  H", "Pen and highlighter: draw freehand"),
+                ("F  M", "Spotlight (dims everything else) and magnifier: drag over the spot"),
+                ("K", "Stamp: pick ✅, ⭐️, Approved and others from the toolbar, then click"),
+                ("Delete", "Delete the selected mark"),
+                ("Arrow keys", "Nudge the selected mark (with ⇧, 10 points at a time)"),
+                ("⌘Z  ⇧⌘Z", "Undo and redo (also the arrows in the toolbar)"),
+                ("Esc", "Deselect, then go back to the select tool"),
+            ]),
+            .heading("Color, size and style"),
+            .text("The color button and the size menu set how new marks look, and change the selected mark. The size menu also has bold text, filled shapes and text, shadows, and Bring to Front / Send to Back. Quick styles (the palette button) keep favorite combinations one click away; Save Current Style adds yours."),
+            .text("Copy, Save As, dragging a capture out and the thumbnails all include the marks. The eye button hides them to show the picture as captured. Marks sync with the capture to your other Macs."),
+        ]),
+
         HelpTopic(id: "naming", title: "Automatic Names", symbol: "apple.intelligence", blocks: [
             .text("Each new capture is named from what's in it, like \"Quarterly Revenue Chart\" or \"Xcode Build Error\", using Apple Intelligence on this Mac. The name appears a moment after the capture; until then it's named after the app and window."),
             .text("To rename a capture, type in its Name field. Click the Apple Intelligence button beside the name (or choose Suggest a Name from the right-click menu) for a fresh suggestion."),

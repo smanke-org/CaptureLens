@@ -1,4 +1,5 @@
 import AppKit
+import CaptureLensKit
 import Carbon.HIToolbox
 import Observation
 import SwiftUI
@@ -191,6 +192,12 @@ final class Preferences {
     /// What the library syncs through when `librarySync` is on.
     var libraryBackend = LibraryBackend.iCloud { didSet { save(libraryBackend.rawValue, "libraryBackend"); librarySyncChanged() } }
 
+    // MARK: Annotations
+    /// The style new annotations get (the last one chosen).
+    var annotationStyle = AnnotationStyle.standard { didSet { saveCodable(annotationStyle, "annotationStyle") } }
+    /// Saved styles, one click away in the annotation toolbar.
+    var quickStyles = AnnotationStyle.quickDefaults { didSet { saveCodable(quickStyles, "quickStyles") } }
+
     // MARK: Presets and shortcuts
     var presets: [CapturePreset] = CapturePreset.defaults { didSet { saveCodable(presets, "presets") } }
     var libraryHotKey: HotKey? = Defaults.libraryHotKey { didSet { saveCodable(libraryHotKey, "libraryHotKey") } }
@@ -205,7 +212,7 @@ final class Preferences {
     /// Every key this class writes, so a reset can clear them all. All of them sync.
     static let keys = [
         "copyToClipboard", "afterCapture", "captureCursor", "showCursorByDefault", "windowShadow", "playSound", "showNotice",
-        "autoName", "recognizeText", "recordWebAddress", "librarySync", "libraryBackend", "presets", "libraryHotKey", "captureAgainHotKey",
+        "autoName", "recognizeText", "recordWebAddress", "librarySync", "libraryBackend", "annotationStyle", "quickStyles", "presets", "libraryHotKey", "captureAgainHotKey",
     ]
 
     @ObservationIgnored private var loading = false
@@ -228,7 +235,7 @@ final class Preferences {
             "showCursorByDefault": showCursorByDefault, "windowShadow": windowShadow, "playSound": playSound,
             "showNotice": showNotice, "autoName": autoName, "recognizeText": recognizeText,
             "recordWebAddress": recordWebAddress, "librarySync": librarySync, "libraryBackend": libraryBackend.rawValue,
-            "presets": data(presets),
+            "annotationStyle": data(annotationStyle), "quickStyles": data(quickStyles), "presets": data(presets),
             "libraryHotKey": data(libraryHotKey), "captureAgainHotKey": data(captureAgainHotKey),
         ]
     }
@@ -273,6 +280,8 @@ final class Preferences {
         recordWebAddress = bool("recordWebAddress", true)
         librarySync = bool("librarySync", true)
         libraryBackend = LibraryBackend(rawValue: string("libraryBackend")) ?? .iCloud
+        annotationStyle = codable("annotationStyle", AnnotationStyle.standard)
+        quickStyles = codable("quickStyles", AnnotationStyle.quickDefaults)
         presets = codable("presets", CapturePreset.defaults)
         libraryHotKey = codable("libraryHotKey", Defaults.libraryHotKey)
         captureAgainHotKey = codable("captureAgainHotKey", nil as HotKey?)

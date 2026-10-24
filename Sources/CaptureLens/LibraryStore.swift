@@ -25,6 +25,8 @@ final class LibraryStore {
     /// Turning encryption on or off rewrites the library; this is true meanwhile.
     private(set) var isResealing = false
     private(set) var lastError: String?
+    /// Bumped when a thumbnail is redrawn, so the grid shows the new one.
+    private(set) var thumbnailRevision = 0
 
     @ObservationIgnored private var thumbnailCache: [UUID: NSImage] = [:]
     @ObservationIgnored private(set) var db: LibraryDatabase?
@@ -206,7 +208,9 @@ final class LibraryStore {
             NSLog("CaptureLens: couldn't save to the library: \(error.localizedDescription)")
             return
         }
+        let before = items[index]
         items[index] = item
+        if before.annotations != item.annotations || before.cursor != item.cursor { refreshThumbnail(item) }
         LibrarySync.shared.localDidChange([item.id])
         FolderSync.shared.localDidChange([item.id])
     }
@@ -230,11 +234,19 @@ final class LibraryStore {
             return
         }
         var byID = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        var redraw: [CaptureItem] = []
         for (item, image) in incoming {
+            let before = byID[item.id]
             byID[item.id] = item
             if image != nil { thumbnailCache[item.id] = nil }
+            // Thumbnails show the annotations: draw them again when those changed elsewhere.
+            if Flattener.needsDrawing(item) || before.map(Flattener.needsDrawing) == true,
+               before?.annotations != item.annotations || before?.cursor != item.cursor || image != nil {
+                redraw.append(item)
+            }
         }
         items = byID.values.sorted { $0.created > $1.created }
+        for item in redraw { refreshThumbnail(item) }
     }
 
     /// Items deleted on another Mac.
@@ -253,11 +265,20 @@ final class LibraryStore {
         items.removeAll { ids.contains($0.id) }
     }
 
+    /// Draws the capture's thumbnail again, with its annotations and pointer.
+    private func refreshThumbnail(_ item: CaptureItem) {
+        guard let db, let image = Flattener.image(item), let png = image.thumbnail().pngData else { return }
+        try? db.setThumbnail(item.id, png)
+        thumbnailCache[item.id] = nil
+        thumbnailRevision += 1
+    }
+
     // MARK: - Reading
 
     func entry(_ id: UUID) -> CaptureItem? { items.first { $0.id == id } }
 
     func thumbnail(_ item: CaptureItem) -> NSImage? {
+        _ = thumbnailRevision
         if let cached = thumbnailCache[item.id] { return cached }
         guard let data = db?.thumbnail(item.id) ?? db?.image(item.id), let image = NSImage(data: data) else { return nil }
         thumbnailCache[item.id] = image

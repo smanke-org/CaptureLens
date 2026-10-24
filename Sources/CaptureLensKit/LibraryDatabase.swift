@@ -145,6 +145,13 @@ public final class LibraryDatabase: @unchecked Sendable {
         try upsert([(item, image: image, thumbnail: thumbnail)])
     }
 
+    /// Replaces a capture's thumbnail (after annotating it, say), keeping its picture.
+    public func setThumbnail(_ id: UUID, _ thumbnail: Data) throws {
+        let (data, _) = try encode(thumbnail)
+        // The row's sealed flag covers both blobs; they're always sealed alike.
+        try run("UPDATE images SET thumbnail = ? WHERE id = ?", [data, id.uuidString])
+    }
+
     /// Removes items and their pictures. `tombstone` records the deletion so it can sync.
     public func delete(_ ids: [UUID], tombstone: Date?) throws {
         try transaction {

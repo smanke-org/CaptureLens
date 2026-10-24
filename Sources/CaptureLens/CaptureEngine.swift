@@ -239,28 +239,22 @@ final class Countdown {
 /// A capture with its visible layers drawn in, for copying, dragging and saving.
 @MainActor
 enum Flattener {
-    /// PNG of the capture as it looks in the library: the picture plus the pointer, if shown.
+    /// PNG of the capture as it looks in the library: the picture with its annotations and,
+    /// if shown, the pointer.
     static func png(_ item: CaptureItem) -> Data? {
         guard let data = LibraryStore.shared.pngData(item.id) else { return nil }
-        guard let cursor = item.cursor, cursor.visible else { return data }
+        guard needsDrawing(item) else { return data }
         return image(item, data: data)?.pngData ?? data
     }
 
     static func image(_ item: CaptureItem, data: Data? = nil) -> CGImage? {
-        guard let data = data ?? LibraryStore.shared.pngData(item.id),
-              let source = NSBitmapImageRep(data: data)?.cgImage else { return nil }
-        guard let cursor = item.cursor, cursor.visible, let pointer = NSBitmapImageRep(data: cursor.png)?.cgImage,
-              let context = CGContext(data: nil, width: source.width, height: source.height, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return source }
-        let scale = item.scale
-        context.draw(source, in: CGRect(x: 0, y: 0, width: source.width, height: source.height))
-        let f = cursor.frame
-        // Layer coordinates have their origin at the top left; the context's is at the bottom left.
-        context.interpolationQuality = .high
-        context.draw(pointer, in: CGRect(x: f.minX * scale, y: Double(source.height) - f.maxY * scale,
-                                         width: f.width * scale, height: f.height * scale))
-        return context.makeImage()
+        guard let data = data ?? LibraryStore.shared.pngData(item.id), let source = AnnotationRenderer.image(from: data) else { return nil }
+        return AnnotationRenderer.flatten(base: source, scale: item.scale, annotations: item.annotations, cursor: item.cursor)
+    }
+
+    /// Whether anything is drawn over the picture.
+    static func needsDrawing(_ item: CaptureItem) -> Bool {
+        !item.annotations.isEmpty || item.cursor?.visible == true
     }
 
     /// Writes the flattened capture to a temporary file named after it, for dragging out.

@@ -317,3 +317,124 @@ private func item(_ name: String, daysAgo: Double = 0, now: Date, tags: [String]
         #expect(try JSONDecoder().decode(FolderLayout.Info.self, from: data) == info)
     }
 }
+
+@Suite struct AnnotationTests {
+    let style = AnnotationStyle(color: .red, lineWidth: 4, shadow: false)
+
+    @Test func itemsKeepTheirAnnotations() throws {
+        var item = CaptureItem(kind: .region, name: "With marks", pixelWidth: 200, pixelHeight: 100)
+        item.annotations = [
+            Annotation(kind: .rectangle, rect: CGRect(x: 10, y: 10, width: 50, height: 30), style: style),
+            Annotation(kind: .arrow, from: CGPoint(x: 0, y: 0), to: CGPoint(x: 40, y: 40), style: style),
+            Annotation(kind: .text, rect: CGRect(x: 5, y: 60, width: 80, height: 30), text: "Look here", style: style),
+            Annotation(kind: .pen, points: [CGPoint(x: 1, y: 1), CGPoint(x: 5, y: 9)], style: style),
+        ]
+        let decoded = try SyncedItem.decode(SyncedItem(item: item).encoded()).item
+        #expect(decoded.annotations == item.annotations)
+        // Captures from before annotations decode with none.
+        let older = try PropertyListSerialization.data(fromPropertyList: ["id": UUID().uuidString, "created": Date()], format: .binary, options: 0)
+        #expect(try PropertyListDecoder().decode(CaptureItem.self, from: older).annotations.isEmpty)
+    }
+
+    @Test func hitTesting() {
+        let box = Annotation(kind: .rectangle, rect: CGRect(x: 10, y: 10, width: 100, height: 50), style: style)
+        #expect(box.hit(CGPoint(x: 10, y: 30)))
+        #expect(!box.hit(CGPoint(x: 60, y: 35)), "an empty box is picked up by its edge")
+        var filled = box
+        filled.style.filled = true
+        #expect(filled.hit(CGPoint(x: 60, y: 35)))
+        let arrow = Annotation(kind: .arrow, from: CGPoint(x: 0, y: 0), to: CGPoint(x: 100, y: 0), style: style)
+        #expect(arrow.hit(CGPoint(x: 50, y: 3)))
+        #expect(!arrow.hit(CGPoint(x: 50, y: 30)))
+        let ring = Annotation(kind: .ellipse, rect: CGRect(x: 0, y: 0, width: 100, height: 100), style: style)
+        #expect(ring.hit(CGPoint(x: 100, y: 50)))
+        #expect(!ring.hit(CGPoint(x: 50, y: 50)))
+    }
+
+    @Test func geometryHelpers() {
+        #expect(Annotation.rect(from: CGPoint(x: 10, y: 10), to: CGPoint(x: 0, y: 30), constrain: false) == CGRect(x: 0, y: 10, width: 10, height: 20))
+        #expect(Annotation.rect(from: .zero, to: CGPoint(x: 10, y: 30), constrain: true).size == CGSize(width: 30, height: 30))
+        let snapped = Annotation.lineEnd(from: .zero, to: CGPoint(x: 100, y: 8), constrain: true)
+        #expect(abs(snapped.y) < 0.001)
+        var moved = Annotation(kind: .callout, rect: CGRect(x: 0, y: 0, width: 10, height: 10), tail: CGPoint(x: 20, y: 20), style: style)
+        moved.offset(dx: 5, dy: -5)
+        #expect(moved.rect.origin == CGPoint(x: 5, y: -5) && moved.tail == CGPoint(x: 25, y: 15))
+        let steps = [Annotation(kind: .step, style: style), Annotation(kind: .arrow, style: style), Annotation(kind: .step, style: style)]
+        let numbers = Annotation.stepNumbers(steps)
+        #expect(numbers[steps[0].id] == 1 && numbers[steps[2].id] == 2 && numbers[steps[1].id] == nil)
+    }
+
+    /// The picture's pixel at (x, y) in points from the top left, as RGBA bytes.
+    func pixel(_ image: CGImage, _ x: Int, _ y: Int, scale: Int = 1) -> [UInt8] {
+        let ctx = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let data = ctx.data!.assumingMemoryBound(to: UInt8.self)
+        // Bitmap memory rows run from the top.
+        let offset = (y * scale) * image.width * 4 + (x * scale) * 4
+        return Array(UnsafeBufferPointer(start: data + offset, count: 4))
+    }
+
+    func whitePicture(width: Int, height: Int) -> CGImage {
+        let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(CGColor(gray: 1, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return ctx.makeImage()!
+    }
+
+    @Test func flattenDrawsMarksWhereTheyAreAndLeavesTheRest() throws {
+        let base = whitePicture(width: 400, height: 200) // 200 × 100 points at 2×
+        let marks = [
+            Annotation(kind: .rectangle, rect: CGRect(x: 20, y: 10, width: 60, height: 40), style: AnnotationStyle(color: .red, lineWidth: 4, shadow: false)),
+            Annotation(kind: .step, rect: CGRect(x: 150, y: 60, width: 30, height: 30), style: AnnotationStyle(color: .blue, shadow: false)),
+        ]
+        let flat = try #require(AnnotationRenderer.flatten(base: base, scale: 2, annotations: marks, cursor: nil))
+        #expect(flat.width == 400 && flat.height == 200)
+        let edge = pixel(flat, 20, 30, scale: 2)          // left edge of the box: red
+        #expect(edge[0] > 200 && edge[1] < 120 && edge[2] < 120)
+        let inside = pixel(flat, 50, 30, scale: 2)        // inside the empty box: still white
+        #expect(inside[0] > 240 && inside[1] > 240 && inside[2] > 240)
+        let step = pixel(flat, 154, 75, scale: 2)          // the step's disc, off its number: blue
+        #expect(step[2] > 200 && step[0] < 100)
+        // The original is untouched: annotations never go into its pixels.
+        #expect(pixel(base, 20, 30, scale: 2)[1] == 255)
+    }
+
+    @Test func spotlightDimsOutsideOnly() throws {
+        let base = whitePicture(width: 100, height: 100)
+        let spot = Annotation(kind: .spotlight, rect: CGRect(x: 30, y: 30, width: 40, height: 40), style: style)
+        let flat = try #require(AnnotationRenderer.flatten(base: base, scale: 1, annotations: [spot], cursor: nil))
+        #expect(pixel(flat, 50, 50)[0] > 240)
+        #expect(pixel(flat, 5, 5)[0] < 140)
+    }
+
+    @Test func textAndArrowsDrawSomething() throws {
+        let base = whitePicture(width: 300, height: 120)
+        let text = Annotation(kind: .text, rect: CGRect(x: 10, y: 10, width: 280, height: 60), text: "MMMMMMMM",
+                              style: AnnotationStyle(color: .black, fontSize: 40, shadow: false))
+        let flat = try #require(AnnotationRenderer.flatten(base: base, scale: 1, annotations: [text], cursor: nil))
+        let dark = (10..<280).contains { x in (12..<60).contains { y in pixel(flat, x, y)[0] < 80 } }
+        #expect(dark, "the text appears in its box")
+        #expect(pixel(flat, 150, 110)[0] > 240, "and not below it")
+        #expect(AnnotationRenderer.textSize("Hello", style: text.style, width: 500).width > 60)
+    }
+}
+
+@Suite struct CalloutTests {
+    @Test func calloutTailJoinsTheBubbleWithoutAHole() throws {
+        let ctx = CGContext(data: nil, width: 300, height: 200, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(CGColor(gray: 1, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: 300, height: 200))
+        let base = ctx.makeImage()!
+        let callout = Annotation(kind: .callout, rect: CGRect(x: 150, y: 100, width: 120, height: 60), tail: CGPoint(x: 20, y: 20),
+                                 style: AnnotationStyle(color: .purple, shadow: false))
+        let flat = try #require(AnnotationRenderer.flatten(base: base, scale: 1, annotations: [callout], cursor: nil))
+        let tests = AnnotationTests()
+        // Where the wedge crosses the bubble (between its middle and the tail): purple, not white.
+        let crossing = tests.pixel(flat, 175, 115)
+        #expect(crossing[0] > 120 && crossing[1] < 120, "overlap filled: \(crossing)")
+        #expect(tests.pixel(flat, 60, 43)[1] < 150, "the tail reaches out toward its point")
+    }
+}

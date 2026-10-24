@@ -31,11 +31,19 @@ private struct SingleCaptureView: View {
     let item: CaptureItem
     @State private var store = LibraryStore.shared
     @State private var zoomToFit = 0
+    @State private var editor = AnnotationEditor.shared
+
+    /// What the drawing layer shows, so it redraws when any of it changes.
+    private var editorState: CaptureCanvas.EditorState {
+        .init(tool: editor.tool, selection: editor.selection, showAnnotations: editor.showAnnotations, style: editor.style)
+    }
 
     var body: some View {
         VSplitView {
             VStack(spacing: 0) {
-                CaptureCanvas(item: item, fitRequest: zoomToFit)
+                AnnotationToolbar()
+                Divider()
+                CaptureCanvas(item: item, fitRequest: zoomToFit, editor: editorState)
                     .frame(minHeight: 200)
                 HStack(spacing: 12) {
                     Button { if let png = Flattener.png(item) { Clipboard.copy(png: png); Notice.shared.show("Copied") } } label: {
@@ -101,6 +109,14 @@ struct CaptureCanvas: NSViewRepresentable {
     let item: CaptureItem
     /// Changes when the Fit button is pressed.
     let fitRequest: Int
+    let editor: EditorState
+
+    struct EditorState: Equatable {
+        var tool: AnnotationEditor.Tool
+        var selection: UUID?
+        var showAnnotations: Bool
+        var style: AnnotationStyle
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -124,6 +140,7 @@ struct CaptureCanvas: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         context.coordinator.update(item)
+        context.coordinator.editorChanged(editor)
         if context.coordinator.lastFit != fitRequest {
             context.coordinator.lastFit = fitRequest
             context.coordinator.fit()
@@ -137,7 +154,9 @@ struct CaptureCanvas: NSViewRepresentable {
         private let canvas = FlippedView()
         private let imageView = NSImageView()
         private let overlay = ImageAnalysisOverlayView()
+        private let annotationLayer = AnnotationLayerView()
         private let cursorView = CursorLayerView()
+        private var lastEditor: EditorState?
         private var itemID: UUID?
         private var analysisTask: Task<Void, Never>?
         private static let analyzer = ImageAnalyzer()
@@ -155,6 +174,7 @@ struct CaptureCanvas: NSViewRepresentable {
             overlay.preferredInteractionTypes = .automatic
             overlay.autoresizingMask = [.width, .height]
             imageView.addSubview(overlay)
+            canvas.addSubview(annotationLayer)
             canvas.addSubview(cursorView)
             scroll.documentView = canvas
         }
@@ -168,6 +188,10 @@ struct CaptureCanvas: NSViewRepresentable {
             imageView.frame = canvas.bounds
             overlay.frame = imageView.bounds
             overlay.analysis = nil
+            AnnotationEditor.shared.open(item.id)
+            annotationLayer.frame = canvas.bounds
+            annotationLayer.baseImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            annotationLayer.refresh()
             updateCursor(item)
             DispatchQueue.main.async { self.fit() }
             analysisTask?.cancel()
@@ -181,7 +205,19 @@ struct CaptureCanvas: NSViewRepresentable {
         }
 
         func update(_ item: CaptureItem) {
-            if item.id != itemID { load(item) } else { updateCursor(item) }
+            if item.id != itemID { load(item) } else { updateCursor(item); annotationLayer.refresh() }
+        }
+
+        func editorChanged(_ state: EditorState) {
+            guard state != lastEditor else { return }
+            let toolChanged = state.tool != lastEditor?.tool
+            lastEditor = state
+            annotationLayer.refresh()
+            if toolChanged {
+                annotationLayer.window?.invalidateCursorRects(for: annotationLayer)
+                // Drawing tools take the keyboard too (Delete, arrows, tool letters).
+                if state.tool != .select { annotationLayer.window?.makeFirstResponder(annotationLayer) }
+            }
         }
 
         private func updateCursor(_ item: CaptureItem) {

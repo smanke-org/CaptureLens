@@ -49,6 +49,8 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
     public var scale: Double
     /// The mouse pointer, kept as its own layer so it can be shown, hidden, moved or resized.
     public var cursor: CursorLayer?
+    /// Boxes, arrows, text and the rest, drawn over the picture but never into it.
+    public var annotations: [Annotation]
     /// The hashed device ID of the Mac that took it.
     public var origin: String?
 
@@ -81,7 +83,7 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
     public init(id: UUID = UUID(), created: Date = Date(), modified: Date? = nil, kind: Kind, name: String,
                 nameIsAutomatic: Bool = true, tags: [String] = [], notes: String = "", recognizedText: String = "",
                 favorite: Bool = false, source: Source = Source(), pixelWidth: Int, pixelHeight: Int, scale: Double = 2,
-                cursor: CursorLayer? = nil, origin: String? = nil) {
+                cursor: CursorLayer? = nil, annotations: [Annotation] = [], origin: String? = nil) {
         self.id = id
         self.created = created
         self.modified = modified ?? created
@@ -97,6 +99,7 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
         self.pixelHeight = pixelHeight
         self.scale = scale
         self.cursor = cursor
+        self.annotations = annotations
         self.origin = origin
     }
 
@@ -117,6 +120,7 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
         pixelHeight = try c.decodeIfPresent(Int.self, forKey: .pixelHeight) ?? 0
         scale = try c.decodeIfPresent(Double.self, forKey: .scale) ?? 2
         cursor = try c.decodeIfPresent(CursorLayer.self, forKey: .cursor)
+        annotations = try c.decodeIfPresent([Annotation].self, forKey: .annotations) ?? []
         origin = try c.decodeIfPresent(String.self, forKey: .origin)
     }
 

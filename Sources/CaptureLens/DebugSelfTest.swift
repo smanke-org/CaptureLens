@@ -77,6 +77,8 @@ enum DebugSelfTest {
             render(window.window, to: out.appending(path: "library-filtered.png"))
             window.state.filter = LibraryFilter()
 
+            await annotationTest(note, out: out)
+
             CapturePreview.shared.show(store.items[0], near: NSScreen.main?.frame ?? .zero, copied: true)
             try? await Task.sleep(for: .seconds(1))
             render(NSApp.windows.first { $0 is NSPanel && $0.isVisible && $0.contentView is NSHostingViewProtocol }, to: out.appending(path: "preview.png"))
@@ -99,6 +101,106 @@ enum DebugSelfTest {
             note("done")
             NSApp.terminate(nil)
         }
+    }
+
+    /// Every kind of annotation on a sample, then drawing, moving, undoing and typing with
+    /// simulated mouse and keys, as a person would in the library.
+    private static func annotationTest(_ note: (String) -> Void, out: URL) async {
+        let store = LibraryStore.shared
+        let window = LibraryWindow.shared
+        guard let target = store.items.last else { return note("annotations: no capture") }
+        let thumbBefore = store.db?.thumbnail(target.id)
+        var item = target
+        let red = AnnotationStyle(color: .red, lineWidth: 4)
+        item.annotations = [
+            Annotation(kind: .spotlight, rect: CGRect(x: 20, y: 20, width: 330, height: 130), style: red),
+            Annotation(kind: .rectangle, rect: CGRect(x: 25, y: 30, width: 300, height: 60), style: red),
+            Annotation(kind: .arrow, from: CGPoint(x: 420, y: 170), to: CGPoint(x: 330, y: 70), style: AnnotationStyle(color: .blue, lineWidth: 5)),
+            Annotation(kind: .callout, rect: CGRect(x: 470, y: 120, width: 240, height: 70), tail: CGPoint(x: 340, y: 60),
+                       text: "Revenue is up", style: AnnotationStyle(color: .purple, fontSize: 20)),
+            Annotation(kind: .step, rect: CGRect(x: 10, y: 120, width: 34, height: 34), style: AnnotationStyle(color: .orange)),
+            Annotation(kind: .step, rect: CGRect(x: 60, y: 120, width: 34, height: 34), style: AnnotationStyle(color: .orange)),
+            Annotation(kind: .highlighter, points: [CGPoint(x: 30, y: 70), CGPoint(x: 260, y: 70)], style: AnnotationStyle(color: .yellow, lineWidth: 6, shadow: false)),
+            Annotation(kind: .text, rect: CGRect(x: 520, y: 20, width: 300, height: 40), text: "Check the totals", style: AnnotationStyle(color: .green, fontSize: 24)),
+            Annotation(kind: .magnify, rect: CGRect(x: 740, y: 230, width: 130, height: 130), zoom: 2.5, style: AnnotationStyle(color: .black, lineWidth: 3)),
+            Annotation(kind: .stamp, rect: CGRect(x: 600, y: 330, width: 150, height: 54), stamp: "Approved", style: AnnotationStyle(color: .green)),
+            Annotation(kind: .stamp, rect: CGRect(x: 520, y: 330, width: 56, height: 56), stamp: "✅", style: red),
+            Annotation(kind: .ellipse, rect: CGRect(x: 300, y: 250, width: 160, height: 90), style: AnnotationStyle(color: .red, lineWidth: 3, filled: true)),
+            Annotation(kind: .pen, points: (0..<20).map { CGPoint(x: 100 + Double($0) * 8, y: 300 + sin(Double($0) / 2) * 20) }, style: AnnotationStyle(color: .blue, lineWidth: 3)),
+            Annotation(kind: .line, from: CGPoint(x: 100, y: 380), to: CGPoint(x: 300, y: 380), style: AnnotationStyle(color: .black, lineWidth: 2)),
+        ]
+        store.update(item)
+        let thumbAfter = store.db?.thumbnail(target.id)
+        note("annotations saved: \(store.entry(target.id)?.annotations.count ?? 0); thumbnail redrawn: \(thumbBefore != thumbAfter)")
+        if let png = Flattener.png(store.entry(target.id)!) {
+            try? png.write(to: out.appending(path: "flattened.png"))
+            note("flattened \(png.count) bytes; original unchanged: \(store.pngData(target.id) != png)")
+        }
+
+        window.show(select: target.id)
+        window.state.showInspector = true
+        try? await Task.sleep(for: .seconds(2))
+        AnnotationEditor.shared.select(item.annotations[3].id)
+        try? await Task.sleep(for: .seconds(1))
+        render(window.window, to: out.appending(path: "annotated.png"))
+
+        // Drive the layer as a person would.
+        func find(_ view: NSView?) -> AnnotationLayerView? {
+            guard let view else { return nil }
+            if let layer = view as? AnnotationLayerView { return layer }
+            for sub in view.subviews { if let hit = find(sub) { return hit } }
+            return nil
+        }
+        guard let layer = find(window.window?.contentView), let win = window.window else { return note("annotations: no layer") }
+        func send(_ type: NSEvent.EventType, _ point: CGPoint, clicks: Int = 1) {
+            let inWindow = layer.convert(point, to: nil)
+            guard let event = NSEvent.mouseEvent(with: type, location: inWindow, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                 windowNumber: win.windowNumber, context: nil, eventNumber: 0, clickCount: clicks, pressure: 1) else { return }
+            switch type {
+            case .leftMouseDown: layer.mouseDown(with: event)
+            case .leftMouseDragged: layer.mouseDragged(with: event)
+            default: layer.mouseUp(with: event)
+            }
+        }
+        let editor = AnnotationEditor.shared
+        let undo: UndoManager? = AnnotationEditor.shared.undoManager
+        editor.pick(.draw(.rectangle))
+        let countBefore = editor.annotations.count
+        send(.leftMouseDown, CGPoint(x: 600, y: 230)); send(.leftMouseDragged, CGPoint(x: 650, y: 260)); send(.leftMouseDragged, CGPoint(x: 700, y: 290)); send(.leftMouseUp, CGPoint(x: 700, y: 290))
+        let drawn = editor.annotations.last
+        note("draw box: \(editor.annotations.count == countBefore + 1 && drawn?.kind == .rectangle) rect=\(drawn.map { "\($0.rect)" } ?? "-")")
+        // Each real click is its own event, and its own undo step.
+        try? await Task.sleep(for: .milliseconds(300))
+        editor.pick(.select)
+        note("undo after drawing: level \(undo?.groupingLevel ?? -1), can undo \(undo?.canUndo ?? false) '\(undo?.undoActionName ?? "")'")
+        send(.leftMouseDown, CGPoint(x: 600, y: 260)); send(.leftMouseDragged, CGPoint(x: 620, y: 270)); send(.leftMouseUp, CGPoint(x: 620, y: 270))
+        let moved = editor.annotations.last
+        note("move box by (20, 10): \(moved.map { "\($0.rect.origin)" } ?? "-") selected=\(editor.selection == moved?.id)")
+        try? await Task.sleep(for: .milliseconds(300))
+        note("before undo: level \(undo?.groupingLevel ?? -1) '\(undo?.undoActionName ?? "")'")
+        editor.undo()
+        note("undo move: \(editor.annotations.last.map { "\($0.rect.origin)" } ?? "-") (\(undo?.undoActionName ?? ""))")
+        try? await Task.sleep(for: .milliseconds(300))
+        editor.undo()
+        note("undo add: count back to \(editor.annotations.count) (was \(countBefore))")
+        editor.redo()
+        note("redo add: \(editor.annotations.count == countBefore + 1)")
+        editor.undo()
+        editor.pick(.draw(.text))
+        send(.leftMouseDown, CGPoint(x: 120, y: 200)); send(.leftMouseUp, CGPoint(x: 120, y: 200))
+        if let textView = win.firstResponder as? NSTextView {
+            textView.insertText("Typed in the library", replacementRange: NSRange(location: NSNotFound, length: 0))
+            layer.endTextEditing()
+        }
+        let typed = editor.annotations.last
+        note("type text: \(typed?.kind == .text && typed?.text == "Typed in the library") size=\(typed.map { "\($0.rect.size)" } ?? "-")")
+        editor.pick(.select)
+        editor.select(typed?.id)
+        let keyDelete = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: win.windowNumber,
+                                         context: nil, characters: "\u{7f}", charactersIgnoringModifiers: "\u{7f}", isARepeat: false, keyCode: 51)
+        if let keyDelete { layer.keyDown(with: keyDelete) }
+        note("delete key removes it: \(!editor.annotations.contains { $0.id == typed?.id })")
+        try? await Task.sleep(for: .milliseconds(500))
     }
 
     /// Settings that sync survive the trip through a sealed record; per-Mac ones stay out.
