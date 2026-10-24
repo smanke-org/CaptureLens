@@ -46,6 +46,79 @@ private struct SingleCaptureView: View {
             .frame(minHeight: 180, idealHeight: 300)
     }
 
+    private func fit() { zoomToFit += 1 }
+
+    /// Edit/Result, then whatever fits.
+    private func barRow<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        HStack(spacing: 12) {
+            Picker("", selection: $editor.showResult) {
+                Text("Edit").tag(false)
+                Text("Result").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .help("Edit marks up the original; Result shows the finished picture, as it's copied and saved")
+            content()
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.borderless)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    @ViewBuilder private var actionButtons: some View {
+        Button { copy() } label: { Label("Copy", systemImage: "doc.on.doc") }
+            .help("Copy")
+        Button { Exporter.save(item) } label: { Label("Save As…", systemImage: "square.and.arrow.down") }
+            .help("Save As…")
+        ShareButton(items: { [item] }).fixedSize().help("Share")
+        Button { store.toggleFavorite([item.id]) } label: {
+            Label("Favorite", systemImage: item.favorite ? "star.fill" : "star")
+        }
+        .help(item.favorite ? "Remove from Favorites" : "Add to Favorites")
+    }
+
+    @ViewBuilder private var deleteAndPanes: some View {
+        Button(role: .destructive) { state.confirmDelete = [item.id] } label: { Label("Delete", systemImage: "trash") }
+            .help("Delete…")
+        Divider().frame(height: 16)
+        Button { collapsed = .details } label: { Label("Hide Details", systemImage: "chevron.down.circle") }
+            .help("Hide the details, for more room to annotate")
+        Button { collapsed = .picture } label: { Label("Hide Picture", systemImage: "chevron.up.circle") }
+            .help("Hide the picture, for more room for the details")
+    }
+
+    /// Everything the narrow bar has no room for.
+    private func moreMenu(includeZoom: Bool) -> some View {
+        Menu {
+            Button("Copy") { copy() }
+            Button("Save As…") { Exporter.save(item) }
+            Button("Share…") { ShareButton.shareAtPointer([item]) }
+            Button(item.favorite ? "Remove from Favorites" : "Add to Favorites") { store.toggleFavorite([item.id]) }
+            Divider()
+            if includeZoom {
+                Button("Zoom In") { CanvasZoom.shared.step(in: true) }
+                Button("Zoom Out") { CanvasZoom.shared.step(in: false) }
+            }
+            Button("Zoom to Fit") { fit() }
+            Divider()
+            Button("Hide Details") { collapsed = .details }
+            Button("Hide Picture") { collapsed = .picture }
+            Divider()
+            Button("Delete…", role: .destructive) { state.confirmDelete = [item.id] }
+        } label: {
+            Label("More", systemImage: "ellipsis.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Copy, save, share, zoom and more")
+    }
+
+    private func copy() {
+        if let png = Flattener.png(item) { Clipboard.copy(png: png); Notice.shared.show("Copied") }
+    }
+
     private var pictureArea: some View {
         VStack(spacing: 0) {
             if editor.showResult {
@@ -63,36 +136,14 @@ private struct SingleCaptureView: View {
                 }
                 .frame(minHeight: 200)
             }
-            HStack(spacing: 12) {
-                Picker("", selection: $editor.showResult) {
-                    Text("Edit").tag(false)
-                    Text("Result").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .help("Edit marks up the original; Result shows the finished picture, as it's copied and saved")
-                Button { if let png = Flattener.png(item) { Clipboard.copy(png: png); Notice.shared.show("Copied") } } label: {
-                    Label("Copy", systemImage: "doc.on.doc")
-                }
-                Button { Exporter.save(item) } label: { Label("Save As…", systemImage: "square.and.arrow.down") }
-                    .help("Save As…")
-                ShareButton(items: { [item] }).fixedSize().help("Share")
-                Button { store.toggleFavorite([item.id]) } label: {
-                    Label(item.favorite ? "Favorite" : "Favorite", systemImage: item.favorite ? "star.fill" : "star")
-                }
-                .help(item.favorite ? "Remove from Favorites" : "Add to Favorites")
-                Spacer(minLength: 4)
-                ZoomControls(fit: { zoomToFit += 1 })
-                Button(role: .destructive) { state.confirmDelete = [item.id] } label: { Label("Delete", systemImage: "trash") }
-                Divider().frame(height: 16)
-                Button { collapsed = .details } label: { Label("Hide Details", systemImage: "chevron.down.circle") }
-                    .help("Hide the details, for more room to annotate")
-                Button { collapsed = .picture } label: { Label("Hide Picture", systemImage: "chevron.up.circle") }
-                    .help("Hide the picture, for more room for the details")
+            // The whole bar when there's room; in a narrow window the less used buttons move into
+            // a ⋯ menu, then zooming too, so the bar never pushes the column past the window.
+            ViewThatFits(in: .horizontal) {
+                barRow { actionButtons; Spacer(minLength: 4); ZoomControls(fit: fit); deleteAndPanes }
+                barRow { actionButtons; Spacer(minLength: 4); ZoomControls(fit: fit, compact: true); deleteAndPanes }
+                barRow { Spacer(minLength: 4); ZoomControls(fit: fit, compact: true); moreMenu(includeZoom: false) }
+                barRow { Spacer(minLength: 4); moreMenu(includeZoom: true) }
             }
-            .labelStyle(.iconOnly)
-            .buttonStyle(.borderless)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
         }
@@ -517,6 +568,8 @@ final class CanvasZoom {
 /// Zoom out, a zoom slider, zoom in, the zoom level, and Fit.
 struct ZoomControls: View {
     let fit: () -> Void
+    /// Without the slider and Fit, for a narrow bar.
+    var compact = false
     @State private var zoom = CanvasZoom.shared
 
     var body: some View {
@@ -524,12 +577,13 @@ struct ZoomControls: View {
             Button { zoom.step(in: false) } label: { Label("Zoom Out", systemImage: "minus.magnifyingglass") }
                 .disabled(zoom.magnification <= CanvasZoom.range.lowerBound + 0.001)
                 .help("Zoom out")
+            if !compact {
             Slider(value: Binding(get: { log2(zoom.magnification) }, set: { zoom.set(pow(2, $0)) }),
                    in: log2(CanvasZoom.range.lowerBound)...log2(CanvasZoom.range.upperBound))
                 .controlSize(.small)
-                // Gives way first when the bar is short of room.
-                .frame(minWidth: 40, idealWidth: 110, maxWidth: 110)
+                .frame(width: 100)
                 .help("Zoom. Pinch or ⌘-scroll also zoom.")
+            }
             Button { zoom.step(in: true) } label: { Label("Zoom In", systemImage: "plus.magnifyingglass") }
                 .disabled(zoom.magnification >= CanvasZoom.range.upperBound - 0.001)
                 .help("Zoom in")
@@ -546,8 +600,10 @@ struct ZoomControls: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .help("Pick a zoom level")
-            Button(action: fit) { Label("Fit", systemImage: "arrow.up.left.and.down.right.magnifyingglass") }
-                .help("Zoom to fit")
+            if !compact {
+                Button(action: fit) { Label("Fit", systemImage: "arrow.up.left.and.down.right.magnifyingglass") }
+                    .help("Zoom to fit")
+            }
         }
     }
 }
