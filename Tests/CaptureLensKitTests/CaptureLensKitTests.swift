@@ -1,4 +1,6 @@
+import Compression
 import CoreGraphics
+import ImageIO
 import CryptoKit
 import Foundation
 import Testing
@@ -891,5 +893,122 @@ private func item(_ name: String, daysAgo: Double = 0, now: Date, tags: [String]
         let firstPiece = 4 + 4 + Int(data[4..<8].withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }.bigEndian)
         try data.prefix(firstPiece).write(to: dir.appending(path: "short"))
         #expect(throws: (any Error).self) { try ChunkedSeal.open(dir.appending(path: "short"), to: dir.appending(path: "y"), key: key) }
+    }
+}
+
+/// A zip built in memory: each file stored, or deflated when `deflate` is set.
+func makeZip(_ files: [(String, Data)], deflate: Bool = false) -> Data {
+    var out = Data(), central = Data()
+    func u16(_ v: Int) -> Data { withUnsafeBytes(of: UInt16(v).littleEndian) { Data($0) } }
+    func u32(_ v: Int) -> Data { withUnsafeBytes(of: UInt32(v).littleEndian) { Data($0) } }
+    for (name, data) in files {
+        var body = data
+        if deflate, !data.isEmpty {
+            var buffer = [UInt8](repeating: 0, count: data.count + 1024)
+            let n = data.withUnsafeBytes { src in
+                compression_encode_buffer(&buffer, buffer.count, src.bindMemory(to: UInt8.self).baseAddress!, data.count, nil, COMPRESSION_ZLIB)
+            }
+            body = Data(buffer.prefix(n))
+        }
+        let method = deflate && !data.isEmpty ? 8 : 0
+        let offset = out.count
+        let nameData = Data(name.utf8)
+        let local: [Data] = [u32(0x0403_4B50), u16(20), u16(0), u16(method), u16(0), u16(0), u32(0), u32(body.count), u32(data.count),
+                             u16(nameData.count), u16(0), nameData, body]
+        for part in local { out.append(part) }
+        let entry: [Data] = [u32(0x0201_4B50), u16(20), u16(20), u16(0), u16(method), u16(0), u16(0), u32(0), u32(body.count),
+                             u32(data.count), u16(nameData.count), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset), nameData]
+        for part in entry { central.append(part) }
+    }
+    let start = out.count
+    out += central
+    let end: [Data] = [u32(0x0605_4B50), u16(0), u16(0), u16(files.count), u16(files.count), u32(central.count), u32(start), u16(0)]
+    for part in end { out.append(part) }
+    return out
+}
+
+@Suite struct SnagitImportTests {
+    @Test func readsStoredAndDeflatedZips() throws {
+        let text = Data(String(repeating: "CaptureLens ", count: 200).utf8)
+        for deflate in [false, true] {
+            let zip = try ZipReader(makeZip([("a.json", Data("{}".utf8)), ("b.txt", text), ("empty", Data())], deflate: deflate))
+            #expect(Set(zip.names) == ["a.json", "b.txt", "empty"])
+            #expect(try zip.data("b.txt") == text)
+            #expect(try zip.data("empty") == Data())
+            #expect(try zip.data("missing") == nil)
+        }
+        #expect(throws: (any Error).self) { try ZipReader(Data("not a zip".utf8)) }
+    }
+
+    func capture(objects: [[String: Any]], tags: [String] = [], picture: Bool = true, dpi: Int = 72) throws -> Data {
+        let png = SmartToolTests().picture(CGSize(width: 200, height: 100)).pngDataForTests
+        var page: [String: Any] = ["CaptureCanvasWidth": 200 * 72 / dpi, "CaptureCanvasHeight": 100 * 72 / dpi, "DPI": dpi,
+                                   "BackgroundSize": "\(200 * 72 / dpi).000000,\(100 * 72 / dpi).000000",
+                                   "CaptureBackgroundLocation": "0.000000,0.000000", "CaptureObjects": objects]
+        if picture { page["CaptureBackgroundImage"] = "{P}.png" }
+        let meta: [String: Any] = ["CaptureDate": "2022-12-14 21:12:34", "AppName": "Safari", "WindowName": "Docs",
+                                   "WebURL": "https://example.com/a", "Tags": tags, "OcrText": "Hello"]
+        var files: [(String, Data)] = [("index.json", try JSONSerialization.data(withJSONObject: ["Pages": ["{P}.json"]])),
+                                       ("metadata.json", try JSONSerialization.data(withJSONObject: meta)),
+                                       ("{P}.json", try JSONSerialization.data(withJSONObject: page))]
+        if picture { files += [("{P}.png", png), ("thumbnail.png", png)] }
+        return makeZip(files)
+    }
+
+    @Test func readsDetailsAndConvertsMarkup() throws {
+        let objects: [[String: Any]] = [
+            ["ToolMode": "Shape", "ToolShape": "Rectangle", "StartPoint": "10,10", "EndPoint": "60,40", "ForegroundColor": "#FFFF0000",
+             "BackgroundColor": "#00000000", "StrokeWidth": 4, "Opacity": 100, "RotationAngle": 0],
+            ["ToolMode": "Arrow", "StartPoint": "100,80", "EndPoint": "150,20", "ForegroundColor": "#FF0000FF", "StrokeWidth": 3,
+             "ArrowStart": "Round", "ArrowEnd": "TaperArrow", "RotationAngle": 0],
+            ["ToolMode": "Arrow", "StartPoint": "0,0", "EndPoint": "5,5", "ForegroundColor": "#FF000000", "ArrowStart": "Flat", "ArrowEnd": "Flat"],
+            ["ToolMode": "Shape", "ToolShape": "Rectangle", "StartPoint": "0,90", "EndPoint": "40,99", "ForegroundColor": "#00000000",
+             "BackgroundColor": "#FF00FF00", "StrokeWidth": 0],
+            ["ToolMode": "Step", "StartPoint": "160,60", "EndPoint": "184,84", "BackgroundColor": "#FF000000", "PlainText": "1"],
+            ["ToolMode": "Text", "StartPoint": "20,50", "EndPoint": "120,70", "PlainText": "Note", "FontSize": 14, "TextSelectionColor": "#FF000000"],
+            ["ToolMode": "Select", "StartPoint": "0,0", "EndPoint": "1,1"],
+        ]
+        let capture = try SnagitImport.read(try capture(objects: objects, tags: ["work", "Snagit Favorites", "Online-only"]), rtf: { _ in nil })
+        #expect(!capture.isEmpty && capture.convertible && capture.unsupported.isEmpty)
+        #expect(capture.source.appName == "Safari" && capture.source.windowTitle == "Docs" && capture.source.url == "https://example.com/a")
+        #expect(capture.tags == ["work"] && capture.favorite && capture.recognizedText == "Hello")
+        #expect(capture.created == Date(timeIntervalSince1970: 1_671_052_354))
+        #expect(capture.annotations.map(\.kind) == [.rectangle, .arrow, .line, .redact, .step, .text])
+        #expect(capture.annotations[0].rect == CGRect(x: 10, y: 10, width: 50, height: 30) && capture.annotations[0].style.color == .init(1, 0, 0))
+        #expect(capture.annotations[1].from == CGPoint(x: 100, y: 80) && capture.annotations[1].to == CGPoint(x: 150, y: 20))
+        #expect(capture.annotations[3].style.color.g == 1, "a fill-only box keeps its fill color")
+        #expect(capture.annotations[5].text == "Note" && capture.annotations[5].style.fontSize == 14)
+        #expect(capture.fingerprint?.count == 64)
+    }
+
+    @Test func unsupportedMarkupAndEmptyPlaceholders() throws {
+        let pasted = try SnagitImport.read(try capture(objects: [["ToolMode": "Image", "StartPoint": "0,0", "EndPoint": "9,9"],
+                                                                  ["ToolMode": "Shape", "ToolShape": "Rectangle", "RotationAngle": 45,
+                                                                   "StartPoint": "0,0", "EndPoint": "9,9", "ForegroundColor": "#FFFF0000", "StrokeWidth": 2]]),
+                                           rtf: { _ in nil })
+        #expect(pasted.unsupported == ["Image", "Shape (rotated)"] && !pasted.convertible)
+        let empty = try SnagitImport.read(try capture(objects: [], tags: ["Online-only"], picture: false), rtf: { _ in nil })
+        #expect(empty.isEmpty && empty.tags.isEmpty)
+        // Retina: twice the pixels per point.
+        #expect(try SnagitImport.read(try capture(objects: [], dpi: 144), rtf: { _ in nil }).scale == 2)
+    }
+
+    @Test func comparingDrawings() {
+        let a = SmartToolTests().picture(boxes: [(CGRect(x: 20, y: 20, width: 40, height: 30), .red)])
+        let b = SmartToolTests().picture(boxes: [(CGRect(x: 21, y: 20, width: 40, height: 30), .red)])
+        let c = SmartToolTests().picture(boxes: [(CGRect(x: 150, y: 120, width: 40, height: 30), .red)])
+        #expect(ImageCompare.difference(a, a) == 0)
+        #expect(ImageCompare.difference(a, b) < 32, "nearly the same")
+        #expect(ImageCompare.difference(a, c) > 40, "a mark in another place")
+    }
+}
+
+extension CGImage {
+    var pngDataForTests: Data {
+        let data = NSMutableData()
+        let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil)!
+        CGImageDestinationAddImage(destination, self, nil)
+        CGImageDestinationFinalize(destination)
+        return data as Data
     }
 }

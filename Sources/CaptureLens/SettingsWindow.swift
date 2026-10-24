@@ -500,6 +500,14 @@ struct LibrarySettings: View {
             } footer: {
                 Text(syncFooter).font(.caption).foregroundStyle(.secondary)
             }
+            Section {
+                LabeledContent("Moving from Snagit?") {
+                    Button("Import from Snagit…") { SnagitImportWindow.shared.show() }
+                }
+            } footer: {
+                Text("Brings in your Snagit captures with their dates, apps, web addresses and tags, and their markup editable where CaptureLens has the same tool. Videos can come too; they stay on this Mac.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .confirmationDialog("Remove the library's copies from iCloud?", isPresented: $confirmRemoveICloud) {

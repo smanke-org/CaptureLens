@@ -30,7 +30,18 @@ final class VideoStore {
         clearPlayback()
     }
 
-    private func plainURL(_ id: UUID) -> URL { folder.appending(path: "\(id.uuidString).mp4") }
+    private func plainURL(_ id: UUID) -> URL { externalURL(id) ?? folder.appending(path: "\(id.uuidString).mp4") }
+
+    /// Imported videos stay where they were copied (a folder of the user's), not in Videos/.
+    private func externalURL(_ id: UUID) -> URL? {
+        LibraryStore.shared.db?.string(forKey: "video.external.\(id.uuidString)").map { URL(fileURLWithPath: $0) }
+    }
+
+    /// Keeps a movie the library doesn't hold itself, for the capture `id`.
+    func attach(_ movie: URL, to id: UUID) {
+        try? LibraryStore.shared.db?.set(movie.path, forKey: "video.external.\(id.uuidString)")
+        revision += 1
+    }
     private func sealedURL(_ id: UUID) -> URL { folder.appending(path: "\(id.uuidString).clvideo") }
 
     /// Whether this Mac has the movie.
@@ -120,9 +131,11 @@ final class VideoStore {
 
     func remove(_ ids: some Sequence<UUID>) {
         for id in ids {
+            // An imported video's copy belongs to its capture, so it goes too.
             for url in [plainURL(id), sealedURL(id), playbackFolder.appending(path: "\(id.uuidString).mp4")] {
                 try? FileManager.default.removeItem(at: url)
             }
+            try? LibraryStore.shared.db?.set(nil as String?, forKey: "video.external.\(id.uuidString)")
         }
         revision += 1
     }

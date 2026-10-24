@@ -88,6 +88,7 @@ enum DebugSelfTest {
             await phase3Test(note, out: out)
             await phase4Test(note, out: out)
             await phase5Test(note, out: out)
+            await snagitTest(note, out: out)
 
             CapturePreview.shared.show(store.items[0], near: NSScreen.main?.frame ?? .zero, copied: true)
             try? await Task.sleep(for: .seconds(1))
@@ -380,6 +381,138 @@ enum DebugSelfTest {
                 note("remove background: corner alpha \(corner), middle alpha \(middle)")
                 try? NSBitmapImageRep(cgImage: flat).representation(using: .png, properties: [:])?.write(to: out.appending(path: "no-background.png"))
             }
+        }
+    }
+
+    /// Importing made-up Snagit captures and a video into the test library.
+    private static func snagitTest(_ note: (String) -> Void, out: URL) async {
+        let store = LibraryStore.shared
+        let folder = FileManager.default.temporaryDirectory.appending(path: "CaptureLens Snagit Test \(UUID().uuidString)")
+        let videos = folder.appending(path: "Imported Videos")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        guard let picture = DebugImage.make(text: "Snagit test capture\nwith a box and an arrow", size: CGSize(width: 600, height: 300)),
+              let png = picture.pngData else { return note("snagit: no picture") }
+        let marks: [[String: Any]] = [
+            ["ToolMode": "Shape", "ToolShape": "Rectangle", "StartPoint": "20,20", "EndPoint": "300,120", "ForegroundColor": "#FFFF0000",
+             "BackgroundColor": "#00000000", "StrokeWidth": 4, "RotationAngle": 0],
+            ["ToolMode": "Arrow", "StartPoint": "500,250", "EndPoint": "320,130", "ForegroundColor": "#FF0000FF", "StrokeWidth": 4,
+             "ArrowStart": "Round", "ArrowEnd": "TaperArrow", "RotationAngle": 0],
+        ]
+        // Snagit's own drawing of the marks, as CaptureLens would draw them.
+        let converted = try? SnagitImport.read(snagx(png: png, drawn: png, objects: marks), rtf: { _ in nil })
+        let drawn = AnnotationRenderer.flatten(base: picture, scale: 1, annotations: converted?.annotations ?? [], cursor: nil)?.pngData ?? png
+        guard let other = DebugImage.make(text: "Pasted picture", size: CGSize(width: 400, height: 200))?.pngData else { return }
+        let files: [(String, Data)] = [
+            ("2022-01-01_10-00-00.snagx", snagx(png: png, drawn: drawn, objects: marks)),
+            ("2022-01-02_10-00-00.snagx", snagx(png: other, drawn: other, objects: [["ToolMode": "Image", "StartPoint": "0,0", "EndPoint": "40,40"]])),
+            ("2022-01-03_10-00-00.snagx", snagx(png: nil, drawn: nil, objects: [], tags: ["Online-only"])),
+            ("2022-01-01_10-00-00-Other Mac.snagx", snagx(png: png, drawn: drawn, objects: marks)),
+        ]
+        for (name, data) in files { try? data.write(to: folder.appending(path: name)) }
+        _ = await DebugMovie.write(to: folder.appending(path: "demo video.mp4"), seconds: 1, startFrame: 0)
+
+        let importer = SnagitImporter.shared
+        importer.debugUse([folder], videoFolder: videos)
+        SnagitImportWindow.shared.show()
+        importer.debugUse([folder], videoFolder: videos)
+        let before = Set(store.items.map(\.id))
+        importer.start()
+        for _ in 0..<120 where importer.phase != .done { try? await Task.sleep(for: .milliseconds(250)) }
+        let s = importer.summary
+        note("snagit import: \(s.imported) imported, \(s.editable) editable, \(s.asDrawn) drawn in, \(s.videos) videos, \(s.empty) empty, \(s.duplicates) duplicates, \(s.failed) failed")
+        let added = store.items.filter { !before.contains($0.id) }
+        if let marked = added.first(where: { !$0.annotations.isEmpty }) {
+            note("snagit marks: \(marked.annotations.map(\.kind.rawValue)), app \(marked.source.appName ?? "-"), date \(marked.created.formatted(.iso8601))")
+        }
+        if let video = added.first(where: { $0.kind == .video }) {
+            let stored = VideoStore.shared.storedFile(video.id)
+            note("snagit video: stays on Mac \(video.video?.staysOnMac == true), kept in import folder \(stored?.url.path.hasPrefix(videos.path) == true), name \(video.name)")
+            if let window = importer.debugWindow { render(window, to: out.appending(path: "snagit-import.png")) }
+            store.delete([video.id])
+            note("snagit video deleted with its copy: \(stored.map { !FileManager.default.fileExists(atPath: $0.url.path) } ?? false)")
+        }
+        importer.debugUse([folder], videoFolder: videos)
+        importer.start()
+        for _ in 0..<120 where importer.phase != .done { try? await Task.sleep(for: .milliseconds(250)) }
+        note("snagit import again: \(importer.summary.imported) imported, \(importer.summary.alreadyImported) already imported")
+        importer.debugWindow?.orderOut(nil)
+    }
+
+    /// A Snagit capture file, built the way Snagit writes them.
+    private static func snagx(png: Data?, drawn: Data?, objects: [[String: Any]], tags: [String] = ["work"]) -> Data {
+        var page: [String: Any] = ["CaptureCanvasWidth": png == nil ? 0 : 600, "CaptureCanvasHeight": png == nil ? 0 : 300, "DPI": 72,
+                                   "BackgroundSize": png == nil ? "0,0" : "600.000000,300.000000", "CaptureBackgroundLocation": "0.000000,0.000000",
+                                   "CaptureObjects": objects]
+        if png != nil { page["CaptureBackgroundImage"] = "{P}.png" }
+        let meta: [String: Any] = ["CaptureDate": "2022-01-01 15:00:00", "AppName": "Notes", "WindowName": "Test", "Tags": tags]
+        var files: [(String, Data)] = [("index.json", (try? JSONSerialization.data(withJSONObject: ["Pages": ["{P}.json"]])) ?? Data()),
+                                       ("metadata.json", (try? JSONSerialization.data(withJSONObject: meta)) ?? Data()),
+                                       ("{P}.json", (try? JSONSerialization.data(withJSONObject: page)) ?? Data())]
+        if let png { files.append(("{P}.png", png)) }
+        if let drawn { files.append(("thumbnail.png", drawn)) }
+        // Stored (uncompressed), as Snagit does.
+        var out = Data(), central = Data()
+        func u16(_ v: Int) -> Data { withUnsafeBytes(of: UInt16(v).littleEndian) { Data($0) } }
+        func u32(_ v: Int) -> Data { withUnsafeBytes(of: UInt32(v).littleEndian) { Data($0) } }
+        for (name, data) in files {
+            let nameData = Data(name.utf8), offset = out.count
+            for part in [u32(0x0403_4B50), u16(20), u16(0), u16(0), u16(0), u16(0), u32(0), u32(data.count), u32(data.count),
+                         u16(nameData.count), u16(0), nameData, data] { out.append(part) }
+            for part in [u32(0x0201_4B50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0), u32(0), u32(data.count), u32(data.count),
+                         u16(nameData.count), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset), nameData] { central.append(part) }
+        }
+        let start = out.count
+        out.append(central)
+        for part in [u32(0x0605_4B50), u16(0), u16(0), u16(files.count), u16(files.count), u32(central.count), u32(start), u16(0)] { out.append(part) }
+        return out
+    }
+
+    /// Runs the Snagit conversion over every capture found, without importing anything, and
+    /// writes how it went (counts, how close each conversion drew to Snagit's) to `out`.
+    static func snagitEval(out: URL) {
+        Task.detached {
+            try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+            var lines: [String] = []
+            let folders = await SnagitImporter.findFolders()
+            lines.append("folders: \(folders.map(\.path))")
+            let files = folders.flatMap { (try? FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil)) ?? [] }
+                .filter { $0.pathExtension.lowercased() == "snagx" }
+            var empty = 0, failed = 0, plain = 0, editable = 0, drawnIn = 0, uncompared = 0
+            var diffs: [(Double, Bool, String)] = []
+            var kinds: [String: [Double]] = [:]
+            var unsupported: [String: Int] = [:]
+            var fingerprints = Set<String>()
+            var duplicates = 0
+            for file in files {
+                switch SnagitImporter.prepare(file) {
+                case .empty: empty += 1
+                case .failed: failed += 1
+                case .prepared(let p):
+                    if !fingerprints.insert(p.fingerprint).inserted { duplicates += 1; continue }
+                    if !p.hadMarkup { plain += 1 } else if p.editable { editable += 1 } else { drawnIn += 1 }
+                    if let d = p.difference {
+                        diffs.append((d, p.editable, file.lastPathComponent))
+                        for kind in Set(p.annotations.map(\.kind.rawValue)) { kinds[kind, default: []].append(d) }
+                    } else if p.hadMarkup && p.editable { uncompared += 1 }
+                }
+                if !(file.lastPathComponent.isEmpty), let data = try? Data(contentsOf: file, options: .alwaysMapped),
+                   let capture = try? SnagitImport.read(data, rtf: SnagitImporter.richText) {
+                    for what in capture.unsupported { unsupported[what, default: 0] += 1 }
+                }
+            }
+            lines.append("files \(files.count): empty \(empty), failed \(failed), duplicates \(duplicates), plain \(plain), editable \(editable), drawn in \(drawnIn), editable unchecked \(uncompared)")
+            lines.append("unsupported: \(unsupported.sorted { $0.value > $1.value })")
+            let buckets = stride(from: 0, through: 120, by: 10).map { low in (low, diffs.filter { $0.0 >= Double(low) && $0.0 < Double(low + 10) }.count) }
+            lines.append("difference histogram (10s): \(buckets.map { "\($0.0):\($0.1)" }.joined(separator: " ")) 130+:\(diffs.filter { $0.0 >= 130 }.count)")
+            for (kind, values) in kinds.sorted(by: { $0.key < $1.key }) {
+                let sorted = values.sorted()
+                lines.append("kind \(kind): n=\(values.count) median \(Int(sorted[sorted.count / 2])) max \(Int(sorted.last ?? 0)) over limit \(values.filter { $0 > SnagitImporter.matchLimit }.count)")
+            }
+            lines.append("closest rejected: \(diffs.filter { !$0.1 }.sorted { $0.0 < $1.0 }.prefix(8).map { "\(Int($0.0)) \($0.2)" })")
+            lines.append("worst accepted: \(diffs.filter { $0.1 }.sorted { $0.0 > $1.0 }.prefix(8).map { "\(Int($0.0)) \($0.2)" })")
+            try? lines.joined(separator: "\n").appending("\ndone\n").write(to: out.appending(path: "report.txt"), atomically: true, encoding: .utf8)
+            await MainActor.run { NSApp.terminate(nil) }
         }
     }
 

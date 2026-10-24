@@ -64,7 +64,9 @@ struct VideoPane: View {
             VStack(spacing: 8) {
                 Image(systemName: "video.slash").font(.largeTitle).foregroundStyle(.secondary)
                 Text("This video is on another Mac").font(.headline)
-                Text(prefs.syncVideos
+                Text(item.video?.staysOnMac == true
+                     ? "It was imported on another Mac, and imported videos stay on the Mac that has them. Its name, tags and notes are here."
+                     : prefs.syncVideos
                      ? "It arrives once the Mac that recorded it has synced it. Its name, tags and notes are here already."
                      : "Turn on “Sync video files” in Settings › Library on both Macs to play it here.")
                     .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 360)

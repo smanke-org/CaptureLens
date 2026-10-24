@@ -133,7 +133,8 @@ final class LibrarySync {
         guard Preferences.shared.syncVideos, let key = SettingsSync.shared.key, let db else { return }
         let libraryKey = db.sealKey
         for id in ids where !preparing.contains(id) && preparedVideos[id] == nil {
-            guard LibraryStore.shared.entry(id)?.kind == .video, db.data(forKey: Keys.videoSentPrefix + id.uuidString) == nil,
+            guard let item = LibraryStore.shared.entry(id), item.kind == .video, item.video?.staysOnMac != true,
+                  db.data(forKey: Keys.videoSentPrefix + id.uuidString) == nil,
                   let stored = VideoStore.shared.storedFile(id) else { continue }
             preparing.insert(id)
             Task {

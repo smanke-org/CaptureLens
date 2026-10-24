@@ -46,6 +46,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DebugHelpTest.run(snapshot: snapshot, delegate: self)
             return
         }
+        if let out = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SNAGIT_EVAL"] {
+            DebugSelfTest.snagitEval(out: URL(fileURLWithPath: out))
+            return
+        }
         if let folder = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SNAPSHOT"] {
             setUpStatusItem()
             DebugSelfTest.run(folder: folder)
@@ -261,6 +265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(recentItem)
         }
         menu.addItem(item("Import Pictures…", #selector(importPictures)))
+        menu.addItem(item("Import from Snagit…", #selector(importFromSnagit)))
         menu.addItem(toggle("Copy Captures to Clipboard", prefs.copyToClipboard, #selector(toggleClipboard)))
         menu.addItem(toggle("Open Captures in Library", prefs.afterCapture.opensLibrary, #selector(toggleOpenInLibrary)))
 
@@ -352,6 +357,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let id = sender.representedObject as? UUID else { return }
         LibraryWindow.shared.show(select: id)
     }
+    @objc func importFromSnagit() {
+        SnagitImportWindow.shared.show()
+    }
+
     @objc func importPictures() {
         NSApp.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel()

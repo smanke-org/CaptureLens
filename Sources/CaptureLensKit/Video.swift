@@ -8,11 +8,14 @@ public struct VideoInfo: Codable, Equatable, Sendable {
     public var duration: Double
     public var hasAudio: Bool
     public var edits: VideoEdits
+    /// The movie stays on the Mac that has it, even with video sync on (imported videos).
+    public var staysOnMac: Bool
 
-    public init(duration: Double, hasAudio: Bool = false, edits: VideoEdits = VideoEdits()) {
+    public init(duration: Double, hasAudio: Bool = false, edits: VideoEdits = VideoEdits(), staysOnMac: Bool = false) {
         self.duration = duration
         self.hasAudio = hasAudio
         self.edits = edits
+        self.staysOnMac = staysOnMac
     }
 
     public init(from decoder: Decoder) throws {
@@ -20,6 +23,7 @@ public struct VideoInfo: Codable, Equatable, Sendable {
         duration = try c.decodeIfPresent(Double.self, forKey: .duration) ?? 0
         hasAudio = try c.decodeIfPresent(Bool.self, forKey: .hasAudio) ?? false
         edits = try c.decodeIfPresent(VideoEdits.self, forKey: .edits) ?? VideoEdits()
+        staysOnMac = try c.decodeIfPresent(Bool.self, forKey: .staysOnMac) ?? false
     }
 
     /// How long the finished video runs.

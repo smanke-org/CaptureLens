@@ -215,6 +215,9 @@ enum Help {
                 ("Pinch or ⌘-scroll", "Zoom the picture; or use the zoom slider, − and + below it, or pick a level from the percentage"),
                 ("Slider below the captures, or ⌘+ / ⌘−", "Make the thumbnails bigger or smaller"),
             ]),
+            .heading("Moving from Snagit"),
+            .text("Choose Import from Snagit… in the menu bar menu (or Settings › Library). CaptureLens finds Snagit's folders, such as its autosave folder and a library kept in OneDrive or iCloud Drive, and shows what's there; add any other folder of Snagit captures. Each capture comes in with its date, app, window, web address and tags. Boxes, ellipses, arrows, lines, text, steps, highlights, pen strokes, magnifiers, blur and callouts become CaptureLens marks you can edit, when they draw the same as in Snagit; otherwise, or with Snagit tools CaptureLens doesn't have, the capture comes in as Snagit drew it. The Photos library is never touched, and Snagit's files aren't changed."),
+            .text("Videos are copied to a folder of their own (Movies › CaptureLens Imports, unless you choose another). They play in the library but never sync, even with \"Sync video files\" on; deleting one from the library deletes its copy. Empty placeholders Snagit left, duplicates and captures already imported are skipped, so importing again only adds what's new."),
         ]),
 
         HelpTopic(id: "sync", title: "Sync and Security", symbol: "lock.icloud", blocks: [

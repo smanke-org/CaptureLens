@@ -197,7 +197,7 @@ final class FolderSync {
     private func syncVideos(_ ids: Set<UUID>) async {
         guard Preferences.shared.syncVideos, let root, let key = SettingsSync.shared.key, let db else { return }
         let libraryKey = db.sealKey
-        for id in ids where LibraryStore.shared.entry(id)?.kind == .video {
+        for id in ids where LibraryStore.shared.entry(id)?.kind == .video && LibraryStore.shared.entry(id)?.video?.staysOnMac != true {
             let target = root.appending(path: FolderIO.videosFolder).appending(path: "\(id.uuidString).clvideo")
             let inFolder = await io.fileExists(target)
             if let stored = VideoStore.shared.storedFile(id) {

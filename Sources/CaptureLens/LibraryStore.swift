@@ -70,7 +70,7 @@ final class LibraryStore {
     /// Saves a new capture, then reads its text and names it in the background.
     @discardableResult
     func add(image: CGImage, kind: CaptureItem.Kind, scale: Double, source: CaptureItem.Source,
-             cursor: CursorLayer?, created: Date = Date(), video: VideoInfo? = nil) -> CaptureItem? {
+             cursor: CursorLayer?, created: Date = Date(), video: VideoInfo? = nil, analyze: Bool = true) -> CaptureItem? {
         guard let db, let png = image.pngData else { return nil }
         let item = CaptureItem(created: created, kind: kind, name: CaptureNaming.fallback(source: source, date: created),
                                source: source, pixelWidth: image.width, pixelHeight: image.height, scale: scale,
@@ -86,8 +86,13 @@ final class LibraryStore {
         items.insert(item, at: 0)
         LibrarySync.shared.localDidChange([item.id])
         FolderSync.shared.localDidChange([item.id])
-        analyze(item.id, image: image, rename: true)
+        if analyze { self.analyze(item.id, image: image, rename: true) }
         return item
+    }
+
+    /// Captures added in bulk (an import), kept in date order.
+    func insertImported(_ added: [CaptureItem]) {
+        items = (items + added).sorted { $0.created > $1.created }
     }
 
     /// Pictures dropped on the Dock icon or chosen with Import.
@@ -111,11 +116,16 @@ final class LibraryStore {
     /// Reads the text (for search) and, if `rename` and the name is still automatic, asks
     /// the on-device model for a name.
     func analyze(_ id: UUID, image: CGImage? = nil, rename: Bool) {
+        Task { await analyzeNow(id, image: image, rename: rename) }
+    }
+
+    /// `analyze`, finishing before it returns (for going through many one at a time).
+    func analyzeNow(_ id: UUID, image: CGImage? = nil, rename: Bool = true) async {
         guard !analyzing.contains(id) else { return }
         let prefs = Preferences.shared
         guard let picture = image ?? fullImage(id).flatMap({ $0.cgImage(forProposedRect: nil, context: nil, hints: nil) }) else { return }
         analyzing.insert(id)
-        Task {
+        do {
             defer { analyzing.remove(id) }
             var text = entry(id)?.recognizedText ?? ""
             if prefs.recognizeText || rename, text.isEmpty {
