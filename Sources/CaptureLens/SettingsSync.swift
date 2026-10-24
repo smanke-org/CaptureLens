@@ -470,6 +470,11 @@ enum SyncDebugHook {
                 }
             }
         }
+        // `CAPTURELENS_DEBUG_COMMANDS=<file>`: runs each new line of the file (see `DebugCommands`)
+        // and writes the state to `<file>.status`, so a running test copy can be driven.
+        if let path = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_COMMANDS"] {
+            DebugCommands.start(path: path)
+        }
         Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
             MainActor.assumeIsolated {
                 let d = AppDefaults.store
@@ -491,6 +496,97 @@ enum SyncDebugHook {
 #endif
 
 #if DEBUG
+/// Commands for a running test copy, one per line: `create:<pass>`, `enter:<pass>`,
+/// `change:<pass>`, `startover:<pass>`, `add:<text>`, `rename-first:<name>`, `tag-first:<tag>`,
+/// `notes-first:<text>`, `favorite-first`, `delete-first`, `clipboard:<true|false>`,
+/// `preset-name:<name>`, `appearance:<system|light|dark>`, `sync-now`, `sync-off`, `delete-zone`, `quit`.
+@MainActor
+enum DebugCommands {
+    private static var done = 0
+
+    static func start(path: String) {
+        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            MainActor.assumeIsolated { tick(path) }
+        }
+    }
+
+    private static func tick(_ path: String) {
+        let lines = ((try? String(contentsOfFile: path, encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
+        while done < lines.count {
+            let line = lines[done]
+            done += 1
+            Task { await run(line) }
+        }
+        writeStatus(path + ".status")
+    }
+
+    private static func run(_ line: String) async {
+        let sync = SettingsSync.shared
+        let store = LibraryStore.shared
+        let prefs = Preferences.shared
+        let (verb, arg): (String, String) = {
+            guard let colon = line.firstIndex(of: ":") else { return (line, "") }
+            return (String(line[..<colon]), String(line[line.index(after: colon)...]))
+        }()
+        var result = "ok"
+        do {
+            switch verb {
+            case "create": sync.isEnabled = true; try await Task.sleep(for: .seconds(2)); try await sync.createPassphrase(arg)
+            case "enter": sync.isEnabled = true; try await Task.sleep(for: .seconds(2)); try await sync.enterPassphrase(arg)
+            case "change": try await sync.changePassphrase(arg)
+            case "startover": try await sync.createPassphrase(arg, replacing: true)
+            case "add":
+                if let image = DebugImage.make(text: arg) {
+                    store.add(image: image, kind: .region, scale: 2, source: .init(appName: "DebugHook"), cursor: nil)
+                }
+            case "rename-first": if let first = store.items.first { store.rename(first.id, to: arg) }
+            case "tag-first": if let first = store.items.first { store.setTags([first.id], add: [arg]) }
+            case "notes-first":
+                if var first = store.items.first { first.notes = arg; store.update(first) }
+            case "favorite-first": if let first = store.items.first { store.toggleFavorite([first.id]) }
+            case "delete-first": if let first = store.items.first { store.delete([first.id]) }
+            case "clipboard": prefs.copyToClipboard = arg == "true"
+            case "preset-name":
+                var first = prefs.presets[0]
+                first.name = arg
+                prefs.update(first)
+            case "appearance": AppAppearance.store.set(arg, forKey: AppAppearance.key); sync.localDidChange()
+            case "sync-now": sync.syncNow()
+            case "sync-off": sync.isEnabled = false
+            case "delete-zone":
+                // Removes the test zone from iCloud once a test is over.
+                sync.isEnabled = false
+                _ = try await CloudSync.shared.database.deleteRecordZone(withID: CloudSync.shared.zoneID)
+            case "quit": NSApp.terminate(nil)
+            default: result = "unknown command"
+            }
+        } catch {
+            result = "error: \(error.localizedDescription)"
+        }
+        AppDefaults.store.set("\(line) -> \(result)", forKey: "debug.lastCommand")
+    }
+
+    private static func writeStatus(_ path: String) {
+        let sync = SettingsSync.shared
+        let store = LibraryStore.shared
+        let prefs = Preferences.shared
+        let status: [String: Any] = [
+            "keyState": "\(sync.keyState)", "syncError": sync.lastError ?? "", "cloudError": CloudSync.shared.lastError ?? "",
+            "engineRunning": CloudSync.shared.isRunning, "lastCommand": AppDefaults.store.string(forKey: "debug.lastCommand") ?? "",
+            "settingsFrom": sync.lastSource ?? "", "pending": LibrarySync.shared.pendingUploads,
+            "items": store.items.map { item -> [String: Any] in
+                ["name": item.name, "tags": item.tags, "notes": item.notes, "favorite": item.favorite,
+                 "hasImage": store.pngData(item.id) != nil, "origin": item.origin ?? ""]
+            },
+            "copyToClipboard": prefs.copyToClipboard, "preset0": prefs.presets.first?.name ?? "",
+            "appearance": AppAppearance.current.rawValue,
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: status, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: URL(fileURLWithPath: path))
+        }
+    }
+}
+
 /// A picture with some text on it, for debug hooks and self-tests.
 enum DebugImage {
     @MainActor static func make(text: String, size: CGSize = CGSize(width: 640, height: 240)) -> CGImage? {
