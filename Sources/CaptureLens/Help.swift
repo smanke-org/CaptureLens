@@ -138,7 +138,7 @@ enum Help {
             .heading("Adjusting the picture"),
             .text("The Adjust button (the sliders) crops, rotates and resizes the picture, cuts strips out of it (drag across or down the strip; torn, wavy or straight seams), adds a border with rounded corners and a shadow, gives it torn, wavy or faded edges, and removes the background to keep just the subject. None of it changes the original: each adjustment can be changed, undone, or reset with Reset All Adjustments."),
             .text("Smart Redact (also in Adjust) finds email addresses, phone numbers, card numbers, ID numbers, IP addresses, street addresses and keys or tokens in the picture and covers each with a black box, blur or pixels. The covers are ordinary marks: move, resize or delete any of them."),
-            .text("Edit and Result, below the picture, switch between marking up the original and seeing the finished picture as it will be copied and saved. Save As writes PNG, JPEG, HEIC, TIFF, GIF, BMP or PDF."),
+            .text("The Edit switch below the picture turns editing on (mark up and adjust the original) or off (see the finished picture as it will be copied and saved). Save As writes PNG, JPEG, HEIC, TIFF, GIF, BMP or PDF."),
             .text("Copy, Save As, dragging a capture out and the thumbnails all include the marks. The eye button hides them to show the picture as captured. Marks sync with the capture to your other Macs."),
         ]),
 
