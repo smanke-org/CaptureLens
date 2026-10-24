@@ -51,14 +51,13 @@ private struct SingleCaptureView: View {
     /// Edit/Result, then whatever fits.
     private func barRow<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         HStack(spacing: 12) {
-            Picker("", selection: $editor.showResult) {
-                Text("Edit").tag(false)
-                Text("Result").tag(true)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .help("Edit marks up the original; Result shows the finished picture, as it's copied and saved")
+            // On: mark up the original. Off: the finished picture, as it's copied and saved.
+            Toggle("Edit", isOn: Binding(get: { !editor.showResult }, set: { editor.showResult = !$0 }))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .fixedSize()
+                .help(editor.showResult ? "Turn on to annotate and adjust the picture"
+                                        : "Turn off to see the finished picture, as it's copied and saved")
             content()
         }
         .labelStyle(.iconOnly)
