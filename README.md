@@ -8,6 +8,9 @@ you can find it again by its name, the date, its tags or notes, or any text that
 CaptureLens also:
 - **Captures** the whole screen, one window (even where others cover it), an area you drag out, or a frame of an
   exact size, now or after a countdown, each from its own preset and shortcut.
+- **Records video** of the screen, a window or an area, with the Mac's sound, your microphone, your camera in a
+  round bubble, rings where you click and the shortcuts you press. Pause and resume, trim the ends, cut sections
+  out of the middle, save a frame as a picture, and save as MP4 or an animated GIF.
 - **Captures long pages** by stitching a scrolling area into one tall picture, and **records how-tos**: a
   capture at every click, each step numbered and named from what you clicked, ready to become a guide.
 - **Makes guides**: lay captures out as a step-by-step guide, reference sheet or timeline, as a PDF or picture,
@@ -20,6 +23,9 @@ CaptureLens also:
   seams, add borders, shadows and torn or faded edges, remove the background, and blur or black out anything
   sensitive, which Smart Redact finds for you (emails, phone and card numbers, keys and more). Save as PNG, JPEG,
   HEIC, TIFF, GIF, BMP or PDF.
+- **Edits what's in the picture**: retype text in a matching font, size and color, pick up buttons, icons and
+  lines of text and move them elsewhere (the spot they leave is filled in), or simplify the whole picture into
+  plain shapes to show a layout without its details.
 - **Lets you select and copy text** right in the picture, with macOS's own Live Text.
 - **Organizes** with tags, favorites and notes ("More Info"), and filters by date, type, tag, app or website in
   one click.
@@ -34,7 +40,8 @@ CaptureLens also:
 1. Open the disk image and drag **CaptureLens** to **Applications**.
 2. Open CaptureLens. Its icon appears in the menu bar.
 3. Allow **Screen Recording** when asked (System Settings › Privacy & Security › Screen & System Audio Recording).
-   CaptureLens needs it to capture the screen.
+   CaptureLens needs it to capture the screen. Recording your voice or camera asks for the microphone or camera
+   the first time you turn them on.
 
 Requires macOS 26 or later. Automatic names need Apple Intelligence turned on.
 
@@ -46,6 +53,7 @@ Requires macOS 26 or later. Automatic names need Apple Intelligence turned on.
 | ⌥⇧⌘3 | Capture the whole screen |
 | ⌥⇧⌘5 | Capture a window |
 | ⌥⇧⌘6 | Scrolling capture: pick an area, scroll, and it's stitched into one tall picture |
+| ⌥⇧⌘R | Record a video (press again to stop) |
 | ⌥⇧⌘L | Open the library |
 
 Every capture goes into the library, and onto the clipboard if you like. A preview slides into the corner:
@@ -59,7 +67,7 @@ In the library, search finds words in names, tags, notes and the text in the pic
 `tag:work`, `app:safari`, `site:example.com` and dates such as `yesterday` or `March 3`.
 
 Actions can also be run from a URL, for ToolHUD, Shortcuts or scripts: `capturelens://capture`, `screen`,
-`window`, `area`, `scrolling`, `steps`, `recapture`, `library` and `preset/<name>` (for example
+`window`, `area`, `scrolling`, `steps`, `record`, `recapture`, `library` and `preset/<name>` (for example
 `open capturelens://screen`).
 
 ## Privacy
@@ -73,7 +81,8 @@ or your password to open. Sync is end-to-end encrypted: with "Sync settings with
 settings and library are sealed on your Mac before they reach iCloud, using a key that only your sync
 passphrase unlocks. Neither Apple nor the developer can read what's synced. The library can sync through a
 folder that Dropbox, OneDrive, Google Drive or another sync app keeps on your Macs instead (Settings › Library);
-every file there is encrypted the same way, and settings keep syncing through iCloud.
+every file there is encrypted the same way, and settings keep syncing through iCloud. Recordings' video files stay
+on the Mac that recorded them unless you turn on "Sync video files"; their names, tags and notes always sync.
 
 ## Updates
 
