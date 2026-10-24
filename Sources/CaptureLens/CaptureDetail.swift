@@ -32,6 +32,71 @@ private struct SingleCaptureView: View {
     @State private var store = LibraryStore.shared
     @State private var zoomToFit = 0
     @State private var editor = AnnotationEditor.shared
+    /// A pane folded away to give the other all the room; remembered between captures.
+    @AppStorage("library.collapsedPane", store: AppDefaults.store) private var collapsedRaw = ""
+    private var collapsed: Pane? {
+        get { Pane(rawValue: collapsedRaw) }
+        nonmutating set { withAnimation(.easeInOut(duration: 0.2)) { collapsedRaw = newValue?.rawValue ?? "" } }
+    }
+
+    enum Pane: String { case picture, details }
+
+    private var details: some View {
+        CaptureInspector(state: state, item: item)
+            .frame(minHeight: 180, idealHeight: 300)
+    }
+
+    private var pictureArea: some View {
+        VStack(spacing: 0) {
+            if editor.showResult {
+                ResultBar(item: item)
+                Divider()
+                ResultCanvas(item: item, fitRequest: zoomToFit)
+                    .frame(minHeight: 200)
+            } else {
+                AnnotationToolbar()
+                Divider()
+                HStack(spacing: 0) {
+                    ToolPalette()
+                    Divider()
+                    CaptureCanvas(item: item, fitRequest: zoomToFit, editor: editorState)
+                }
+                .frame(minHeight: 200)
+            }
+            HStack(spacing: 12) {
+                Picker("", selection: $editor.showResult) {
+                    Text("Edit").tag(false)
+                    Text("Result").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .help("Edit marks up the original; Result shows the finished picture, as it's copied and saved")
+                Button { if let png = Flattener.png(item) { Clipboard.copy(png: png); Notice.shared.show("Copied") } } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                Button { Exporter.save(item) } label: { Label("Save As…", systemImage: "square.and.arrow.down") }
+                    .help("Save As…")
+                ShareButton(items: { [item] }).fixedSize().help("Share")
+                Button { store.toggleFavorite([item.id]) } label: {
+                    Label(item.favorite ? "Favorite" : "Favorite", systemImage: item.favorite ? "star.fill" : "star")
+                }
+                .help(item.favorite ? "Remove from Favorites" : "Add to Favorites")
+                Spacer(minLength: 4)
+                ZoomControls(fit: { zoomToFit += 1 })
+                Button(role: .destructive) { state.confirmDelete = [item.id] } label: { Label("Delete", systemImage: "trash") }
+                Divider().frame(height: 16)
+                Button { collapsed = .details } label: { Label("Hide Details", systemImage: "chevron.down.circle") }
+                    .help("Hide the details, for more room to annotate")
+                Button { collapsed = .picture } label: { Label("Hide Picture", systemImage: "chevron.up.circle") }
+                    .help("Hide the picture, for more room for the details")
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+        }
+    }
 
     /// What the drawing layer shows, so it redraws when any of it changes.
     private var editorState: CaptureCanvas.EditorState {
@@ -39,55 +104,56 @@ private struct SingleCaptureView: View {
     }
 
     var body: some View {
-        VSplitView {
-            VStack(spacing: 0) {
-                if editor.showResult {
-                    ResultBar(item: item)
+        Group {
+            switch collapsed {
+            case .picture:
+                VStack(spacing: 0) {
+                    CollapsedPaneBar(title: "Picture", symbol: "photo", edge: .top) { collapsed = nil }
                     Divider()
-                    ResultCanvas(item: item, fitRequest: zoomToFit)
-                        .frame(minHeight: 200)
-                } else {
-                    AnnotationToolbar()
+                    details
+                }
+            case .details:
+                VStack(spacing: 0) {
+                    pictureArea
                     Divider()
-                    HStack(spacing: 0) {
-                        ToolPalette()
-                        Divider()
-                        CaptureCanvas(item: item, fitRequest: zoomToFit, editor: editorState)
-                    }
-                    .frame(minHeight: 200)
+                    CollapsedPaneBar(title: "Details", symbol: "info.circle", edge: .bottom) { collapsed = nil }
                 }
-                HStack(spacing: 12) {
-                    Picker("", selection: $editor.showResult) {
-                        Text("Edit").tag(false)
-                        Text("Result").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .fixedSize()
-                    .help("Edit marks up the original; Result shows the finished picture, as it's copied and saved")
-                    Button { if let png = Flattener.png(item) { Clipboard.copy(png: png); Notice.shared.show("Copied") } } label: {
-                        Label("Copy", systemImage: "doc.on.doc")
-                    }
-                    Button { Exporter.save(item) } label: { Label("Save As…", systemImage: "square.and.arrow.down") }
-                        .help("Save As…")
-                    ShareButton(items: { [item] }).fixedSize().help("Share")
-                    Button { store.toggleFavorite([item.id]) } label: {
-                        Label(item.favorite ? "Favorite" : "Favorite", systemImage: item.favorite ? "star.fill" : "star")
-                    }
-                    .help(item.favorite ? "Remove from Favorites" : "Add to Favorites")
-                    Spacer()
-                    ZoomControls(fit: { zoomToFit += 1 })
-                    Button(role: .destructive) { state.confirmDelete = [item.id] } label: { Label("Delete", systemImage: "trash") }
+            case nil:
+                VSplitView {
+                    pictureArea
+                    details
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.borderless)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
             }
-            CaptureInspector(state: state, item: item)
-                .frame(minHeight: 180, idealHeight: 300)
         }
         .sheet(isPresented: $editor.showResize) { ResizeSheet() }
+    }
+}
+
+/// A folded-away pane: its name and a button (or a click anywhere on it) to bring it back.
+private struct CollapsedPaneBar: View {
+    let title: String
+    let symbol: String
+    let edge: VerticalEdge
+    let restore: () -> Void
+
+    var body: some View {
+        Button(action: restore) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol).foregroundStyle(.secondary)
+                Text(title).font(.callout.weight(.medium))
+                Spacer()
+                Label("Show \(title)", systemImage: edge == .bottom ? "chevron.up.circle" : "chevron.down.circle")
+                    .labelStyle(.titleAndIcon)
+                    .font(.callout)
+                    .foregroundStyle(Color.accentColor)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(.bar)
+        .help("Show the \(title.lowercased()) again")
     }
 }
 
@@ -461,7 +527,8 @@ struct ZoomControls: View {
             Slider(value: Binding(get: { log2(zoom.magnification) }, set: { zoom.set(pow(2, $0)) }),
                    in: log2(CanvasZoom.range.lowerBound)...log2(CanvasZoom.range.upperBound))
                 .controlSize(.small)
-                .frame(width: 110)
+                // Gives way first when the bar is short of room.
+                .frame(minWidth: 40, idealWidth: 110, maxWidth: 110)
                 .help("Zoom. Pinch or ⌘-scroll also zoom.")
             Button { zoom.step(in: true) } label: { Label("Zoom In", systemImage: "plus.magnifyingglass") }
                 .disabled(zoom.magnification >= CanvasZoom.range.upperBound - 0.001)
