@@ -392,7 +392,7 @@ struct CaptureCanvas: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSScrollView()
+        let scroll = ZoomingScrollView()
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true
         scroll.autohidesScrollers = true
@@ -604,6 +604,25 @@ struct ZoomControls: View {
                     .help("Zoom to fit")
             }
         }
+    }
+}
+
+/// The Edit view's scroll view: scrolling (mouse wheel or trackpad) zooms around the pointer
+/// instead of moving the picture. Holding ⇧ scrolls as usual, to move around a zoomed picture.
+final class ZoomingScrollView: NSScrollView {
+    override func scrollWheel(with event: NSEvent) {
+        guard allowsMagnification, !event.modifierFlags.contains(.shift) else { return super.scrollWheel(with: event) }
+        // A trackpad's coasting after the fingers lift would keep zooming; ignore it.
+        guard event.momentumPhase.isEmpty else { return }
+        let delta = event.scrollingDeltaY != 0 ? event.scrollingDeltaY : event.scrollingDeltaX
+        guard delta != 0 else { return }
+        // Trackpads send many small, precise steps; mouse wheels a few big ones.
+        let factor = exp(delta * (event.hasPreciseScrollingDeltas ? 0.01 : 0.12))
+        let target = min(max(magnification * factor, minMagnification), maxMagnification)
+        guard let document = documentView else { return }
+        let pointer = document.convert(event.locationInWindow, from: nil)
+        setMagnification(target, centeredAt: pointer)
+        CanvasZoom.shared.noteChange()
     }
 }
 
