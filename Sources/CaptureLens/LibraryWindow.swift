@@ -238,7 +238,9 @@ struct LibraryToolbar: ToolbarContent {
             }
         }
         ToolbarItemGroup(placement: .primaryAction) {
-            ShareButton(items: { state.selectedItems })
+            // A toolbar button like its neighbors (an AppKit one sits smaller and off-center
+            // there); the share menu opens at the click, just under it.
+            Button { ShareButton.shareAtPointer(state.selectedItems) } label: { Label("Share", systemImage: "square.and.arrow.up") }
                 .disabled(state.selection.isEmpty)
                 .help(state.selection.count > 1 ? "Share the selected captures" : "Share the selected capture")
             Button { importFiles() } label: { Label("Import", systemImage: "tray.and.arrow.down") }
