@@ -737,6 +737,8 @@ struct CaptureInspector: View {
     @State private var name = ""
     @State private var notes = ""
     @State private var showText = false
+    /// Where the capture came from folds away like its text; open to start, remembered.
+    @AppStorage("library.details.sourceOpen", store: AppDefaults.store) private var showSource = true
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -766,7 +768,8 @@ struct CaptureInspector: View {
                         .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.secondary.opacity(0.25)))
                 }
             }
-            Section("Source") {
+            Section {
+                DisclosureGroup(isExpanded: $showSource) {
                 LabeledContent("Captured", value: item.created.formatted(date: .long, time: .standard))
                 LabeledContent("Type", value: item.kind.title)
                 if let app = item.source.appName {
@@ -785,6 +788,17 @@ struct CaptureInspector: View {
                 }
                 LabeledContent("Size", value: "\(Int(item.pointSize.width)) × \(Int(item.pointSize.height)) points (\(item.pixelWidth) × \(item.pixelHeight) pixels)")
                 if let display = item.source.displayName { LabeledContent("Display", value: display) }
+                } label: {
+                    // Folded, the app and date say where it came from at a glance.
+                    HStack {
+                        Text("Source")
+                        if !showSource {
+                            Spacer()
+                            Text([item.source.appName, item.created.formatted(date: .abbreviated, time: .omitted)].compactMap { $0 }.joined(separator: " · "))
+                                .foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
+                }
             }
             if item.cursor != nil {
                 Section("Pointer") {
