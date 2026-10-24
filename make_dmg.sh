@@ -62,13 +62,20 @@ ln -s /Applications "${STAGING}/Applications"
 
 echo "Creating ${DMG_PATH}..."
 rm -f "${DMG_PATH}"
+# LZFSE (ULFO), not zlib (UDZO): on macOS 27.0.1 hdiutil writes a corrupt zlib image of
+# this HFS+ volume, which notarytool then refuses as "not a disk image". LZFSE images open
+# on every macOS CaptureLens runs on.
 hdiutil create \
   -volname "${APP_NAME}" \
   -srcfolder "${STAGING}" \
   -fs HFS+ \
-  -format UDZO \
+  -format ULFO \
   -ov \
   "${DMG_PATH}" >/dev/null
+if ! hdiutil imageinfo "${DMG_PATH}" 2>/dev/null | grep -q "Format Description"; then
+  echo "The disk image came out unreadable; not signing or publishing it." >&2
+  exit 1
+fi
 
 if [ -n "${SIGN_IDENTITY}" ]; then
   echo "Signing the disk image with: ${SIGN_IDENTITY}"
