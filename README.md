@@ -9,7 +9,7 @@ CaptureLens also:
 - **Captures** the whole screen, one window (even where others cover it), an area you drag out, or a frame of an
   exact size, now or after a countdown, each from its own preset and shortcut.
 - **Records video** of the screen, a window or an area, with the Mac's sound, your microphone, your camera in a
-  round bubble, rings where you click and the shortcuts you press. Pause and resume, trim the ends, cut sections
+  round bubble, rings where you click and the shortcuts you press, at 10 to 60 frames a second. Pause and resume, trim the ends, cut sections
   out of the middle, save a frame as a picture, and save as MP4 or an animated GIF.
 - **Captures long pages** by stitching a scrolling area into one tall picture, and **records how-tos**: a
   capture at every click, each step numbered and named from what you clicked, ready to become a guide.
@@ -30,6 +30,8 @@ CaptureLens also:
 - **Organizes** with tags, favorites and notes ("More Info"), and filters by date, type, tag, app or website in
   one click.
 - **Remembers where a capture came from**: the app, the window, and in a browser, the web page.
+- **Brings your old library along**: Import from Snagit moves Snagit captures in with their dates, apps, web
+  addresses and tags, and their markup editable where CaptureLens has the same tool. Videos can come too.
 - **Keeps the library private**: encrypted on your Mac, optionally locked behind Touch ID, and synced between
   your Macs end-to-end encrypted through iCloud, or through a Dropbox, OneDrive or Google Drive folder.
 
