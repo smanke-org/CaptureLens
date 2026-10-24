@@ -1213,7 +1213,8 @@ struct ToolPalette: View {
                 Button("Hide Sensitive Info with Blur") { editor.smartRedact(with: .blur) }
                 Button("Hide Sensitive Info with Pixels") { editor.smartRedact(with: .pixelate) }
             } label: { icon("wand.and.stars", on: false) }
-                .menuStyle(.borderlessButton)
+                .menuStyle(.button)
+                .buttonStyle(.plain)
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .help("Smart Redact: find email addresses, phone numbers, card numbers and more, and hide them")
@@ -1228,7 +1229,8 @@ struct ToolPalette: View {
             } label: {
                 if editor.simplifying { ProgressView().controlSize(.small).frame(width: 36, height: 34) } else { icon("rectangle.3.group", on: false) }
             }
-                .menuStyle(.borderlessButton)
+                .menuStyle(.button)
+                .buttonStyle(.plain)
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .help("Simplify: redraw the picture as plain shapes, a bar for each line of text and a box for each part")
@@ -1351,10 +1353,19 @@ struct AdjustMenu: View {
                     .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
             } else { Image(systemName: "slider.horizontal.3") }
         }
-        .menuStyle(.borderlessButton)
+        .modifier(MenuLook(tile: compact))
         .menuIndicator(compact ? .hidden : .visible)
         .fixedSize()
         .help("Adjust: crop, cut out, rotate, resize, border, edges, remove background, hide sensitive info")
+    }
+
+    /// In the palette the menu shows its label as a full tile; in a toolbar, as a small button.
+    struct MenuLook: ViewModifier {
+        let tile: Bool
+
+        func body(content: Content) -> some View {
+            if tile { content.menuStyle(.button).buttonStyle(.plain) } else { content.menuStyle(.borderlessButton) }
+        }
     }
 
     static let sideChoices: [(String, Set<EdgeEffect.Side>)] = [
