@@ -211,28 +211,23 @@ struct LibraryToolbar: ToolbarContent {
     @Bindable var state: LibraryState
 
     var body: some ToolbarContent {
-        ToolbarItem(placement: .navigation) {
-            Menu {
-                ForEach(Preferences.shared.presets) { preset in
-                    Button {
-                        LibraryWindow.shared.window?.orderOut(nil)
-                        CaptureEngine.shared.run(preset)
-                    } label: {
-                        Label(preset.name, systemImage: preset.mode.symbol)
-                    }
-                }
-            } label: {
-                Label("Capture", systemImage: "camera.viewfinder")
-            } primaryAction: {
-                if let first = Preferences.shared.presets.first {
+        // One button per capture preset, in their order in Settings › Presets.
+        ToolbarItemGroup(placement: .navigation) {
+            ForEach(Preferences.shared.presets) { preset in
+                Button {
                     LibraryWindow.shared.window?.orderOut(nil)
-                    CaptureEngine.shared.run(first)
+                    CaptureEngine.shared.run(preset)
+                } label: {
+                    Label(preset.name, systemImage: preset.delay > 0 ? "timer" : preset.mode.symbol)
                 }
+                .help("\(preset.name)\(preset.hotKey.map { " (\($0.display))" } ?? "") — \(preset.summary)")
             }
-            .help("Take a capture. Hold the button for your presets.")
         }
         ToolbarItemGroup(placement: .primaryAction) {
-            Button { importFiles() } label: { Label("Import", systemImage: "square.and.arrow.down") }
+            ShareButton(items: { state.selectedItems })
+                .disabled(state.selection.isEmpty)
+                .help(state.selection.count > 1 ? "Share the selected captures" : "Share the selected capture")
+            Button { importFiles() } label: { Label("Import", systemImage: "tray.and.arrow.down") }
                 .help("Add pictures from files to the library")
             Menu {
                 Picker("Sort", selection: $state.sort) {
@@ -373,8 +368,8 @@ struct FilterBar: View {
 
     var body: some View {
         let items = store.items
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+        // Pills wrap onto more lines when the window is too narrow for one.
+        FlowLayout(spacing: 6) {
                 Chip(title: state.filter.dateRange == .any ? "Date" : state.filter.dateRange.title,
                      symbol: "calendar", active: state.filter.dateRange != .any,
                      clear: { state.filter.dateRange = .any }) {
@@ -443,11 +438,12 @@ struct FilterBar: View {
                     Button("Clear All") { state.filter = LibraryFilter() }
                         .buttonStyle(.link)
                         .padding(.leading, 4)
+                        .padding(.vertical, 4)
                 }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 
     private func chipTitle(_ values: [String], fallback: String) -> String {
@@ -690,6 +686,7 @@ struct CaptureMenu: View {
             Button("Copy") { if let png = Flattener.png(item) { Clipboard.copy(png: png) } }
             Button("Copy Text") { Clipboard.copy(text: item.recognizedText) }.disabled(item.recognizedText.isEmpty)
             Button("Save As…") { Exporter.save(item) }
+            Button("Share…") { ShareButton.shareAtPointer([item]) }
             Divider()
             Button("Rename…") { state.selection = [item.id]; state.renaming = item.id; state.showInspector = true }
             Button("Suggest a Name") { store.suggestName(item.id) }
@@ -697,6 +694,9 @@ struct CaptureMenu: View {
                 Button("Open Web Page") { NSWorkspace.shared.open(url) }
             }
             Divider()
+        }
+        if targets.count > 1 {
+            Button("Share \(targets.count) Captures…") { ShareButton.shareAtPointer(store.items.filter { targets.contains($0.id) }) }
         }
         Button(store.entry(item.id)?.favorite == true && targets.count == 1 ? "Remove from Favorites" : "Add to Favorites") {
             store.toggleFavorite(targets)
@@ -737,5 +737,47 @@ struct LockedView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task { await lock.unlock() }
+    }
+}
+
+/// The macOS Share button: Mail, Messages, AirDrop, Notes and the rest, with the
+/// captures as they look in the library (annotations and pointer drawn in).
+struct ShareButton: NSViewRepresentable {
+    let items: () -> [CaptureItem]
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    /// From a menu: the share sheet opens where the pointer is.
+    @MainActor static func shareAtPointer(_ items: [CaptureItem]) {
+        guard let window = LibraryWindow.shared.window, let view = window.contentView else { return }
+        let files = items.compactMap(Flattener.temporaryFile)
+        guard !files.isEmpty else { return NSSound.beep() }
+        let point = view.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        NSSharingServicePicker(items: files).show(relativeTo: CGRect(origin: point, size: CGSize(width: 1, height: 1)), of: view, preferredEdge: .maxY)
+    }
+
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton(image: NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: "Share")!,
+                              target: context.coordinator, action: #selector(Coordinator.share(_:)))
+        button.bezelStyle = .texturedRounded
+        button.isBordered = false
+        context.coordinator.items = items
+        return button
+    }
+
+    func updateNSView(_ button: NSButton, context: Context) {
+        context.coordinator.items = items
+        button.isEnabled = context.environment.isEnabled
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        var items: () -> [CaptureItem] = { [] }
+
+        @objc func share(_ sender: NSButton) {
+            let files = items().compactMap(Flattener.temporaryFile)
+            guard !files.isEmpty else { return NSSound.beep() }
+            NSSharingServicePicker(items: files).show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
+        }
     }
 }

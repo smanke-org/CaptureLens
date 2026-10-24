@@ -49,7 +49,9 @@ private struct SingleCaptureView: View {
                     Button { if let png = Flattener.png(item) { Clipboard.copy(png: png); Notice.shared.show("Copied") } } label: {
                         Label("Copy", systemImage: "doc.on.doc")
                     }
-                    Button { Exporter.save(item) } label: { Label("Save As…", systemImage: "square.and.arrow.up") }
+                    Button { Exporter.save(item) } label: { Label("Save As…", systemImage: "square.and.arrow.down") }
+                        .help("Save As…")
+                    ShareButton(items: { [item] }).fixedSize().help("Share")
                     Button { store.toggleFavorite([item.id]) } label: {
                         Label(item.favorite ? "Favorite" : "Favorite", systemImage: item.favorite ? "star.fill" : "star")
                     }
@@ -74,17 +76,13 @@ private struct MultipleCapturesView: View {
     @Bindable var state: LibraryState
     let items: [CaptureItem]
     @State private var store = LibraryStore.shared
-    @State private var newTag = ""
 
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: "square.stack.3d.up").font(.system(size: 40)).foregroundStyle(.secondary)
             Text("\(items.count) captures selected").font(.title3.weight(.semibold))
-            HStack {
-                TextField("Add a tag to all", text: $newTag).textFieldStyle(.roundedBorder).frame(width: 200)
-                    .onSubmit(addTag)
-                Button("Add Tag", action: addTag).disabled(newTag.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
+            TagPicker(placeholder: "Add a tag to all") { tags in store.setTags(Set(items.map(\.id)), add: tags) }
+                .frame(maxWidth: 360)
             HStack {
                 Button(items.allSatisfy(\.favorite) ? "Remove from Favorites" : "Add to Favorites") {
                     store.toggleFavorite(Set(items.map(\.id)))
@@ -93,11 +91,6 @@ private struct MultipleCapturesView: View {
             }
         }
         .padding()
-    }
-
-    private func addTag() {
-        store.setTags(Set(items.map(\.id)), add: [newTag])
-        newTag = ""
     }
 }
 
@@ -407,7 +400,6 @@ struct CaptureInspector: View {
 struct TagEditor: View {
     let item: CaptureItem
     @State private var store = LibraryStore.shared
-    @State private var newTag = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -426,27 +418,101 @@ struct TagEditor: View {
                     }
                 }
             }
-            HStack {
-                TextField("Add a tag", text: $newTag)
-                    .onSubmit(add)
-                let suggestions = LibraryQuery.tagCounts(store.items).map(\.tag)
-                    .filter { tag in !item.tags.contains { LibraryQuery.fold($0) == LibraryQuery.fold(tag) } }
-                if !suggestions.isEmpty {
-                    Menu {
-                        ForEach(suggestions, id: \.self) { tag in Button(tag) { store.setTags([item.id], add: [tag]) } }
-                    } label: { Image(systemName: "tag") }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                    .help("Add a tag you've used before")
+            TagPicker(exclude: item.tags) { tags in store.setTags([item.id], add: tags) }
+        }
+    }
+}
+
+/// Adds tags: pick one you've used before from the list, or type a name to make a new one.
+/// Typing narrows the list; Return takes the highlighted tag, or creates the typed one.
+struct TagPicker: View {
+    /// Tags already there, left out of the list.
+    var exclude: [String] = []
+    var placeholder = "Add a tag"
+    let add: ([String]) -> Void
+    @State private var store = LibraryStore.shared
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    private var typed: String { text.trimmingCharacters(in: .whitespaces) }
+
+    private var matches: [String] {
+        let taken = Set(exclude.map(LibraryQuery.fold))
+        let all = LibraryQuery.tagCounts(store.items).map(\.tag).filter { !taken.contains(LibraryQuery.fold($0)) }
+        guard !typed.isEmpty else { return all }
+        let query = LibraryQuery.fold(typed)
+        // Names starting with what's typed first, then names containing it.
+        return all.filter { LibraryQuery.fold($0).hasPrefix(query) } + all.filter {
+            let name = LibraryQuery.fold($0)
+            return !name.hasPrefix(query) && name.contains(query)
+        }
+    }
+
+    /// The typed name isn't a tag yet.
+    private var isNew: Bool {
+        !typed.isEmpty && !LibraryQuery.tagCounts(store.items).contains { LibraryQuery.fold($0.tag) == LibraryQuery.fold(typed) }
+            && !exclude.contains { LibraryQuery.fold($0) == LibraryQuery.fold(typed) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField(placeholder, text: $text, prompt: Text("Type a new tag, or pick one below"))
+                .textFieldStyle(.roundedBorder)
+                .labelsHidden()
+                .focused($focused)
+                .onSubmit(submit)
+            let list = matches
+            if !list.isEmpty || isNew {
+                FlowLayout(spacing: 6) {
+                    if isNew {
+                        Button { take(typed) } label: {
+                            Label("Create “\(typed)”", systemImage: "plus")
+                                .chip(tint: .accentColor, strong: true)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Make a new tag with this name")
+                    }
+                    ForEach(list.prefix(24), id: \.self) { tag in
+                        Button { take(tag) } label: {
+                            Label(tag, systemImage: "tag").chip(tint: .secondary, strong: !isNew && tag == list.first && !typed.isEmpty)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Add “\(tag)”")
+                    }
                 }
+            } else if typed.isEmpty && LibraryQuery.tagCounts(store.items).isEmpty {
+                Text("No tags yet. Type a name and press Return to make the first.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
     }
 
-    private func add() {
-        // Commas add several at once.
-        store.setTags([item.id], add: newTag.split(separator: ",").map(String.init))
-        newTag = ""
+    /// Return: the typed name if it's new (commas make several), else the best match.
+    private func submit() {
+        guard !typed.isEmpty else { return }
+        if typed.contains(",") {
+            add(typed.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+            text = ""
+        } else if !isNew, let best = matches.first {
+            take(best)
+        } else {
+            take(typed)
+        }
+        focused = true
+    }
+
+    private func take(_ tag: String) {
+        add([tag])
+        text = ""
+    }
+}
+
+private extension View {
+    func chip(tint: Color, strong: Bool) -> some View {
+        font(.callout)
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(tint.opacity(strong ? 0.25 : 0.12), in: Capsule())
+            .overlay(Capsule().strokeBorder(strong ? tint.opacity(0.6) : .clear))
     }
 }
 
