@@ -26,9 +26,12 @@ struct CaptureDetail: View {
     }
 }
 
-private struct SingleCaptureView: View {
+struct SingleCaptureView: View {
     @Bindable var state: LibraryState
     let item: CaptureItem
+    /// Just the picture and its tools, for the pop-out editor window.
+    var pictureOnly = false
+    @State private var editorWindow = EditorWindow.shared
     @State private var store = LibraryStore.shared
     @State private var zoomToFit = 0
     @State private var editor = AnnotationEditor.shared
@@ -81,10 +84,17 @@ private struct SingleCaptureView: View {
         Button(role: .destructive) { state.confirmDelete = [item.id] } label: { Label("Delete", systemImage: "trash") }
             .help("Delete…")
         Divider().frame(height: 16)
-        Button { collapsed = .details } label: { Label("Hide Details", systemImage: "chevron.down.circle") }
-            .help("Hide the details, for more room to annotate")
-        Button { collapsed = .picture } label: { Label("Hide Picture", systemImage: "chevron.up.circle") }
-            .help("Hide the picture, for more room for the details")
+        if pictureOnly {
+            Button { editorWindow.close() } label: { Label("Bring Back", systemImage: "arrow.down.right.and.arrow.up.left") }
+                .help("Put the picture back in the library window")
+        } else {
+            Button { collapsed = .details } label: { Label("Hide Details", systemImage: "chevron.down.circle") }
+                .help("Hide the details, for more room to annotate")
+            Button { collapsed = .picture } label: { Label("Hide Picture", systemImage: "chevron.up.circle") }
+                .help("Hide the picture, for more room for the details")
+            Button { editorWindow.open() } label: { Label("Open in Its Own Window", systemImage: "macwindow.badge.plus") }
+                .help("Open the picture and its tools in a window of their own, as big as you like")
+        }
     }
 
     /// Everything the narrow bar has no room for.
@@ -101,8 +111,13 @@ private struct SingleCaptureView: View {
             }
             Button("Zoom to Fit") { fit() }
             Divider()
-            Button("Hide Details") { collapsed = .details }
-            Button("Hide Picture") { collapsed = .picture }
+            if pictureOnly {
+                Button("Bring Back to the Library") { editorWindow.close() }
+            } else {
+                Button("Hide Details") { collapsed = .details }
+                Button("Hide Picture") { collapsed = .picture }
+                Button("Open in Its Own Window") { editorWindow.open() }
+            }
             Divider()
             Button("Delete…", role: .destructive) { state.confirmDelete = [item.id] }
         } label: {
@@ -123,7 +138,7 @@ private struct SingleCaptureView: View {
             if editor.showResult {
                 ResultBar(item: item)
                 Divider()
-                ResultCanvas(item: item, fitRequest: zoomToFit)
+                ResultCanvas(item: item, fitRequest: zoomToFit + CanvasZoom.shared.fitRequested)
                     .frame(minHeight: 200)
             } else {
                 AnnotationToolbar()
@@ -131,7 +146,7 @@ private struct SingleCaptureView: View {
                 HStack(spacing: 0) {
                     ToolPalette()
                     Divider()
-                    CaptureCanvas(item: item, fitRequest: zoomToFit, editor: editorState)
+                    CaptureCanvas(item: item, fitRequest: zoomToFit + CanvasZoom.shared.fitRequested, editor: editorState)
                 }
                 .frame(minHeight: 200)
             }
@@ -155,6 +170,17 @@ private struct SingleCaptureView: View {
 
     var body: some View {
         Group {
+            if pictureOnly {
+                pictureArea
+            } else if editorWindow.isOpen {
+                // The picture is in its own window; the details get all the room here.
+                VStack(spacing: 0) {
+                    CollapsedPaneBar(title: "Picture", symbol: "macwindow", edge: .top, note: "In its own window",
+                                     actionTitle: "Bring Back") { editorWindow.close() }
+                    Divider()
+                    details
+                }
+            } else {
             switch collapsed {
             case .picture:
                 VStack(spacing: 0) {
@@ -174,6 +200,7 @@ private struct SingleCaptureView: View {
                     details
                 }
             }
+            }
         }
         .sheet(isPresented: $editor.showResize) { ResizeSheet() }
     }
@@ -184,6 +211,8 @@ private struct CollapsedPaneBar: View {
     let title: String
     let symbol: String
     let edge: VerticalEdge
+    var note: String? = nil
+    var actionTitle: String? = nil
     let restore: () -> Void
 
     var body: some View {
@@ -191,8 +220,9 @@ private struct CollapsedPaneBar: View {
             HStack(spacing: 6) {
                 Image(systemName: symbol).foregroundStyle(.secondary)
                 Text(title).font(.callout.weight(.medium))
+                if let note { Text(note).font(.callout).foregroundStyle(.secondary) }
                 Spacer()
-                Label("Show \(title)", systemImage: edge == .bottom ? "chevron.up.circle" : "chevron.down.circle")
+                Label(actionTitle ?? "Show \(title)", systemImage: edge == .bottom ? "chevron.up.circle" : "chevron.down.circle")
                     .labelStyle(.titleAndIcon)
                     .font(.callout)
                     .foregroundStyle(Color.accentColor)
@@ -525,6 +555,8 @@ final class CanvasZoom {
 
     static let range: ClosedRange<Double> = 0.05...8
     private(set) var magnification: Double = 1
+    /// Bumped to fit the picture from outside its view (a new window, say).
+    var fitRequested = 0
     @ObservationIgnored private weak var scroll: NSScrollView?
     @ObservationIgnored private var observer: NSObjectProtocol?
 
@@ -1012,5 +1044,80 @@ enum Exporter {
         @objc func changed(_ sender: NSPopUpButton) {
             if let format = Format(rawValue: sender.titleOfSelectedItem ?? "") { panel?.allowedContentTypes = [format.type] }
         }
+    }
+}
+
+/// The picture and its tools in a window of their own, for room to work. It shows the capture
+/// selected in the library (one editor at a time), and closing it puts the picture back.
+@Observable
+@MainActor
+final class EditorWindow: NSObject, NSWindowDelegate {
+    static let shared = EditorWindow()
+
+    private(set) var isOpen = false
+    @ObservationIgnored private var window: NSWindow?
+
+    func open() {
+        if window == nil {
+            let hosting = NSHostingController(rootView: PoppedEditor(state: LibraryWindow.shared.state))
+            hosting.sizingOptions = []
+            let window = NSWindow(contentViewController: hosting)
+            window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            window.setContentSize(NSSize(width: 1100, height: 800))
+            window.minSize = NSSize(width: 520, height: 420)
+            window.isReleasedWhenClosed = false
+            window.delegate = self
+            window.setFrameAutosaveName("CaptureLensEditor")
+            if window.frame.origin == .zero { window.center() }
+            self.window = window
+        }
+        let selected = LibraryWindow.shared.state.selectedItems
+        window?.title = selected.count == 1 ? selected[0].name : "CaptureLens Editor"
+        isOpen = true
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+        // Fit the picture to the bigger room once it's laid out.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { CanvasZoom.shared.fitRequested += 1 }
+    }
+
+    func close() {
+        window?.close()
+    }
+
+    func setTitle(_ title: String) { window?.title = title }
+
+    #if DEBUG
+    var debugWindow: NSWindow? { window }
+    #endif
+
+    func windowWillClose(_ notification: Notification) {
+        isOpen = false
+        // The window's views go, so the library's picture comes back fresh.
+        window?.contentViewController = nil
+        window = nil
+        LibraryWindow.shared.window?.makeKeyAndOrderFront(nil)
+    }
+}
+
+/// What the pop-out window shows: the selected capture's picture and tools.
+private struct PoppedEditor: View {
+    @Bindable var state: LibraryState
+    @State private var store = LibraryStore.shared
+
+    var body: some View {
+        let selected = state.selectedItems
+        Group {
+            if selected.count == 1, let item = selected.first {
+                SingleCaptureView(state: state, item: item, pictureOnly: true)
+                    .id(item.id)
+                    .onAppear { EditorWindow.shared.setTitle(item.name) }
+                    .onChange(of: item.name) { _, name in EditorWindow.shared.setTitle(name) }
+            } else {
+                ContentUnavailableView("Select a Capture", systemImage: "photo",
+                                       description: Text("Pick one capture in the library to edit it here."))
+                    .onAppear { EditorWindow.shared.setTitle("CaptureLens Editor") }
+            }
+        }
+        .frame(minWidth: 520, minHeight: 420)
     }
 }

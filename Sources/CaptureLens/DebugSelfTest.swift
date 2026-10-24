@@ -183,6 +183,40 @@ enum DebugSelfTest {
             note("scroll zoom: no zooming scroll view found")
         }
 
+        // Pop the picture out into its own window and back.
+        func layer(in view: NSView?) -> AnnotationLayerView? {
+            guard let view else { return nil }
+            if let hit = view as? AnnotationLayerView { return hit }
+            for sub in view.subviews { if let hit = layer(in: sub) { return hit } }
+            return nil
+        }
+        EditorWindow.shared.open()
+        try? await Task.sleep(for: .seconds(2))
+        let popped = EditorWindow.shared.debugWindow
+        let poppedLayer = layer(in: popped?.contentView)
+        let libraryLayer = layer(in: window.window?.contentView)
+        note("pop out: open \(EditorWindow.shared.isOpen), editor has canvas \(poppedLayer != nil), library has canvas \(libraryLayer != nil), title '\(popped?.title ?? "-")'")
+        if let popped { render(popped, to: out.appending(path: "editor-window.png")) }
+        render(window.window, to: out.appending(path: "library-popped.png"))
+        let before = AnnotationEditor.shared.annotations.count
+        if let poppedLayer, let win = popped {
+            AnnotationEditor.shared.pick(.draw(.ellipse))
+            for (type, p) in [(NSEvent.EventType.leftMouseDown, CGPoint(x: 100, y: 300)), (.leftMouseDragged, CGPoint(x: 180, y: 360)), (.leftMouseUp, CGPoint(x: 180, y: 360))] {
+                let event = NSEvent.mouseEvent(with: type, location: poppedLayer.convert(p, to: nil), modifierFlags: [], timestamp: 0,
+                                               windowNumber: win.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+                switch type {
+                case .leftMouseDown: poppedLayer.mouseDown(with: event)
+                case .leftMouseDragged: poppedLayer.mouseDragged(with: event)
+                default: poppedLayer.mouseUp(with: event)
+                }
+            }
+            AnnotationEditor.shared.pick(.select)
+        }
+        note("draw in the popped-out editor: \(AnnotationEditor.shared.annotations.count == before + 1)")
+        EditorWindow.shared.close()
+        try? await Task.sleep(for: .seconds(1))
+        note("bring back: open \(EditorWindow.shared.isOpen), library has canvas \(layer(in: window.window?.contentView) != nil)")
+
         // Drive the layer as a person would.
         func find(_ view: NSView?) -> AnnotationLayerView? {
             guard let view else { return nil }
