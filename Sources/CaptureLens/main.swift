@@ -387,7 +387,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let url = URL(string: "https://stevemanke.com/") { NSWorkspace.shared.open(url) }
     }
     @objc func showAbout() {
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.orderFrontStandardAboutPanel(nil)
+        AppInfo.showAbout()
     }
 }

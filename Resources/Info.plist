@@ -27,6 +27,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>CaptureLensReleaseStage</key>
+	<string>beta</string>
 	<key>CFBundleVersion</key>
 	<string>1.0.3</string>
 	<key>LSApplicationCategoryType</key>

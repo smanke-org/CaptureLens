@@ -77,8 +77,8 @@ enum AppPresence {
         let appItem = NSMenuItem()
         main.addItem(appItem)
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "About \(appName)",
-                        action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        // Through the app delegate's showAbout, so the panel carries the beta label.
+        appMenu.addItem(withTitle: "About \(appName)", action: NSSelectorFromString("showAbout"), keyEquivalent: "")
         appMenu.addItem(.separator())
         let prefs = NSMenuItem(title: settingsTitle, action: settings, keyEquivalent: ",")
         prefs.target = target

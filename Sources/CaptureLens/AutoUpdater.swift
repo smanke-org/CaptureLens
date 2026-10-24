@@ -275,7 +275,7 @@ final class AutoUpdater: NSObject, UNUserNotificationCenterDelegate {
         guard let from = AppDefaults.store.string(forKey: Self.installedFromKey) else { return }
         AppDefaults.store.removeObject(forKey: Self.installedFromKey)
         guard from != AppInfo.version else { return }
-        notify(id: "updated-\(AppInfo.version)", title: "CaptureLens updated to \(AppInfo.version)",
+        notify(id: "updated-\(AppInfo.version)", title: "CaptureLens updated to \(AppInfo.labeledVersion)",
                body: "It installed itself while your Mac wasn't in use.", installable: false)
     }
 
@@ -283,7 +283,7 @@ final class AutoUpdater: NSObject, UNUserNotificationCenterDelegate {
         guard AppDefaults.store.string(forKey: Self.notifiedVersionKey) != version else { return }
         AppDefaults.store.set(version, forKey: Self.notifiedVersionKey)
         notify(id: "available-\(version)", title: "CaptureLens \(version) is available",
-               body: "Click to review and install it. You're on \(AppInfo.version).", installable: true)
+               body: "Click to review and install it. You're on \(AppInfo.labeledVersion).", installable: true)
     }
 
     private func notify(id: String, title: String, body: String, installable: Bool) {

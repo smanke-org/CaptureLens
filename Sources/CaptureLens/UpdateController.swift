@@ -39,11 +39,11 @@ enum UpdateController {
                 // No release published yet (or the repository doesn't exist yet) means there
                 // is nothing newer: that is "up to date", not a failure.
                 guard let release = try await fetchLatestRelease() else {
-                    if !silent { present(.upToDate(current: current)) }
+                    if !silent { present(.upToDate(current: AppInfo.labeledVersion)) }
                     return
                 }
                 guard isNewer(release.version, than: current) else {
-                    if !silent { present(.upToDate(current: current)) }
+                    if !silent { present(.upToDate(current: AppInfo.labeledVersion)) }
                     return
                 }
                 // A version the user skipped is not raised again on its own.
@@ -134,8 +134,9 @@ enum UpdateController {
 
     /// Numeric component comparison, so 1.1.10 is correctly newer than 1.1.9.
     static func isNewer(_ candidate: String, than current: String) -> Bool {
-        let a = candidate.split(separator: ".").map { Int($0) ?? 0 }
-        let b = current.split(separator: ".").map { Int($0) ?? 0 }
+        // Leading digits of each part, so a stray suffix ("4-beta") still counts as 4.
+        func parts(_ s: String) -> [Int] { s.split(separator: ".").map { Int($0.prefix { $0.isNumber }) ?? 0 } }
+        let a = parts(candidate), b = parts(current)
         for index in 0..<max(a.count, b.count) {
             let left = index < a.count ? a[index] : 0
             let right = index < b.count ? b[index] : 0

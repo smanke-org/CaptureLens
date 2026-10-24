@@ -35,6 +35,9 @@ else
   VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Resources/Info.plist)
 fi
 TAG="v${VERSION}"
+# The beta label goes in the titles only: a GitHub "pre-release" is skipped by the
+# releases/latest lookups the updater and the README's download link rely on.
+STAGE=$(/usr/libexec/PlistBuddy -c "Print :CaptureLensReleaseStage" Resources/Info.plist 2>/dev/null || true)
 
 if gh release view "${TAG}" >/dev/null 2>&1; then
   echo "Release ${TAG} already exists. Bump the version first." >&2
@@ -52,14 +55,14 @@ for f in "${VERSIONED}" "${STABLE}"; do
 done
 
 echo "==> Tagging ${TAG}"
-git tag -a "${TAG}" -m "CaptureLens ${VERSION}"
+git tag -a "${TAG}" -m "CaptureLens ${VERSION}${STAGE:+ ${STAGE}}"
 git push origin "${TAG}"
 
 echo "==> Publishing ${TAG}"
 # Both assets go up: the version-stamped one to pin to, and the fixed-name one the
 # README's permanent download link resolves against.
 gh release create "${TAG}" "${VERSIONED}" "${STABLE}" \
-  --title "CaptureLens ${VERSION}" \
+  --title "CaptureLens ${VERSION}${STAGE:+ ${STAGE}}" \
   --notes "${RELEASE_NOTES:-See the commit history for what changed in ${VERSION}.}"
 
 echo "==> Verifying the permanent download link"
