@@ -200,6 +200,22 @@ struct CaptureSettings: View {
                 Text("Naming uses Apple Intelligence on this Mac, and text is read with macOS's own Live Text. Nothing is sent anywhere. The first time you capture a browser window, macOS asks whether CaptureLens may ask that browser for its page address.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section {
+                Toggle("Record the Mac's sound", isOn: $prefs.recordSystemAudio)
+                Toggle("Record the microphone", isOn: $prefs.recordMicrophone)
+                Toggle("Show the camera in a bubble", isOn: $prefs.recordCamera)
+                Toggle("Show a ring where you click", isOn: $prefs.showClicks)
+                Toggle("Show shortcuts you press", isOn: $prefs.showKeys)
+                Picker("Frame rate", selection: $prefs.recordFrameRate) {
+                    Text("30 frames a second").tag(30)
+                    Text("60 frames a second").tag(60)
+                }
+            } header: {
+                Text("Video recording")
+            } footer: {
+                Text("These are also buttons in the bar that appears before you record (the Record Video preset, {hotkey:record}). Only shortcuts and keys like Return or the arrows are shown, never what you type. The camera, microphone and shown keys need your permission the first time; macOS asks.".replacingOccurrences(of: "{hotkey:record}", with: Preferences.shared.presets.first { $0.mode == .recording }?.hotKey?.display ?? "no shortcut set"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Feedback") {
                 Toggle("Play the camera sound", isOn: $prefs.playSound)
                 Toggle("Show notes on screen", isOn: $prefs.showNotice)
@@ -345,6 +361,7 @@ struct PresetEditor: View {
         case .screen: "Captures the whole screen the pointer is on, straight away."
         case .fixedSize: "A frame of this size follows the pointer; click to capture what's inside."
         case .scrolling: "Click a window or drag over an area, then scroll it (or let CaptureLens scroll it). The frames are stitched into one tall picture."
+        case .recording: "Click a window, drag over an area or press Return for the whole screen, then choose sound, camera and highlights and press Record. The shortcut again stops it. With no delay, it counts down 3 seconds."
         }
     }
 }
@@ -389,7 +406,7 @@ struct LibrarySettings: View {
                 LabeledContent("\(store.items.count) capture\(store.items.count == 1 ? "" : "s")") {
                     Button("Show Library") { LibraryWindow.shared.show() }
                 }
-                LabeledContent("Space used", value: ByteCountFormatter.string(fromByteCount: store.diskSize, countStyle: .file))
+                LabeledContent("Space used", value: ByteCountFormatter.string(fromByteCount: store.diskSize + VideoStore.shared.diskSize, countStyle: .file))
                 if store.unreadable > 0 {
                     Label("\(store.unreadable) capture\(store.unreadable == 1 ? " is" : "s are") encrypted with a key this Mac no longer has.",
                           systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
@@ -451,6 +468,20 @@ struct LibrarySettings: View {
                                 Text("Waiting for iCloud…")
                             }
                         }
+                    }
+                }
+                if prefs.librarySync {
+                    Toggle(isOn: $prefs.syncVideos) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Sync video files")
+                            Text(prefs.syncVideos
+                                 ? "Recordings play on every Mac. Long ones take a lot of room\(prefs.libraryBackend == .iCloud ? " in iCloud" : " in the sync folder")."
+                                 : "Recordings' names, tags, notes and first frames sync; the videos stay on the Mac that recorded them.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    if let problem = librarySync.videoProblem, prefs.syncVideos, prefs.libraryBackend == .iCloud {
+                        Text(problem).font(.caption).foregroundStyle(.orange)
                     }
                 }
                 if prefs.librarySync && prefs.libraryBackend == .folder && settingsSync.isReady && librarySync.iCloudCaptureCount > 0 {

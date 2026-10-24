@@ -11,6 +11,10 @@ import CaptureLensKit
 ///     Keyring          the data key wrapped by the sync passphrase   field data (bytes)
 ///     Settings         the shared settings                           field data (bytes)
 ///     Capture_<uuid>   one capture's details, and its picture        fields meta (bytes), image (asset)
+///     Video_<uuid>     a recording's movie (with "Sync video files")  type Capture: meta (a marker), image (asset)
+///
+/// Movies use the Capture record type, so no new type has to be published to Production;
+/// versions that don't know them can't read the marker and skip them.
 ///
 /// `SettingsSync` owns the keyring and decides when the engine runs (only while this Mac
 /// holds the key); `LibrarySync` supplies and receives the captures here.
@@ -41,6 +45,11 @@ final class CloudSync: CKSyncEngineDelegate {
         static let settings = "Settings"
         static let capturePrefix = "Capture_"
         static func capture(_ id: UUID) -> String { capturePrefix + id.uuidString }
+        static let videoPrefix = "Video_"
+        static func video(_ id: UUID) -> String { videoPrefix + id.uuidString }
+        static func videoID(_ name: String) -> UUID? {
+            name.hasPrefix(videoPrefix) ? UUID(uuidString: String(name.dropFirst(videoPrefix.count))) : nil
+        }
     }
 
     /// When the engine last finished fetching or sending.
@@ -254,6 +263,20 @@ final class CloudSync: CKSyncEngineDelegate {
         }
     }
 
+    /// Records fetched by name, each with its asset copied to a temporary file (the asset's
+    /// own file doesn't last). Missing records are left out.
+    func fetchRecords(_ names: [String]) async -> [(String, URL)] {
+        guard Self.isEntitled, !names.isEmpty else { return [] }
+        guard let results = try? await database.records(for: names.map(recordID)) else { return [] }
+        var out: [(String, URL)] = []
+        for (id, result) in results {
+            guard case .success(let record) = result, let asset = (record["image"] as? CKAsset)?.fileURL else { continue }
+            let copy = FileManager.default.temporaryDirectory.appending(path: "CaptureLens-\(UUID().uuidString).clsync")
+            if (try? FileManager.default.copyItem(at: asset, to: copy)) != nil { out.append((id.recordName, copy)) }
+        }
+        return out
+    }
+
     /// Saves the keyring. `replacing` starts over: the whole zone (every synced record) is
     /// deleted first. Without it, a keyring another Mac saved meanwhile wins
     /// (`SettingsSync.SyncError.alreadySetUp`).
@@ -354,6 +377,7 @@ final class CloudSync: CKSyncEngineDelegate {
         case .sentRecordZoneChanges(let sent):
             for record in sent.savedRecords where record.recordID.zoneID == zoneID {
                 saveSystemFields(record)
+                if let id = Name.videoID(record.recordID.recordName) { LibrarySync.shared.videoSent(id) }
                 if record.recordType == RecordType.capture, record["image"] != nil,
                    let id = UUID(uuidString: String(record.recordID.recordName.dropFirst(Name.capturePrefix.count))) {
                     LibrarySync.shared.imageSent(id)
@@ -408,6 +432,11 @@ final class CloudSync: CKSyncEngineDelegate {
                 if let keyring = Self.keyring(from: record) { SettingsSync.shared.receivedKeyring(keyring) }
             case RecordType.settings:
                 if let data = record["data"] as? Data { SettingsSync.shared.receivedSettings(data) }
+            case RecordType.capture where Name.videoID(name) != nil:
+                // A movie: kept as a file (it can be big), and only if this Mac wants movies.
+                if let id = Name.videoID(name), let asset = (record["image"] as? CKAsset)?.fileURL {
+                    LibrarySync.shared.receivedVideo(id, assetFile: asset)
+                }
             case RecordType.capture:
                 // Asset files only last while the change is handled: read them now.
                 if let meta = record["meta"] as? Data {
@@ -435,6 +464,18 @@ final class CloudSync: CKSyncEngineDelegate {
     private func handleFailedSave(_ record: CKRecord, _ error: CKError) {
         let name = record.recordID.recordName
         DebugLog.write("failed save \(name): \(error.code.rawValue) \(error.localizedDescription)")
+        if let id = Name.videoID(name) {
+            // A movie is the same everywhere: if the server has one, it's done; otherwise retry
+            // only what passes.
+            switch error.code {
+            case .serverRecordChanged: LibrarySync.shared.videoSent(id)
+            case .networkFailure, .networkUnavailable, .serviceUnavailable, .requestRateLimited, .zoneBusy:
+                queueSave([name])
+                note(error)
+            default: LibrarySync.shared.videoFailed(id, Self.message(for: error))
+            }
+            return
+        }
         switch error.code {
         case .serverRecordChanged:
             // Someone else changed it first: take their version's change tag, then let the
@@ -524,6 +565,14 @@ final class CloudSync: CKSyncEngineDelegate {
             guard let sealed = SettingsSync.shared.sealedSettings(using: key) else { return drop() }
             let record = existingRecord(name, type: RecordType.settings)
             record["data"] = sealed as CKRecordValue
+            return record
+        }
+        if let uuid = Name.videoID(name) {
+            guard let file = LibrarySync.shared.preparedVideo(uuid),
+                  let marker = try? SyncCrypto.seal(Data("video".utf8), using: key) else { return drop() }
+            let record = existingRecord(name, type: RecordType.capture)
+            record["meta"] = marker as CKRecordValue
+            record["image"] = CKAsset(fileURL: file)
             return record
         }
         if name.hasPrefix(Name.capturePrefix) {

@@ -17,6 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private let engine = CaptureEngine.shared
 
+    func applicationWillTerminate(_ notification: Notification) {
+        // Unsealed copies made for playing don't outlive the app.
+        VideoStore.shared.clearPlayback()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppAppearance.start()
         let mainMenu = AppPresence.mainMenu(appName: AppInfo.name, settingsTitle: "Settings…",
@@ -160,6 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case "area": run(mode: .region)
         case "scrolling": run(mode: .scrolling)
         case "steps": toggleSteps()
+        case "record": run(mode: .recording)
         case "recapture": engine.captureAgain()
         case "library": showLibrary()
         case "preset":
@@ -179,6 +185,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .captureAgain: engine.captureAgain()
         case .library: showLibrary()
         }
+    }
+
+    @objc private func stopVideo() {
+        let video = ScreenRecorder.shared
+        if video.phase == .recording || video.phase == .paused { video.stop() } else { video.cancel() }
     }
 
     // MARK: - Menu bar
@@ -214,6 +225,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(.separator())
         }
 
+        let video = ScreenRecorder.shared
+        if video.isActive {
+            let stop = item(video.phase == .ready ? "Cancel Recording" : "Stop Recording", #selector(stopVideo), symbol: "stop.circle")
+            menu.addItem(stop)
+            menu.addItem(.separator())
+        }
         for item in captureItems() { menu.addItem(item) }
         let again = item("Capture Same Area Again", #selector(captureAgain), hotKey: prefs.captureAgainHotKey)
         again.isEnabled = engine.lastRegion != nil

@@ -34,7 +34,15 @@ final class LibrarySync {
         static let uploadedFor = "ck.libraryUploadedForKey"
         /// Set once a capture's picture is in iCloud under the current key.
         static let imageSentPrefix = "ck.img."
+        /// Set once a recording's movie is in iCloud ("1"), or couldn't go ("0").
+        static let videoSentPrefix = "ck.vid."
+        /// Movies another Mac put in iCloud that this Mac didn't take (video sync was off).
+        static let videoWaitingPrefix = "ck.vidAvail."
     }
+
+    /// Movies sealed for sending, waiting for the engine to ask for their records.
+    @ObservationIgnored private var preparedVideos: [UUID: URL] = [:]
+    @ObservationIgnored private var preparing: Set<UUID> = []
 
     var isActive: Bool {
         SettingsSync.shared.isReady && Preferences.shared.librarySync && Preferences.shared.libraryBackend == .iCloud
@@ -65,6 +73,7 @@ final class LibrarySync {
         let keyID = SyncCrypto.keyID(for: key)
         if db.string(forKey: Keys.uploadedFor) != keyID {
             try? db.removeValues(withPrefix: Keys.imageSentPrefix)
+            try? db.removeValues(withPrefix: Keys.videoSentPrefix)
             CloudSync.shared.afterFirstFetch { [weak self] in
                 guard let self, self.started, let db = self.db else { return }
                 CloudSync.shared.queueSave(LibraryStore.shared.items.map { CloudSync.Name.capture($0.id) })
@@ -74,6 +83,7 @@ final class LibrarySync {
         }
         let cutoff = Date().addingTimeInterval(-Self.tombstoneLifetime)
         for (id, at) in db.tombstones() where at < cutoff { try? db.removeTombstone(id) }
+        CloudSync.shared.afterFirstFetch { [weak self] in self?.videoSyncChanged() }
     }
 
     /// Items added, changed or deleted on this Mac.
@@ -91,8 +101,89 @@ final class LibrarySync {
         let existing = Set(LibraryStore.shared.items.map(\.id))
         CloudSync.shared.queueSave(ids.filter { existing.contains($0) }.map(CloudSync.Name.capture))
         let gone = ids.filter { !existing.contains($0) }
-        for id in gone { try? db?.set(nil as Data?, forKey: Keys.imageSentPrefix + id.uuidString) }
-        CloudSync.shared.queueDelete(gone.map(CloudSync.Name.capture))
+        for id in gone {
+            try? db?.set(nil as Data?, forKey: Keys.imageSentPrefix + id.uuidString)
+            try? db?.set(nil as Data?, forKey: Keys.videoSentPrefix + id.uuidString)
+            try? db?.set(nil as Data?, forKey: Keys.videoWaitingPrefix + id.uuidString)
+        }
+        CloudSync.shared.queueDelete(gone.map(CloudSync.Name.capture) + gone.map(CloudSync.Name.video))
+        sendVideos(ids.filter { existing.contains($0) })
+    }
+
+    // MARK: - Movies
+
+    /// Video sync was turned on or off (or sync started): send this Mac's movies, and fetch
+    /// the ones other Macs sent while it was off.
+    func videoSyncChanged() {
+        guard started, Preferences.shared.syncVideos, let db else { return }
+        sendVideos(Set(LibraryStore.shared.items.filter { $0.kind == .video }.map(\.id)))
+        let waiting = db.keys(withPrefix: Keys.videoWaitingPrefix).compactMap { UUID(uuidString: String($0.dropFirst(Keys.videoWaitingPrefix.count))) }
+        guard !waiting.isEmpty else { return }
+        Task {
+            let found = await CloudSync.shared.fetchRecords(waiting.map(CloudSync.Name.video))
+            for (name, asset) in found {
+                guard let id = CloudSync.Name.videoID(name) else { continue }
+                await receive(id, assetFile: asset)
+            }
+        }
+    }
+
+    /// Seals each movie not yet in iCloud and queues it.
+    private func sendVideos(_ ids: Set<UUID>) {
+        guard Preferences.shared.syncVideos, let key = SettingsSync.shared.key, let db else { return }
+        let libraryKey = db.sealKey
+        for id in ids where !preparing.contains(id) && preparedVideos[id] == nil {
+            guard LibraryStore.shared.entry(id)?.kind == .video, db.data(forKey: Keys.videoSentPrefix + id.uuidString) == nil,
+                  let stored = VideoStore.shared.storedFile(id) else { continue }
+            preparing.insert(id)
+            Task {
+                let file = try? await Task.detached(priority: .utility) {
+                    try VideoStore.sealedForSync(stored, libraryKey: libraryKey, syncKey: key)
+                }.value
+                preparing.remove(id)
+                guard let file else { return }
+                preparedVideos[id] = file
+                CloudSync.shared.queueSave([CloudSync.Name.video(id)])
+            }
+        }
+    }
+
+    func preparedVideo(_ id: UUID) -> URL? { preparedVideos[id] }
+
+    func videoSent(_ id: UUID) {
+        try? db?.set(Data([1]), forKey: Keys.videoSentPrefix + id.uuidString)
+        if let file = preparedVideos.removeValue(forKey: id) { try? FileManager.default.removeItem(at: file) }
+    }
+
+    func videoFailed(_ id: UUID, _ message: String) {
+        NSLog("CaptureLens: a video couldn't go to iCloud: \(message)")
+        videoProblem = "A video couldn't go to iCloud: \(message)"
+        try? db?.set(Data([0]), forKey: Keys.videoSentPrefix + id.uuidString)
+        if let file = preparedVideos.removeValue(forKey: id) { try? FileManager.default.removeItem(at: file) }
+    }
+
+    /// The last movie that couldn't be sent, for Settings.
+    private(set) var videoProblem: String?
+
+    /// A movie from iCloud. The asset file only lasts while the change is handled, so it's
+    /// copied right away; video sync off just notes that it's there.
+    func receivedVideo(_ id: UUID, assetFile: URL) {
+        guard let db else { return }
+        try? db.set(Data([1]), forKey: Keys.videoSentPrefix + id.uuidString)
+        guard Preferences.shared.syncVideos, !VideoStore.shared.has(id) else {
+            if !VideoStore.shared.has(id) { try? db.set(Data([1]), forKey: Keys.videoWaitingPrefix + id.uuidString) }
+            return
+        }
+        let copy = FileManager.default.temporaryDirectory.appending(path: "CaptureLens-\(UUID().uuidString).clvideo")
+        guard (try? FileManager.default.copyItem(at: assetFile, to: copy)) != nil else { return }
+        Task { await receive(id, assetFile: copy) }
+    }
+
+    private func receive(_ id: UUID, assetFile: URL) async {
+        guard let key = SettingsSync.shared.key else { return }
+        await VideoStore.shared.receive(id, sealedWith: key, from: assetFile)
+        try? FileManager.default.removeItem(at: assetFile)
+        if VideoStore.shared.has(id) { try? db?.set(nil as Data?, forKey: Keys.videoWaitingPrefix + id.uuidString) }
     }
 
     func syncNow() {
@@ -129,9 +220,11 @@ final class LibrarySync {
     /// those captures too.
     func removeFromICloud() {
         guard !started, Preferences.shared.libraryBackend == .folder, let db else { return }
-        let names = db.keys(withPrefix: "ck.sys." + CloudSync.Name.capturePrefix).map { String($0.dropFirst("ck.sys.".count)) }
+        let names = (db.keys(withPrefix: "ck.sys." + CloudSync.Name.capturePrefix) + db.keys(withPrefix: "ck.sys." + CloudSync.Name.videoPrefix))
+            .map { String($0.dropFirst("ck.sys.".count)) }
         CloudSync.shared.queueDelete(names)
         try? db.removeValues(withPrefix: Keys.imageSentPrefix)
+        try? db.removeValues(withPrefix: Keys.videoSentPrefix)
         try? db.set(nil as String?, forKey: Keys.uploadedFor)
         CloudSync.shared.sendNow()
         NSLog("CaptureLens: removing \(names.count) captures from iCloud")

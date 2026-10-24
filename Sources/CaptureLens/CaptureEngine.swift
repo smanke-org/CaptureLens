@@ -26,7 +26,9 @@ final class CaptureEngine {
     }
 
     func run(_ preset: CapturePreset) {
-        guard !busy else { return }
+        // Recording has its own control bar; the same shortcut stops it.
+        if preset.mode == .recording { return ScreenRecorder.shared.toggle(preset) }
+        guard !busy, !ScreenRecorder.shared.isActive else { return }
         guard ensureAccess() else { return }
         busy = true
         Activity.shared.touch()
@@ -294,6 +296,7 @@ enum Flattener {
 
     /// Writes the flattened capture to a temporary file named after it, for dragging out.
     static func temporaryFile(_ item: CaptureItem) -> URL? {
+        if item.kind == .video, VideoStore.shared.has(item.id) { return VideoExport.temporaryFile(item) }
         guard let png = png(item) else { return nil }
         let folder = FileManager.default.temporaryDirectory.appending(path: "CaptureLens Drag/\(item.id.uuidString)")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

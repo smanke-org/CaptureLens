@@ -400,9 +400,9 @@ struct BatchExportSheet: View {
         var used = Set<String>()
         for (index, id) in ids.enumerated() {
             guard var item = store.entry(id) else { continue }
-            apply(frame, to: &item.edits)
-            item.edits.outputScale *= size
-            guard let image = Flattener.image(item) else { continue }
+            // Recordings go out as their finished video, whatever the picture format.
+            let video = item.kind == .video && VideoStore.shared.has(id)
+            let ext = video ? "mp4" : ext
             let base = name(for: item, index: index + 1, naming: naming)
             var candidate = base
             var n = 2
@@ -410,8 +410,18 @@ struct BatchExportSheet: View {
                 candidate = "\(base) \(n)"
                 n += 1
             }
+            let target = folder.appending(path: "\(candidate).\(ext)")
+            if video {
+                guard let file = VideoExport.temporaryFile(item), (try? FileManager.default.copyItem(at: file, to: target)) != nil else { continue }
+                used.insert(candidate.lowercased())
+                written += 1
+                continue
+            }
+            apply(frame, to: &item.edits)
+            item.edits.outputScale *= size
+            guard let image = Flattener.image(item) else { continue }
             used.insert(candidate.lowercased())
-            if Exporter.write(image, of: item, as: format, to: folder.appending(path: "\(candidate).\(ext)")) { written += 1 }
+            if Exporter.write(image, of: item, as: format, to: target) { written += 1 }
         }
         return written
     }

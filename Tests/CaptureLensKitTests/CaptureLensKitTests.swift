@@ -828,3 +828,68 @@ private func item(_ name: String, daysAgo: Double = 0, now: Date, tags: [String]
         #expect(ObjectFinder.shape(of: CGRect(x: 28, y: 108, width: 44, height: 44), in: base, canvas: canvas, background: white) == .round)
     }
 }
+
+@Suite struct VideoTests {
+    @Test func keptPartsAfterTrimsAndCuts() {
+        let edits = VideoEdits(trimStart: 2, trimEnd: 18, cuts: [TimeCut(start: 5, end: 7), TimeCut(start: 12, end: 10)])
+        #expect(edits.kept(of: 20) == [2..<5, 7..<10, 12..<18])
+        #expect(abs(edits.resultDuration(of: 20) - 12) < 0.0001)
+        #expect(VideoEdits().kept(of: 8) == [0..<8])
+        #expect(VideoEdits().isEmpty && !edits.isEmpty)
+        // A cut over a trimmed-off end changes nothing; one over everything leaves nothing.
+        #expect(VideoEdits(trimEnd: 10, cuts: [TimeCut(start: 12, end: 15)]).kept(of: 20) == [0..<10])
+        #expect(VideoEdits(cuts: [TimeCut(start: 0, end: 20)]).kept(of: 20).isEmpty)
+    }
+
+    @Test func mapsTimesBothWays() {
+        let edits = VideoEdits(trimStart: 2, trimEnd: 18, cuts: [TimeCut(start: 5, end: 7)])
+        #expect(edits.resultTime(forOriginal: 3, duration: 20) == 1)
+        #expect(edits.resultTime(forOriginal: 6, duration: 20) == 3, "inside a cut: where it picks up")
+        #expect(edits.resultTime(forOriginal: 8, duration: 20) == 4)
+        #expect(edits.resultTime(forOriginal: 1, duration: 20) == 0)
+        #expect(edits.originalTime(forResult: 4, duration: 20) == 8)
+        #expect(edits.originalTime(forResult: 99, duration: 20) == 18)
+        #expect(edits.isRemoved(6, duration: 20) && !edits.isRemoved(8, duration: 20) && edits.isRemoved(19, duration: 20))
+    }
+
+    @Test func gifFrameTimes() {
+        let times = GIFPlan.frameTimes(duration: 2, fps: 10)
+        #expect(times.count == 20 && times.first == 0 && abs(times[1] - 0.1) < 0.0001)
+        #expect(GIFPlan.frameTimes(duration: 600, fps: 15, maxFrames: 300).count == 300)
+    }
+
+    @Test func videoDetailsSyncAndOldDetailsStillRead() throws {
+        var item = CaptureItem(kind: .video, name: "Demo", pixelWidth: 10, pixelHeight: 10,
+                               video: VideoInfo(duration: 12.5, hasAudio: true, edits: VideoEdits(trimStart: 1)))
+        item.video?.edits.cuts.append(TimeCut(start: 4, end: 5))
+        let decoded = try JSONDecoder().decode(CaptureItem.self, from: JSONEncoder().encode(item))
+        #expect(decoded.video == item.video && decoded.kind == .video)
+        // A kind this version doesn't know reads as an area capture.
+        var object = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(item)) as? [String: Any])
+        object["kind"] = "hologram"
+        #expect(try JSONDecoder().decode(CaptureItem.self, from: JSONSerialization.data(withJSONObject: object)).kind == .region)
+    }
+
+    @Test func sealsBigFilesInPieces() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "chunked-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let key = SymmetricKey(size: .bits256)
+        for size in [0, 10, ChunkedSeal.chunkSize, ChunkedSeal.chunkSize * 2 + 123] {
+            let plain = Data((0..<size).map { UInt8(truncatingIfNeeded: $0 &* 31) })
+            let input = dir.appending(path: "in-\(size)"), sealed = dir.appending(path: "sealed-\(size)"), output = dir.appending(path: "out-\(size)")
+            try plain.write(to: input)
+            try ChunkedSeal.seal(input, to: sealed, key: key)
+            #expect(ChunkedSeal.isSealed(sealed) && !ChunkedSeal.isSealed(input))
+            try ChunkedSeal.open(sealed, to: output, key: key)
+            #expect(try Data(contentsOf: output) == plain, "size \(size)")
+        }
+        // The wrong key, or a file cut short after a whole piece, is refused.
+        let big = dir.appending(path: "sealed-\(ChunkedSeal.chunkSize * 2 + 123)")
+        #expect(throws: (any Error).self) { try ChunkedSeal.open(big, to: dir.appending(path: "x"), key: SymmetricKey(size: .bits256)) }
+        let data = try Data(contentsOf: big)
+        let firstPiece = 4 + 4 + Int(data[4..<8].withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }.bigEndian)
+        try data.prefix(firstPiece).write(to: dir.appending(path: "short"))
+        #expect(throws: (any Error).self) { try ChunkedSeal.open(dir.appending(path: "short"), to: dir.appending(path: "y"), key: key) }
+    }
+}

@@ -25,6 +25,8 @@ final class CaptureOverlay {
     private var previousApp: NSRunningApplication?
 
     fileprivate var mode: CaptureMode = .allInOne
+    /// Picking what to record rather than capture (it picks like the all-in-one).
+    fileprivate var forRecording = false
     fileprivate var fixedSize = CGSize(width: 1280, height: 720)
     fileprivate var screenWindows: [ScreenWindow] = []
     /// The window under the pointer, while windows can be picked.
@@ -37,6 +39,8 @@ final class CaptureOverlay {
         guard !isSelecting else { return nil }
         isSelecting = true
         defer { isSelecting = false }
+        forRecording = mode == .recording
+        let mode: CaptureMode = mode == .recording ? .allInOne : mode
         self.mode = mode
         self.fixedSize = fixedSize
         screenWindows = mode == .allInOne || mode == .window ? ScreenWindow.onScreen() : []
@@ -95,8 +99,9 @@ final class CaptureOverlay {
     }
 
     fileprivate var prompt: String {
-        switch mode {
-        case .allInOne, .scrolling: "Click a window or drag over an area  ·  Return for the whole screen  ·  Hold ⌥ to open it"
+        if forRecording { return "Click a window or drag over an area to record  ·  Return for the whole screen  ·  Esc to cancel" }
+        return switch mode {
+        case .allInOne, .scrolling, .recording: "Click a window or drag over an area  ·  Return for the whole screen  ·  Hold ⌥ to open it"
         case .region: "Drag over the area to capture"
         case .window: "Click the window to capture"
         case .fixedSize: "Click to capture \(Int(fixedSize.width)) × \(Int(fixedSize.height))"
@@ -158,7 +163,7 @@ private final class OverlayView: NSView {
         switch owner.mode {
         case .fixedSize:
             return NSMouseInRect(owner.pointer, screen.frame, false) ? owner.fixedFrame(in: screen) : nil
-        case .allInOne, .window, .scrolling:
+        case .allInOne, .window, .scrolling, .recording:
             guard let window = owner.hovered else { return nil }
             let local = window.frame.offsetBy(dx: -screen.frame.minX, dy: -screen.frame.minY)
             let visible = local.intersection(bounds)
@@ -278,7 +283,7 @@ private final class OverlayView: NSView {
             return finishRegion(rect)
         }
         switch owner.mode {
-        case .allInOne, .window, .scrolling:
+        case .allInOne, .window, .scrolling, .recording:
             if let window = owner.hovered { owner.finish(.window(window)) }
             else if owner.mode == .allInOne { finishScreen() }
         case .fixedSize:

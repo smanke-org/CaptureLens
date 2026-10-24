@@ -130,12 +130,15 @@ struct SingleCaptureView: View {
     }
 
     private func copy() {
+        if item.kind == .video { return VideoExport.copy(item) }
         if let png = Flattener.png(item) { Clipboard.copy(png: png); Notice.shared.show("Copied") }
     }
 
     private var pictureArea: some View {
         VStack(spacing: 0) {
-            if editor.showResult {
+            if item.kind == .video {
+                VideoPane(item: item).frame(minHeight: 200)
+            } else if editor.showResult {
                 ResultBar(item: item)
                 Divider()
                 ResultCanvas(item: item, fitRequest: zoomToFit + CanvasZoom.shared.fitRequested)
@@ -153,10 +156,16 @@ struct SingleCaptureView: View {
             // The whole bar when there's room; in a narrow window the less used buttons move into
             // a ⋯ menu, then zooming too, so the bar never pushes the column past the window.
             ViewThatFits(in: .horizontal) {
-                barRow { actionButtons; Spacer(minLength: 4); ZoomControls(fit: fit); deleteAndPanes }
-                barRow { actionButtons; Spacer(minLength: 4); ZoomControls(fit: fit, compact: true); deleteAndPanes }
-                barRow { Spacer(minLength: 4); ZoomControls(fit: fit, compact: true); moreMenu(includeZoom: false) }
-                barRow { Spacer(minLength: 4); moreMenu(includeZoom: true) }
+                if item.kind == .video {
+                    // A video has no zooming; its player fits the space.
+                    barRow { actionButtons; Spacer(minLength: 4); deleteAndPanes }
+                    barRow { Spacer(minLength: 4); moreMenu(includeZoom: false) }
+                } else {
+                    barRow { actionButtons; Spacer(minLength: 4); ZoomControls(fit: fit); deleteAndPanes }
+                    barRow { actionButtons; Spacer(minLength: 4); ZoomControls(fit: fit, compact: true); deleteAndPanes }
+                    barRow { Spacer(minLength: 4); ZoomControls(fit: fit, compact: true); moreMenu(includeZoom: false) }
+                    barRow { Spacer(minLength: 4); moreMenu(includeZoom: true) }
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -994,6 +1003,7 @@ enum Exporter {
 
     /// Asks where to save the capture (with its pointer, if shown) and in which format.
     static func save(_ item: CaptureItem) {
+        if item.kind == .video { return VideoExport.save(item) }
         guard let image = Flattener.image(item) else { return NSSound.beep() }
         let panel = NSSavePanel()
         panel.nameFieldStringValue = item.name

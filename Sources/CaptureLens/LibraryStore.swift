@@ -70,11 +70,11 @@ final class LibraryStore {
     /// Saves a new capture, then reads its text and names it in the background.
     @discardableResult
     func add(image: CGImage, kind: CaptureItem.Kind, scale: Double, source: CaptureItem.Source,
-             cursor: CursorLayer?, created: Date = Date()) -> CaptureItem? {
+             cursor: CursorLayer?, created: Date = Date(), video: VideoInfo? = nil) -> CaptureItem? {
         guard let db, let png = image.pngData else { return nil }
         let item = CaptureItem(created: created, kind: kind, name: CaptureNaming.fallback(source: source, date: created),
                                source: source, pixelWidth: image.width, pixelHeight: image.height, scale: scale,
-                               cursor: cursor, origin: DeviceIdentity.deviceID)
+                               cursor: cursor, video: video, origin: DeviceIdentity.deviceID)
         let thumb = image.thumbnail().pngData
         do {
             try db.upsert(item, image: png, thumbnail: thumb)
@@ -198,6 +198,7 @@ final class LibraryStore {
         }
         for id in ids { thumbnailCache[id] = nil }
         items.removeAll { ids.contains($0.id) }
+        VideoStore.shared.remove(ids)
         LibrarySync.shared.localDidChange(ids)
         FolderSync.shared.localDidChange(ids)
     }
@@ -265,6 +266,7 @@ final class LibraryStore {
         }
         for id in ids { thumbnailCache[id] = nil }
         items.removeAll { ids.contains($0.id) }
+        VideoStore.shared.remove(ids)
     }
 
     /// Draws the capture's thumbnail again, with its annotations and pointer.
@@ -321,6 +323,7 @@ final class LibraryStore {
         db.sealKey = on ? key : nil
         Task.detached(priority: .userInitiated) {
             let failures = (try? db.reseal(previous: previous ?? key)) ?? -1
+            await VideoStore.shared.reseal(from: previous ?? key, to: on ? key : nil)
             await MainActor.run {
                 let store = LibraryStore.shared
                 store.isResealing = false

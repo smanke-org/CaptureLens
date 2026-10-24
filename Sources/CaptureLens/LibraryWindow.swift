@@ -657,6 +657,24 @@ struct CaptureCell: View {
             }
             .frame(width: size, height: size * 0.68)
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? Color.accentColor : .clear, lineWidth: 3))
+            .overlay {
+                if item.kind == .video {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: max(18, size * 0.16)))
+                        .foregroundStyle(.white, .black.opacity(0.45))
+                        .shadow(radius: 2)
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if let video = item.video {
+                    Text(VideoModel.format(video.resultDuration).replacingOccurrences(of: #"\.\d$"#, with: "", options: .regularExpression))
+                        .font(.caption2.weight(.semibold).monospacedDigit())
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(.black.opacity(0.6), in: Capsule())
+                        .foregroundStyle(.white)
+                        .padding(6)
+                }
+            }
             .overlay(alignment: .topTrailing) {
                 if item.favorite {
                     Image(systemName: "star.fill").foregroundStyle(.yellow).shadow(radius: 1).padding(6)

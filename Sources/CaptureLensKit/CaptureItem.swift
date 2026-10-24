@@ -7,6 +7,8 @@ import Foundation
 public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
     public enum Kind: String, Codable, CaseIterable, Sendable {
         case region, window, screen, imported
+        /// A screen recording; its picture is the poster frame.
+        case video
 
         public var title: String {
             switch self {
@@ -14,6 +16,7 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
             case .window: "Window"
             case .screen: "Full Screen"
             case .imported: "Imported"
+            case .video: "Video"
             }
         }
 
@@ -23,6 +26,7 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
             case .window: "macwindow"
             case .screen: "display"
             case .imported: "square.and.arrow.down"
+            case .video: "video"
             }
         }
     }
@@ -53,6 +57,8 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
     public var annotations: [Annotation]
     /// Crop, cut-outs, rotation, size, edges, border, background: applied on the way out.
     public var edits: ImageEdits
+    /// For a recording: its length, sound, and trims and cuts.
+    public var video: VideoInfo?
     /// The hashed device ID of the Mac that took it.
     public var origin: String?
 
@@ -85,7 +91,8 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
     public init(id: UUID = UUID(), created: Date = Date(), modified: Date? = nil, kind: Kind, name: String,
                 nameIsAutomatic: Bool = true, tags: [String] = [], notes: String = "", recognizedText: String = "",
                 favorite: Bool = false, source: Source = Source(), pixelWidth: Int, pixelHeight: Int, scale: Double = 2,
-                cursor: CursorLayer? = nil, annotations: [Annotation] = [], edits: ImageEdits = .none, origin: String? = nil) {
+                cursor: CursorLayer? = nil, annotations: [Annotation] = [], edits: ImageEdits = .none, video: VideoInfo? = nil,
+                origin: String? = nil) {
         self.id = id
         self.created = created
         self.modified = modified ?? created
@@ -103,6 +110,7 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
         self.cursor = cursor
         self.annotations = annotations
         self.edits = edits
+        self.video = video
         self.origin = origin
     }
 
@@ -127,6 +135,7 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
         // A mark this version doesn't know (made by a newer one) is skipped, not the whole capture.
         annotations = (try c.decodeIfPresent([Lossy<Annotation>].self, forKey: .annotations) ?? []).compactMap(\.value)
         edits = try c.decodeIfPresent(ImageEdits.self, forKey: .edits) ?? .none
+        video = try? c.decodeIfPresent(VideoInfo.self, forKey: .video)
         origin = try c.decodeIfPresent(String.self, forKey: .origin)
     }
 

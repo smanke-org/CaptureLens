@@ -45,6 +45,9 @@ final class AnnotationEditor {
     var simplifying = false
     /// Off shows the picture as captured, without marks (copying and saving still include them).
     var showAnnotations = true
+    /// For a recording: the cut section picked on the timeline, and whether dragging there cuts.
+    var selectedVideoCut: UUID?
+    var cuttingVideo = false
     /// The capture being edited.
     private(set) var itemID: UUID?
     /// Undo for annotation changes, apart from the window's: every change is exactly one step.
@@ -68,6 +71,8 @@ final class AnnotationEditor {
         guard id != itemID else { return }
         itemID = id
         analysis = nil
+        selectedVideoCut = nil
+        cuttingVideo = false
         selection = nil
         selectedCut = nil
         // Undo belongs to the capture it was made on.
@@ -242,6 +247,8 @@ final class AnnotationEditor {
             }
         }
     }
+
+    func bumpRevision() { revision += 1 }
 
     func undo() {
         guard undoManager.canUndo else { return }

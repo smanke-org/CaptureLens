@@ -1,5 +1,6 @@
 #if DEBUG
 import AppKit
+@preconcurrency import AVFoundation
 import CaptureLensKit
 import CryptoKit
 import SwiftUI
@@ -86,6 +87,7 @@ enum DebugSelfTest {
             await adjustTest(note, out: out)
             await phase3Test(note, out: out)
             await phase4Test(note, out: out)
+            await phase5Test(note, out: out)
 
             CapturePreview.shared.show(store.items[0], near: NSScreen.main?.frame ?? .zero, copied: true)
             try? await Task.sleep(for: .seconds(1))
@@ -381,6 +383,85 @@ enum DebugSelfTest {
         }
     }
 
+    /// A made-up recording: saving, sealing, trimming and cutting, exporting, the video view.
+    private static func phase5Test(_ note: (String) -> Void, out: URL) async {
+        let store = LibraryStore.shared
+        let window = LibraryWindow.shared
+        let folder = FileManager.default.temporaryDirectory.appending(path: "CaptureLens Self-Test \(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        // Two 2-second pieces, as a recording paused once would leave.
+        let first = folder.appending(path: "a.mp4"), second = folder.appending(path: "b.mp4")
+        guard await DebugMovie.write(to: first, seconds: 2, startFrame: 0), await DebugMovie.write(to: second, seconds: 2, startFrame: 60) else {
+            return note("video: couldn't make the test movie")
+        }
+        guard let joined = try? await ScreenRecorder.join([first, second], into: folder.appending(path: "joined.mp4")) else {
+            return note("video: couldn't join the pieces")
+        }
+        let asset = AVURLAsset(url: joined)
+        let duration = (try? await asset.load(.duration).seconds) ?? 0
+        note("video join: \(String(format: "%.2f", duration)) s from two 2 s pieces")
+        guard let poster = await VideoStore.frame(of: asset, at: 0.5),
+              let item = store.addVideo(movie: joined, poster: poster, scale: 2, info: VideoInfo(duration: duration),
+                                        source: .init(appName: "DebugHook", windowTitle: "Demo Recording")) else {
+            return note("video: couldn't save to the library")
+        }
+        let stored = VideoStore.shared.storedFile(item.id)
+        note("video stored: \(stored != nil), sealed \(stored?.sealed == true) (library encrypted \(store.isEncrypted))")
+        let playable = await VideoStore.shared.playableURL(item.id)
+        let playDuration = playable.map { _ in duration } ?? 0
+        note("video plays: \(playable != nil) \(String(format: "%.2f", playDuration)) s")
+
+        // Trim half a second off the start and cut a second from the middle: 2.5 s left.
+        var edited = store.entry(item.id)!
+        edited.video?.edits = VideoEdits(trimStart: 0.5, cuts: [TimeCut(start: 1.5, end: 2.5)])
+        store.update(edited)
+        if let playable, let info = store.entry(item.id)?.video {
+            let mp4 = folder.appending(path: "out.mp4"), gif = folder.appending(path: "out.gif")
+            do {
+                try await VideoExport.writeMP4(source: playable, info: info, to: mp4)
+                let length = try await AVURLAsset(url: mp4).load(.duration).seconds
+                note("video export mp4: \(String(format: "%.2f", length)) s (expected \(String(format: "%.2f", info.resultDuration)))")
+            } catch { note("video export mp4 FAILED: \(error.localizedDescription)") }
+            do {
+                try await VideoExport.writeGIF(source: playable, info: info, to: gif, maxWidth: 320, fps: 8)
+                let frames = CGImageSourceCreateWithURL(gif as CFURL, nil).map(CGImageSourceGetCount) ?? 0
+                note("video export gif: \(frames) frames")
+            } catch { note("video export gif FAILED: \(error.localizedDescription)") }
+        }
+        let batch = folder.appending(path: "batch")
+        try? FileManager.default.createDirectory(at: batch, withIntermediateDirectories: true)
+        let written = BatchExportSheet.export([item.id], format: .png, size: 1, frame: .asIs, naming: .name, to: batch)
+        note("video batch export: \(written) written \((try? FileManager.default.contentsOfDirectory(atPath: batch.path)) ?? [])")
+
+        window.show(select: item.id)
+        AnnotationEditor.shared.showResult = false
+        try? await Task.sleep(for: .seconds(3))
+        render(window.window, to: out.appending(path: "video-view.png"))
+        AnnotationEditor.shared.showResult = true
+        try? await Task.sleep(for: .seconds(1.5))
+        render(window.window, to: out.appending(path: "video-result.png"))
+        AnnotationEditor.shared.showResult = false
+        AnnotationEditor.shared.commitVideo(VideoEdits(), action: "Reset")
+        AnnotationEditor.shared.undo()
+        note("video undo: \(store.entry(item.id)?.video?.edits.cuts.count == 1)")
+
+        // Keys shown while recording: shortcuts and special keys, never typing.
+        func key(_ chars: String, _ code: UInt16, _ flags: NSEvent.ModifierFlags) -> String? {
+            NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0, context: nil,
+                             characters: chars, charactersIgnoringModifiers: chars, isARepeat: false, keyCode: code)
+                .flatMap(RecordingOverlay.describe)
+        }
+        note("keys shown: ⌘⇧4 → \(key("4", 21, [.command, .shift]) ?? "nil"), a → \(key("a", 0, []) ?? "nil"), Return → \(key("\r", 36, []) ?? "nil"), ⌥← → \(key("", 123, [.option]) ?? "nil")")
+
+        if let bar = ScreenRecorder.shared.debugShowBar(over: CGRect(x: 200, y: 300, width: 640, height: 360)) {
+            try? await Task.sleep(for: .seconds(1))
+            render(bar, to: out.appending(path: "record-bar.png"))
+        }
+        await ScreenRecorder.shared.debugReset()
+        note("record preset: \(Preferences.shared.presets.first { $0.mode == .recording }.map { "\($0.name) \($0.hotKey?.display ?? "-")" } ?? "missing")")
+    }
+
     /// Edit Text, Smart Move and Simplify on a made-up settings window.
     private static func phase4Test(_ note: (String) -> Void, out: URL) async {
         let store = LibraryStore.shared
@@ -661,4 +742,50 @@ enum DebugSelfTest {
 
 private protocol NSHostingViewProtocol {}
 extension NSHostingView: NSHostingViewProtocol {}
+/// Short test movies: colored frames with their number written on them.
+enum DebugMovie {
+    static func write(to url: URL, seconds: Double, startFrame: Int, size: CGSize = CGSize(width: 640, height: 360)) async -> Bool {
+        try? FileManager.default.removeItem(at: url)
+        guard let writer = try? AVAssetWriter(outputURL: url, fileType: .mp4) else { return false }
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: Int(size.width), AVVideoHeightKey: Int(size.height),
+        ])
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: Int(size.width), kCVPixelBufferHeightKey as String: Int(size.height),
+        ])
+        writer.add(input)
+        guard writer.startWriting() else { return false }
+        writer.startSession(atSourceTime: .zero)
+        let count = Int(seconds * 30)
+        for i in 0..<count {
+            while !input.isReadyForMoreMediaData { try? await Task.sleep(for: .milliseconds(5)) }
+            guard let pool = adaptor.pixelBufferPool else { return false }
+            var buffer: CVPixelBuffer?
+            CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer)
+            guard let buffer else { return false }
+            CVPixelBufferLockBaseAddress(buffer, [])
+            if let ctx = CGContext(data: CVPixelBufferGetBaseAddress(buffer), width: Int(size.width), height: Int(size.height),
+                                   bitsPerComponent: 8, bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
+                                   space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                   bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) {
+                let n = startFrame + i
+                let hue = CGFloat(n % 120) / 120
+                ctx.setFillColor(NSColor(hue: hue, saturation: 0.35, brightness: 0.95, alpha: 1).cgColor)
+                ctx.fill(CGRect(origin: .zero, size: size))
+                NSGraphicsContext.saveGraphicsState()
+                NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
+                NSAttributedString(string: "Demo Recording\nFrame \(n)", attributes: [.font: NSFont.systemFont(ofSize: 44, weight: .bold),
+                                                                                       .foregroundColor: NSColor.black])
+                    .draw(at: CGPoint(x: 40, y: 140))
+                NSGraphicsContext.restoreGraphicsState()
+            }
+            CVPixelBufferUnlockBaseAddress(buffer, [])
+            adaptor.append(buffer, withPresentationTime: CMTime(value: CMTimeValue(i), timescale: 30))
+        }
+        input.markAsFinished()
+        await writer.finishWriting()
+        return writer.status == .completed
+    }
+}
 #endif

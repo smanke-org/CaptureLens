@@ -41,6 +41,7 @@ enum Help {
         let keys: [(String, HotKey?)] = [
             ("capture", preset(0)), ("screen", preset(1)), ("window", preset(2)),
             ("library", p.libraryHotKey), ("again", p.captureAgainHotKey), ("scrolling", preset(5)),
+            ("record", p.preset(CapturePreset.defaults[6].id)?.hotKey ?? p.presets.first { $0.mode == .recording }?.hotKey),
         ]
         var out = text
         for (name, key) in keys { out = out.replacingOccurrences(of: "{hotkey:\(name)}", with: key?.display ?? "(no shortcut set)") }
@@ -162,6 +163,24 @@ enum Help {
             .text("Select several captures and choose Export…: pick a format, a size, a frame (a border, rounded corners and a shadow, or a torn edge) and how to name the files, then a folder. The captures themselves don't change."),
         ]),
 
+        HelpTopic(id: "video", title: "Recording Video", symbol: "video", blocks: [
+            .text("Press {hotkey:record} (the Record Video preset), then click a window, drag over an area, or press Return for the whole screen. A bar appears with what to record along with the screen; press Record, and after a 3-second countdown CaptureLens records. Press {hotkey:record} again, or Stop in the bar or the menu bar menu, to finish: the video goes into the library."),
+            .keys([
+                ("Sound", "The Mac's own sound: videos, calls, alerts"),
+                ("Mic", "Your voice, from the microphone"),
+                ("Camera", "You, in a round bubble over the recording; drag it anywhere before or while recording"),
+                ("Clicks", "A yellow ring wherever you click (blue for a right-click)"),
+                ("Keys", "The shortcuts and keys like Return and the arrows you press, at the bottom of the video. What you type is never shown, so passwords stay out of recordings"),
+            ]),
+            .text("Pause and Resume leave out the time in between. The bar, the red outline and CaptureLens's other windows are never in the video."),
+            .heading("In the library"),
+            .text("Recordings are named from what's in them and their text is searchable, like pictures; Type › Video in the filters shows just them. With Edit on, the timeline below the player trims and cuts: drag the yellow handles to trim the start and end (or use Start Here and End Here at the playhead), turn on Cut Out and drag across a section to take it out, click a cut and press Delete to put it back. Turn Edit off to watch the finished video. Nothing is cut from the recording itself."),
+            .text("Save Frame adds the frame at the playhead to the library as a picture, to mark up like any capture. Copy, Save As (MP4 or an animated GIF), dragging out, sharing and Export all use the finished video."),
+            .heading("Syncing videos"),
+            .text("Every recording's name, tags, notes and first frame sync like any capture. The video files themselves stay on the Mac that recorded them unless you turn on \"Sync video files\" in Settings › Library; then they go to your other Macs too, encrypted, through iCloud or your sync folder. Long recordings take a lot of space."),
+            .tip("The first time, macOS asks to allow CaptureLens to use the microphone or camera, and Keys needs CaptureLens turned on in Privacy & Security › Accessibility."),
+        ]),
+
         HelpTopic(id: "naming", title: "Automatic Names", symbol: "apple.intelligence", blocks: [
             .text("Each new capture is named from what's in it, like \"Quarterly Revenue Chart\" or \"Xcode Build Error\", using Apple Intelligence on this Mac. The name appears a moment after the capture; until then it's named after the app and window."),
             .text("To rename a capture, type in its Name field. Click the Apple Intelligence button beside the name (or choose Suggest a Name from the right-click menu) for a fresh suggestion."),
@@ -240,6 +259,7 @@ enum Help {
                 ("capturelens://area", "Capture an area"),
                 ("capturelens://scrolling", "Capture a scrolling area"),
                 ("capturelens://steps", "Start (or stop) recording steps"),
+                ("capturelens://record", "Record a video (again to stop)"),
                 ("capturelens://recapture", "Capture the same area again"),
                 ("capturelens://library", "Open the library"),
                 ("capturelens://preset/<name>", "Run a preset by its name"),

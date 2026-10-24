@@ -39,6 +39,10 @@
 	<string>CaptureLens asks your browser for the address of the page you capture, so the library can show where it came from and you can search by website.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 Steve Manke</string>
+	<key>NSCameraUsageDescription</key>
+	<string>CaptureLens shows your camera in a bubble on screen recordings, when you turn Camera on.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>CaptureLens records your voice with screen recordings, when you turn Mic on.</string>
 	<key>ToolHUDActions</key>
 	<array>
 		<dict>
@@ -112,6 +116,18 @@
 			<string>record.circle</string>
 			<key>title</key>
 			<string>Record steps (again to stop)</string>
+		</dict>
+		<dict>
+			<key>activates</key>
+			<false/>
+			<key>id</key>
+			<string>record</string>
+			<key>shortTitle</key>
+			<string>Record video</string>
+			<key>symbol</key>
+			<string>video</string>
+			<key>title</key>
+			<string>Record a video of the screen (again to stop)</string>
 		</dict>
 		<dict>
 			<key>activates</key>

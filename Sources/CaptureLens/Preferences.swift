@@ -48,6 +48,8 @@ enum CaptureMode: String, Codable, CaseIterable {
     case fixedSize
     /// Pick an area or window, then scroll it: the frames are stitched into one tall picture.
     case scrolling
+    /// Pick an area, window or screen, then record a video of it.
+    case recording
 
     var title: String {
         switch self {
@@ -57,6 +59,7 @@ enum CaptureMode: String, Codable, CaseIterable {
         case .screen: "Full screen"
         case .fixedSize: "Exact size"
         case .scrolling: "Scrolling area"
+        case .recording: "Video recording"
         }
     }
 
@@ -68,6 +71,7 @@ enum CaptureMode: String, Codable, CaseIterable {
         case .screen: "display"
         case .fixedSize: "aspectratio"
         case .scrolling: "arrow.down.doc"
+        case .recording: "record.circle"
         }
     }
 }
@@ -162,6 +166,8 @@ struct CapturePreset: Codable, Identifiable, Equatable {
                       mode: .fixedSize, width: 1280, height: 720),
         CapturePreset(id: UUID(uuidString: "6C1D0E2A-0006-4C6E-9C1A-CA9701E50006")!, name: "Scrolling Capture", mode: .scrolling,
                       hotKey: HotKey(keyCode: UInt32(kVK_ANSI_6), modifiers: optionShiftCommand, display: "⌥⇧⌘6")),
+        CapturePreset(id: UUID(uuidString: "6C1D0E2A-0007-4C6E-9C1A-CA9701E50007")!, name: "Record Video", mode: .recording,
+                      hotKey: HotKey(keyCode: UInt32(kVK_ANSI_R), modifiers: optionShiftCommand, display: "⌥⇧⌘R")),
     ]
 }
 
@@ -198,6 +204,20 @@ final class Preferences {
     /// What the library syncs through when `librarySync` is on.
     var libraryBackend = LibraryBackend.iCloud { didSet { save(libraryBackend.rawValue, "libraryBackend"); librarySyncChanged() } }
 
+    // MARK: Recording
+    var recordMicrophone = false { didSet { save(recordMicrophone, "recordMicrophone") } }
+    /// The Mac's own sound (apps playing audio).
+    var recordSystemAudio = true { didSet { save(recordSystemAudio, "recordSystemAudio") } }
+    /// The camera in a round bubble over the recording.
+    var recordCamera = false { didSet { save(recordCamera, "recordCamera") } }
+    /// A ring wherever the mouse is clicked.
+    var showClicks = true { didSet { save(showClicks, "showClicks") } }
+    /// Keyboard shortcuts and special keys pressed, shown at the bottom of the recording.
+    var showKeys = false { didSet { save(showKeys, "showKeys") } }
+    var recordFrameRate = 30 { didSet { save(recordFrameRate, "recordFrameRate") } }
+    /// Movie files go to other Macs too (their details always do).
+    var syncVideos = false { didSet { save(syncVideos, "syncVideos"); if syncVideos != oldValue { syncVideosChanged() } } }
+
     // MARK: Annotations
     /// The style new annotations get (the last one chosen).
     var annotationStyle = AnnotationStyle.standard { didSet { saveCodable(annotationStyle, "annotationStyle") } }
@@ -219,6 +239,7 @@ final class Preferences {
     static let keys = [
         "copyToClipboard", "afterCapture", "captureCursor", "showCursorByDefault", "windowShadow", "playSound", "showNotice",
         "autoName", "recognizeText", "recordWebAddress", "librarySync", "libraryBackend", "annotationStyle", "quickStyles", "presets", "libraryHotKey", "captureAgainHotKey",
+        "recordMicrophone", "recordSystemAudio", "recordCamera", "showClicks", "showKeys", "recordFrameRate", "syncVideos",
     ]
 
     @ObservationIgnored private var loading = false
@@ -236,7 +257,7 @@ final class Preferences {
     private func addNewDefaultPresets() {
         let key = "presets.addedDefaults"
         var added = Set(AppDefaults.store.stringArray(forKey: key) ?? [])
-        let newer = CapturePreset.defaults.filter { $0.mode == .scrolling }
+        let newer = CapturePreset.defaults.filter { $0.mode == .scrolling || $0.mode == .recording }
         for preset in newer where !added.contains(preset.id.uuidString) {
             added.insert(preset.id.uuidString)
             guard !presets.contains(where: { $0.id == preset.id }) else { continue }
@@ -266,6 +287,8 @@ final class Preferences {
             "recordWebAddress": recordWebAddress, "librarySync": librarySync, "libraryBackend": libraryBackend.rawValue,
             "annotationStyle": data(annotationStyle), "quickStyles": data(quickStyles), "presets": data(presets),
             "libraryHotKey": data(libraryHotKey), "captureAgainHotKey": data(captureAgainHotKey),
+            "recordMicrophone": recordMicrophone, "recordSystemAudio": recordSystemAudio, "recordCamera": recordCamera,
+            "showClicks": showClicks, "showKeys": showKeys, "recordFrameRate": recordFrameRate, "syncVideos": syncVideos,
         ]
     }
 
@@ -273,6 +296,17 @@ final class Preferences {
     func reload() {
         load()
         librarySyncChanged(force: true)
+    }
+
+    /// Turning on video sync sends this Mac's movies and fetches the others'.
+    private func syncVideosChanged() {
+        guard !loading else { return }
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                LibrarySync.shared.videoSyncChanged()
+                FolderSync.shared.videoSyncChanged()
+            }
+        }
     }
 
     /// Library sync follows its own switch and service. Deferred, since it reads Preferences.
@@ -314,6 +348,13 @@ final class Preferences {
         presets = codable("presets", CapturePreset.defaults)
         libraryHotKey = codable("libraryHotKey", Defaults.libraryHotKey)
         captureAgainHotKey = codable("captureAgainHotKey", nil as HotKey?)
+        recordMicrophone = bool("recordMicrophone", false)
+        recordSystemAudio = bool("recordSystemAudio", true)
+        recordCamera = bool("recordCamera", false)
+        showClicks = bool("showClicks", true)
+        showKeys = bool("showKeys", false)
+        recordFrameRate = d.object(forKey: "recordFrameRate") as? Int ?? 30
+        syncVideos = bool("syncVideos", false)
     }
 
     private func save(_ value: Any, _ key: String) {

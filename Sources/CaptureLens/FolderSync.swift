@@ -180,6 +180,40 @@ final class FolderSync {
                 await write(outbox)
                 saveOutbox([])
             }
+            await syncVideos(Set(LibraryStore.shared.items.filter { $0.kind == .video }.map(\.id)))
+        }
+    }
+
+    // MARK: - Movies
+
+    /// Video sync was turned on: movies go both ways.
+    func videoSyncChanged() {
+        guard started else { return }
+        Task { await syncVideos(Set(LibraryStore.shared.items.filter { $0.kind == .video }.map(\.id))) }
+    }
+
+    /// Puts this Mac's movies the folder lacks in Videos/ (sealed with the sync key), and
+    /// takes the folder's movies this Mac lacks.
+    private func syncVideos(_ ids: Set<UUID>) async {
+        guard Preferences.shared.syncVideos, let root, let key = SettingsSync.shared.key, let db else { return }
+        let libraryKey = db.sealKey
+        for id in ids where LibraryStore.shared.entry(id)?.kind == .video {
+            let target = root.appending(path: FolderIO.videosFolder).appending(path: "\(id.uuidString).clvideo")
+            let inFolder = await io.fileExists(target)
+            if let stored = VideoStore.shared.storedFile(id) {
+                guard !inFolder else { continue }
+                do {
+                    let sealed = try await Task.detached(priority: .utility) {
+                        try VideoStore.sealedForSync(stored, libraryKey: libraryKey, syncKey: key)
+                    }.value
+                    try await io.moveIn(sealed, to: target)
+                } catch {
+                    lastError = "A video couldn't go to the sync folder: \(Self.describe(error))"
+                }
+            } else if inFolder, let copy = await io.copyOut(target) {
+                await VideoStore.shared.receive(id, sealedWith: key, from: copy)
+                try? FileManager.default.removeItem(at: copy)
+            }
         }
     }
 
@@ -261,6 +295,7 @@ final class FolderSync {
         }
         saveSeen()
         lastSynced = Date()
+        await syncVideos(Set(ids.filter { LibraryStore.shared.entry($0) != nil }))
     }
 
     // MARK: - Changes from other Macs
@@ -376,6 +411,9 @@ final class FolderSync {
         }
         lastSynced = Date()
         if !keyMismatch { lastError = nil }
+        // Movies of recordings that arrived without one.
+        let missing = store.items.filter { $0.kind == .video && !VideoStore.shared.has($0.id) }.map(\.id)
+        if !missing.isEmpty { await syncVideos(Set(missing)) }
     }
 
     // MARK: - Watching
@@ -530,6 +568,43 @@ final class FolderIO: @unchecked Sendable {
         (try? await run { Self.coordinatedRead(url) }) ?? nil
     }
 
+    /// Recordings' movies, sealed with the sync key, beside the other folders.
+    static let videosFolder = "Videos"
+
+    func fileExists(_ url: URL) async -> Bool {
+        (try? await run { FileManager.default.fileExists(atPath: url.path) }) ?? false
+    }
+
+    /// Moves a finished file into the folder (it can be big, so it isn't read into memory).
+    func moveIn(_ file: URL, to url: URL) async throws {
+        try await run {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            var thrown: Error?
+            var error: NSError?
+            NSFileCoordinator().coordinate(writingItemAt: url, options: .forReplacing, error: &error) { target in
+                do {
+                    try? FileManager.default.removeItem(at: target)
+                    try FileManager.default.moveItem(at: file, to: target)
+                } catch { thrown = error }
+            }
+            if let error { throw error }
+            if let thrown { throw thrown }
+        }
+    }
+
+    /// A copy of a file in the folder (downloaded first, if the sync app keeps it online).
+    func copyOut(_ url: URL) async -> URL? {
+        (try? await run {
+            var result: URL?
+            var error: NSError?
+            NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &error) { source in
+                let copy = FileManager.default.temporaryDirectory.appending(path: "CaptureLens-\(UUID().uuidString).clvideo")
+                if (try? FileManager.default.copyItem(at: source, to: copy)) != nil { result = copy }
+            }
+            return result
+        }) ?? nil
+    }
+
     func remove(_ urls: [URL]) async {
         _ = try? await run { for url in urls { Self.coordinatedRemove(url) } }
     }
@@ -560,6 +635,7 @@ final class FolderIO: @unchecked Sendable {
             for kind in [FolderLayout.Kind.item, .image] {
                 Self.coordinatedRemove(root.appending(path: kind.folder).appending(path: FolderLayout.fileName(id, kind)))
             }
+            Self.coordinatedRemove(root.appending(path: Self.videosFolder).appending(path: "\(id.uuidString).clvideo"))
             return ["\(FolderLayout.deletedFolder)/\(url.lastPathComponent)": Self.mtime(url)]
         }
     }
