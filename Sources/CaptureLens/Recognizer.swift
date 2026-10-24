@@ -1,5 +1,6 @@
 import AppKit
 import CaptureLensKit
+import CoreImage
 import Vision
 
 /// Reading a capture with Apple's Vision framework, entirely on this Mac: its text (so the
@@ -39,5 +40,44 @@ enum Recognizer {
                 .prefix(limit)
                 .map { $0.identifier.replacingOccurrences(of: "_", with: " ") }
         }.value) ?? []
+    }
+
+    /// Where sensitive text sits in the picture (emails, card numbers…), as boxes in 0–1
+    /// coordinates with the origin at the top left, for Smart Redact.
+    static func sensitiveBoxes(in image: CGImage, kinds: Set<SensitiveText.Kind> = Set(SensitiveText.Kind.allCases)) async -> [CGRect] {
+        let source = image.upscaledForReading()
+        return (try? await Task.detached(priority: .userInitiated) {
+            let request = VNRecognizeTextRequest()
+            request.recognitionLevel = .accurate
+            request.usesLanguageCorrection = false
+            request.automaticallyDetectsLanguage = true
+            try VNImageRequestHandler(cgImage: source, options: [:]).perform([request])
+            var boxes: [CGRect] = []
+            for observation in request.results ?? [] {
+                guard let candidate = observation.topCandidates(1).first else { continue }
+                for match in SensitiveText.find(in: candidate.string, kinds: kinds) {
+                    guard let box = try? candidate.boundingBox(for: match.range)?.boundingBox else { continue }
+                    // Vision's origin is at the bottom left.
+                    boxes.append(CGRect(x: box.minX, y: 1 - box.maxY, width: box.width, height: box.height))
+                }
+            }
+            return boxes
+        }.value) ?? []
+    }
+
+    /// A mask of the picture's subject (white where it is), for removing the background.
+    static func subjectMask(for image: CGImage) -> CGImage? {
+        let request = VNGenerateForegroundInstanceMaskRequest()
+        let handler = VNImageRequestHandler(cgImage: image, options: [:])
+        do {
+            try handler.perform([request])
+            guard let result = request.results?.first else { return nil }
+            let buffer = try result.generateScaledMaskForImage(forInstances: result.allInstances, from: handler)
+            let mask = CIImage(cvPixelBuffer: buffer)
+            return CIContext().createCGImage(mask, from: mask.extent, format: .L8, colorSpace: CGColorSpaceCreateDeviceGray())
+        } catch {
+            NSLog("CaptureLens: couldn't find the subject: \(error.localizedDescription)")
+            return nil
+        }
     }
 }

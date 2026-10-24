@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreImage
 import CoreText
 import Foundation
 import ImageIO
@@ -170,9 +171,51 @@ public enum AnnotationRenderer {
             ctx.addPath(circle)
             ctx.strokePath()
 
+        case .blur, .pixelate:
+            let rect = a.rect.standardized
+            guard rect.width > 1, rect.height > 1 else { return }
+            ctx.setShadow(offset: .zero, blur: 0, color: nil)
+            if let base, let hidden = obscure(base, rect: rect, canvas: canvas, pixelate: a.kind == .pixelate) {
+                drawImage(hidden, in: rect, ctx: ctx)
+            } else {
+                ctx.setFillColor(CGColor(gray: 0.5, alpha: 1))
+                ctx.fill(rect)
+            }
+
+        case .redact:
+            ctx.setShadow(offset: .zero, blur: 0, color: nil)
+            ctx.fill(a.rect.standardized)
+
         case .spotlight:
             break
         }
+    }
+
+    private static let ciContext = CIContext(options: [.cacheIntermediates: false])
+
+    /// The part of `base` under `rect`, blurred or pixelated so it can't be read.
+    static func obscure(_ base: CGImage, rect: CGRect, canvas: CGSize, pixelate: Bool) -> CGImage? {
+        let scale = CGFloat(base.width) / max(canvas.width, 1)
+        let pixels = CGRect(x: rect.minX * scale, y: rect.minY * scale, width: rect.width * scale, height: rect.height * scale)
+            .integral.intersection(CGRect(x: 0, y: 0, width: base.width, height: base.height))
+        guard !pixels.isEmpty, let piece = base.cropping(to: pixels) else { return nil }
+        let input = CIImage(cgImage: piece)
+        let side = min(pixels.width, pixels.height)
+        let output: CIImage?
+        if pixelate {
+            let filter = CIFilter(name: "CIPixellate")
+            filter?.setValue(input.clampedToExtent(), forKey: kCIInputImageKey)
+            filter?.setValue(max(8 * scale, side / 10), forKey: kCIInputScaleKey)
+            filter?.setValue(CIVector(x: 0, y: 0), forKey: kCIInputCenterKey)
+            output = filter?.outputImage?.cropped(to: input.extent)
+        } else {
+            let filter = CIFilter(name: "CIGaussianBlur")
+            filter?.setValue(input.clampedToExtent(), forKey: kCIInputImageKey)
+            filter?.setValue(max(10 * scale, side / 6), forKey: kCIInputRadiusKey)
+            output = filter?.outputImage?.cropped(to: input.extent)
+        }
+        guard let output else { return nil }
+        return ciContext.createCGImage(output, from: input.extent)
     }
 
     /// Dims everything outside the spotlights.

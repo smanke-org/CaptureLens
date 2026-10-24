@@ -438,3 +438,149 @@ private func item(_ name: String, daysAgo: Double = 0, now: Date, tags: [String]
         #expect(tests.pixel(flat, 60, 43)[1] < 150, "the tail reaches out toward its point")
     }
 }
+
+@Suite struct EditTests {
+    let helper = AnnotationTests()
+
+    /// 200 × 100 points at 2×: left half red, right half blue, so turns and crops can be told apart.
+    func picture() -> CGImage {
+        let ctx = CGContext(data: nil, width: 400, height: 200, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: 200, height: 200))
+        ctx.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 1, alpha: 1))
+        ctx.fill(CGRect(x: 200, y: 0, width: 200, height: 200))
+        return ctx.makeImage()!
+    }
+
+    func render(_ edits: ImageEdits, annotations: [Annotation] = [], mask: CGImage? = nil) throws -> CGImage {
+        try #require(EditRenderer.render(base: picture(), scale: 2, edits: edits, annotations: annotations, cursor: nil, mask: mask))
+    }
+
+    @Test func noEditsLeavesThePicture() throws {
+        let out = try render(.none)
+        #expect(out.width == 400 && out.height == 200)
+    }
+
+    @Test func cropKeepsThePartChosen() throws {
+        var edits = ImageEdits()
+        edits.crop = CGRect(x: 110, y: 10, width: 50, height: 40)   // inside the blue half
+        let out = try render(edits)
+        #expect(out.width == 100 && out.height == 80)
+        #expect(helper.pixel(out, 10, 10)[2] > 200)
+        #expect(edits.outputSize(for: CGSize(width: 200, height: 100)) == CGSize(width: 50, height: 40))
+    }
+
+    @Test func rotationTurnsClockwise() throws {
+        let out = try render(ImageEdits().rotated(clockwise: true))
+        #expect(out.width == 200 && out.height == 400)
+        // Turned clockwise, the left (red) half ends up on top.
+        #expect(helper.pixel(out, 50, 20)[0] > 200)
+        #expect(helper.pixel(out, 50, 380)[2] > 200)
+        #expect(ImageEdits().rotated(clockwise: false).rotation == 3)
+    }
+
+    @Test func cutOutsRemoveStrips() throws {
+        var edits = ImageEdits()
+        edits.cuts = [CutOut(axis: .vertical, from: 80, to: 120, seam: .straight)]
+        let out = try render(edits)
+        #expect(out.width == 320 && out.height == 200)
+        #expect(edits.outputSize(for: CGSize(width: 200, height: 100)).width == 160)
+        // A torn seam leaves a small gap between the two sides.
+        edits.cuts = [CutOut(axis: .horizontal, from: 30, to: 60, seam: .torn)]
+        let torn = try render(edits)
+        #expect(torn.height == 200 - 60 + 16)
+        let counted = edits.outputSize(for: CGSize(width: 200, height: 100)).height
+        #expect(counted == 78, "the size counts the gap: \(counted)")
+        #expect(helper.pixel(torn, 100, 68)[3] < 40, "the gap (rows 60–76) is transparent")
+    }
+
+    @Test func resizeBorderAndShadow() throws {
+        var edits = ImageEdits()
+        edits.outputScale = 0.5
+        #expect(try render(edits).width == 200)
+        edits.outputScale = 1
+        edits.border = Border(width: 4, color: .green, cornerRadius: 0, shadow: false)
+        let framed = try render(edits)
+        #expect(framed.width == 400)
+        let edge = helper.pixel(framed, 1, 50)
+        #expect(edge[1] > 150 && edge[0] < 100, "the border is green")
+        edits.border?.shadow = true
+        let shadowed = try render(edits)
+        #expect(shadowed.width == 400 + 72, "a margin for the shadow")
+    }
+
+    @Test func edgesCutIntoTheSides() throws {
+        var edits = ImageEdits()
+        edits.edges = EdgeEffect(kind: .torn, sides: [.bottom])
+        let torn = try render(edits)
+        let bottomRow = (0..<400).filter { helper.pixel(torn, $0, 199)[3] < 50 }.count
+        #expect(bottomRow > 20, "parts of the bottom edge are torn away")
+        #expect(helper.pixel(torn, 100, 1)[3] == 255, "the top is untouched")
+        edits.edges = EdgeEffect(kind: .fade, sides: [.left])
+        let faded = try render(edits)
+        #expect(helper.pixel(faded, 0, 50)[3] < 60)
+        #expect(helper.pixel(faded, 100, 50)[3] == 255)
+    }
+
+    @Test func backgroundRemovalKeepsTheMask() throws {
+        let ctx = CGContext(data: nil, width: 400, height: 200, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceGray(),
+                            bitmapInfo: CGImageAlphaInfo.none.rawValue)!
+        ctx.setFillColor(CGColor(gray: 0, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: 400, height: 200))
+        ctx.setFillColor(CGColor(gray: 1, alpha: 1))
+        ctx.fill(CGRect(x: 100, y: 50, width: 200, height: 100))   // the subject, in the middle
+        var edits = ImageEdits()
+        edits.removeBackground = true
+        let out = try render(edits, mask: ctx.makeImage()!)
+        #expect(helper.pixel(out, 100, 50)[3] == 255)
+        #expect(helper.pixel(out, 5, 5)[3] == 0)
+        // Without a mask it's left alone.
+        #expect(helper.pixel(try render(edits), 5, 5)[3] == 255)
+    }
+
+    @Test func blurPixelateAndRedactHideWhatsUnder() throws {
+        let marks = [Annotation(kind: .redact, rect: CGRect(x: 10, y: 10, width: 40, height: 40), style: AnnotationStyle(color: .black, shadow: false)),
+                     Annotation(kind: .blur, rect: CGRect(x: 80, y: 10, width: 40, height: 40), style: .standard)]
+        let out = try render(.none, annotations: marks)
+        #expect(helper.pixel(out, 30, 30, scale: 2)[0] < 40, "redacted in black")
+        // Blurred across the red/blue border at x = 100: purple in the middle, not pure.
+        let mid = helper.pixel(out, 100, 30, scale: 2)
+        #expect(mid[0] > 40 && mid[2] > 40)
+        let hit = Annotation(kind: .pixelate, rect: CGRect(x: 0, y: 0, width: 20, height: 20), style: .standard)
+        #expect(hit.hit(CGPoint(x: 10, y: 10)))
+    }
+
+    @Test func editsRoundTripAndOlderItemsHaveNone() throws {
+        var item = CaptureItem(kind: .region, name: "Edited", pixelWidth: 400, pixelHeight: 200)
+        item.edits = ImageEdits(crop: CGRect(x: 1, y: 2, width: 3, height: 4), cuts: [CutOut(axis: .vertical, from: 9, to: 4)],
+                                rotation: 3, outputScale: 0.5, border: Border(), edges: EdgeEffect(kind: .wave, sides: [.left, .right]),
+                                removeBackground: true)
+        #expect(item.edits.cuts[0].from == 4 && item.edits.cuts[0].to == 9)
+        #expect(try SyncedItem.decode(SyncedItem(item: item).encoded()).item.edits == item.edits)
+        let older = try PropertyListSerialization.data(fromPropertyList: ["id": UUID().uuidString, "created": Date()], format: .binary, options: 0)
+        #expect(try PropertyListDecoder().decode(CaptureItem.self, from: older).edits.isEmpty)
+    }
+}
+
+@Suite struct SensitiveTextTests {
+    func kinds(_ text: String) -> [String] {
+        SensitiveText.find(in: text).map { "\($0.kind.rawValue):\(text[$0.range])" }
+    }
+
+    @Test func findsTheUsualSuspects() {
+        #expect(kinds("Mail jane.doe@example.com today") == ["email:jane.doe@example.com"])
+        #expect(kinds("Card 4111 1111 1111 1111 exp 12/29").first == "card:4111 1111 1111 1111")
+        #expect(kinds("SSN 123-45-6789") == ["idNumber:123-45-6789"])
+        #expect(kinds("Server 192.168.1.20 is down") == ["ipAddress:192.168.1.20"])
+        #expect(kinds("token ghp_abcdefghijklmnopqrstuvwx1234").contains("secret:ghp_abcdefghijklmnopqrstuvwx1234"))
+        #expect(kinds("Call (555) 123-4567 now").contains { $0.hasPrefix("phone:") })
+    }
+
+    @Test func leavesOrdinaryTextAlone() {
+        #expect(kinds("Quarterly revenue grew 12% in 2026").isEmpty)
+        #expect(kinds("Order 1234 5678 9012 3456").filter { $0.hasPrefix("card") }.isEmpty, "fails the card checksum")
+        #expect(SensitiveText.luhn("4111111111111111"))
+        #expect(!SensitiveText.luhn("4111111111111112"))
+    }
+}

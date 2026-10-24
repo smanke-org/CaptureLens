@@ -247,14 +247,18 @@ enum Flattener {
         return image(item, data: data)?.pngData ?? data
     }
 
+    /// The finished picture: annotations and pointer drawn in, then cropped, cut, turned,
+    /// resized, edged and framed as the capture's adjustments say.
     static func image(_ item: CaptureItem, data: Data? = nil) -> CGImage? {
         guard let data = data ?? LibraryStore.shared.pngData(item.id), let source = AnnotationRenderer.image(from: data) else { return nil }
-        return AnnotationRenderer.flatten(base: source, scale: item.scale, annotations: item.annotations, cursor: item.cursor)
+        let mask = item.edits.removeBackground ? LibraryStore.shared.subjectMask(item.id, image: source) : nil
+        return EditRenderer.render(base: source, scale: item.scale, edits: item.edits, annotations: item.annotations,
+                                   cursor: item.cursor, mask: mask)
     }
 
-    /// Whether anything is drawn over the picture.
+    /// Whether the finished picture differs from the original.
     static func needsDrawing(_ item: CaptureItem) -> Bool {
-        !item.annotations.isEmpty || item.cursor?.visible == true
+        !item.annotations.isEmpty || item.cursor?.visible == true || !item.edits.isEmpty
     }
 
     /// Writes the flattened capture to a temporary file named after it, for dragging out.

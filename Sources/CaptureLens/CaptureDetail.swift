@@ -41,11 +41,26 @@ private struct SingleCaptureView: View {
     var body: some View {
         VSplitView {
             VStack(spacing: 0) {
-                AnnotationToolbar()
-                Divider()
-                CaptureCanvas(item: item, fitRequest: zoomToFit, editor: editorState)
-                    .frame(minHeight: 200)
+                if editor.showResult {
+                    ResultBar(item: item)
+                    Divider()
+                    ResultCanvas(item: item, fitRequest: zoomToFit)
+                        .frame(minHeight: 200)
+                } else {
+                    AnnotationToolbar()
+                    Divider()
+                    CaptureCanvas(item: item, fitRequest: zoomToFit, editor: editorState)
+                        .frame(minHeight: 200)
+                }
                 HStack(spacing: 12) {
+                    Picker("", selection: $editor.showResult) {
+                        Text("Edit").tag(false)
+                        Text("Result").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                    .help("Edit marks up the original; Result shows the finished picture, as it's copied and saved")
                     Button { if let png = Flattener.png(item) { Clipboard.copy(png: png); Notice.shared.show("Copied") } } label: {
                         Label("Copy", systemImage: "doc.on.doc")
                     }
@@ -67,6 +82,145 @@ private struct SingleCaptureView: View {
             CaptureInspector(state: state, item: item)
                 .frame(minHeight: 180, idealHeight: 300)
         }
+        .sheet(isPresented: $editor.showResize) { ResizeSheet() }
+    }
+}
+
+/// Above the finished picture: its size and what's been done to it.
+private struct ResultBar: View {
+    let item: CaptureItem
+
+    var body: some View {
+        let size = item.edits.outputSize(for: item.pointSize)
+        HStack(spacing: 10) {
+            Text("\(Int(size.width)) × \(Int(size.height)) points").monospacedDigit()
+            if !summary.isEmpty { Text(summary).foregroundStyle(.secondary).lineLimit(1) }
+            Spacer()
+            AdjustMenu()
+        }
+        .font(.callout)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+    }
+
+    private var summary: String {
+        let e = item.edits
+        var parts: [String] = []
+        if e.crop != nil { parts.append("cropped") }
+        if !e.cuts.isEmpty { parts.append("\(e.cuts.count) cut-out\(e.cuts.count == 1 ? "" : "s")") }
+        if e.rotation != 0 { parts.append("turned \(e.rotation * 90)°") }
+        if abs(e.outputScale - 1) > 0.001 { parts.append("\(Int((e.outputScale * 100).rounded()))%") }
+        if e.edges != nil { parts.append("edges") }
+        if e.border != nil { parts.append("border") }
+        if e.removeBackground { parts.append("background removed") }
+        if !item.annotations.isEmpty { parts.append("\(item.annotations.count) mark\(item.annotations.count == 1 ? "" : "s")") }
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// The finished picture, zoomable, on a checkerboard so transparency shows.
+struct ResultCanvas: NSViewRepresentable {
+    let item: CaptureItem
+    let fitRequest: Int
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.hasHorizontalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.allowsMagnification = true
+        scroll.minMagnification = 0.05
+        scroll.maxMagnification = 8
+        scroll.backgroundColor = .underPageBackgroundColor
+        let clip = CenteringClipView()
+        clip.drawsBackground = false
+        scroll.contentView = clip
+        context.coordinator.scroll = scroll
+        scroll.documentView = context.coordinator.imageView
+        context.coordinator.show(item)
+        return scroll
+    }
+
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        context.coordinator.show(item)
+        context.coordinator.fitOnceSized()
+        if context.coordinator.lastFit != fitRequest {
+            context.coordinator.lastFit = fitRequest
+            context.coordinator.fit()
+        }
+    }
+
+    @MainActor
+    final class Coordinator {
+        weak var scroll: NSScrollView?
+        let imageView = CheckerImageView()
+        var lastFit = 0
+        private var shown: CaptureItem?
+
+        func show(_ item: CaptureItem) {
+            guard item != shown else { return }
+            let first = shown?.id != item.id
+            shown = item
+            guard let image = Flattener.image(item) else { return }
+            let pointsPerPixel = 1 / max(item.scale * item.edits.outputScale, 0.01)
+            let size = CGSize(width: CGFloat(image.width) * pointsPerPixel, height: CGFloat(image.height) * pointsPerPixel)
+            imageView.image = NSImage(cgImage: image, size: size)
+            imageView.frame = CGRect(origin: .zero, size: size)
+            if first {
+                fitted = false
+                fitOnceSized()
+            }
+        }
+
+        private var fitted = false
+
+        /// Fits the picture as soon as the view has its real size (it's tiny at first).
+        func fitOnceSized() {
+            guard !fitted, let scroll else { return }
+            guard scroll.contentSize.width > 80, scroll.contentSize.height > 80 else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.fitOnceSized() }
+                return
+            }
+            fitted = true
+            fit()
+        }
+
+        func fit() {
+            guard let scroll, imageView.frame.width > 0 else { return }
+            let available = scroll.contentSize
+            let factor = min(1, min((available.width - 24) / imageView.frame.width, (available.height - 24) / imageView.frame.height))
+            scroll.magnification = max(scroll.minMagnification, factor)
+        }
+    }
+}
+
+/// An image view that draws a checkerboard behind see-through parts.
+final class CheckerImageView: NSImageView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        imageScaling = .scaleAxesIndependently
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let square: CGFloat = 8
+        NSColor(white: 0.85, alpha: 1).setFill()
+        bounds.fill()
+        NSColor(white: 0.7, alpha: 1).setFill()
+        var y: CGFloat = 0, row = 0
+        while y < bounds.height {
+            var x: CGFloat = row % 2 == 0 ? 0 : square
+            while x < bounds.width {
+                NSRect(x: x, y: y, width: square, height: square).fill()
+                x += square * 2
+            }
+            y += square
+            row += 1
+        }
+        super.draw(dirtyRect)
     }
 }
 
@@ -484,7 +638,7 @@ struct FlowLayout: Layout {
 @MainActor
 enum Exporter {
     enum Format: String, CaseIterable {
-        case png = "PNG", jpeg = "JPEG", heic = "HEIC", tiff = "TIFF"
+        case png = "PNG", jpeg = "JPEG", heic = "HEIC", tiff = "TIFF", webp = "WebP", gif = "GIF", bmp = "BMP", pdf = "PDF"
 
         var type: UTType {
             switch self {
@@ -492,7 +646,17 @@ enum Exporter {
             case .jpeg: .jpeg
             case .heic: .heic
             case .tiff: .tiff
+            case .webp: .webP
+            case .gif: .gif
+            case .bmp: .bmp
+            case .pdf: .pdf
             }
+        }
+
+        /// The formats this Mac can write (WebP needs a recent macOS).
+        static var available: [Format] {
+            let writable = Set((CGImageDestinationCopyTypeIdentifiers() as? [String]) ?? [])
+            return allCases.filter { $0 == .pdf || writable.contains($0.type.identifier) }
         }
     }
 
@@ -502,7 +666,7 @@ enum Exporter {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = item.name
         let popup = NSPopUpButton(frame: .zero, pullsDown: false)
-        popup.addItems(withTitles: Format.allCases.map(\.rawValue))
+        popup.addItems(withTitles: Format.available.map(\.rawValue))
         let last = Format(rawValue: AppDefaults.store.string(forKey: "export.format") ?? "") ?? .png
         popup.selectItem(withTitle: last.rawValue)
         panel.allowedContentTypes = [last.type]
@@ -516,11 +680,29 @@ enum Exporter {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let format = Format(rawValue: popup.titleOfSelectedItem ?? "") ?? .png
         AppDefaults.store.set(format.rawValue, forKey: "export.format")
-        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, format.type.identifier as CFString, 1, nil) else { return NSSound.beep() }
+        if !write(image, of: item, as: format, to: url) { Notice.shared.show(error: "Couldn't save the picture") }
+        withExtendedLifetime(handler) {}
+    }
+
+    /// Writes the finished picture in `format`; false if it couldn't.
+    @discardableResult
+    static func write(_ image: CGImage, of item: CaptureItem, as format: Format, to url: URL) -> Bool {
+        if format == .pdf {
+            // One page the size of the picture, in points.
+            let pointsPerPixel = 1 / max(item.scale * item.edits.outputScale, 0.01)
+            var box = CGRect(x: 0, y: 0, width: CGFloat(image.width) * pointsPerPixel, height: CGFloat(image.height) * pointsPerPixel)
+            guard let pdf = CGContext(url as CFURL, mediaBox: &box, [kCGPDFContextTitle as String: item.name] as CFDictionary) else { return false }
+            pdf.beginPDFPage(nil)
+            pdf.interpolationQuality = .high
+            pdf.draw(image, in: box)
+            pdf.endPDFPage()
+            pdf.closePDF()
+            return true
+        }
+        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, format.type.identifier as CFString, 1, nil) else { return false }
         let options: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: 0.9]
         CGImageDestinationAddImage(destination, image, options as CFDictionary)
-        if !CGImageDestinationFinalize(destination) { Notice.shared.show(error: "Couldn't save the picture") }
-        withExtendedLifetime(handler) {}
+        return CGImageDestinationFinalize(destination)
     }
 
     @MainActor

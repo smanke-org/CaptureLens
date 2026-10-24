@@ -78,6 +78,7 @@ enum DebugSelfTest {
             window.state.filter = LibraryFilter()
 
             await annotationTest(note, out: out)
+            await adjustTest(note, out: out)
 
             CapturePreview.shared.show(store.items[0], near: NSScreen.main?.frame ?? .zero, copied: true)
             try? await Task.sleep(for: .seconds(1))
@@ -201,6 +202,118 @@ enum DebugSelfTest {
         if let keyDelete { layer.keyDown(with: keyDelete) }
         note("delete key removes it: \(!editor.annotations.contains { $0.id == typed?.id })")
         try? await Task.sleep(for: .milliseconds(500))
+    }
+
+    /// Crop, cut-outs, rotation, border, edges, Smart Redact, background removal and every
+    /// export format, on sample captures, plus the crop and cut tools driven by mouse.
+    private static func adjustTest(_ note: (String) -> Void, out: URL) async {
+        let store = LibraryStore.shared
+        let editor = AnnotationEditor.shared
+        let window = LibraryWindow.shared
+        guard let target = store.items.last else { return }
+        window.show(select: target.id)
+        try? await Task.sleep(for: .seconds(1))
+        editor.open(target.id)
+        let size = target.pointSize
+        editor.commitEdits(ImageEdits(crop: CGRect(x: 10, y: 10, width: size.width - 20, height: size.height - 20),
+                                      cuts: [CutOut(axis: .horizontal, from: 200, to: 240, seam: .torn)],
+                                      rotation: 0, outputScale: 1, border: Border(width: 4, color: .blue, cornerRadius: 12, shadow: true),
+                                      edges: EdgeEffect(kind: .torn, sides: [.bottom])), action: "Test")
+        if let item = store.entry(target.id), let image = Flattener.image(item) {
+            let expected = item.edits.outputSize(for: item.pointSize)
+            note("result \(image.width)×\(image.height) px for \(Int(expected.width))×\(Int(expected.height)) pt (+ shadow margin)")
+            try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: out.appending(path: "result.png"))
+            for format in Exporter.Format.allCases {
+                let url = out.appending(path: "export.\(format.type.preferredFilenameExtension ?? format.rawValue)")
+                let ok = Exporter.Format.available.contains(format) && Exporter.write(image, of: item, as: format, to: url)
+                let bytes = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+                note("export \(format.rawValue): \(Exporter.Format.available.contains(format) ? (ok ? "\(bytes) bytes" : "FAILED") : "not available on this Mac")")
+            }
+        }
+        editor.showResult = true
+        try? await Task.sleep(for: .seconds(1.5))
+        render(window.window, to: out.appending(path: "result-view.png"))
+        editor.showResult = false
+        try? await Task.sleep(for: .seconds(1))
+        render(window.window, to: out.appending(path: "edit-view.png"))
+
+        // The crop and cut tools, by mouse.
+        func find(_ view: NSView?) -> AnnotationLayerView? {
+            guard let view else { return nil }
+            if let layer = view as? AnnotationLayerView { return layer }
+            for sub in view.subviews { if let hit = find(sub) { return hit } }
+            return nil
+        }
+        guard let layer = find(window.window?.contentView), let win = window.window else { return note("adjust: no layer") }
+        func send(_ type: NSEvent.EventType, _ point: CGPoint) {
+            guard let event = NSEvent.mouseEvent(with: type, location: layer.convert(point, to: nil), modifierFlags: [],
+                                                 timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: win.windowNumber,
+                                                 context: nil, eventNumber: 0, clickCount: 1, pressure: 1) else { return }
+            switch type {
+            case .leftMouseDown: layer.mouseDown(with: event)
+            case .leftMouseDragged: layer.mouseDragged(with: event)
+            default: layer.mouseUp(with: event)
+            }
+        }
+        editor.commitEdits(.none, action: "Reset")
+        editor.pick(.crop)
+        send(.leftMouseDown, CGPoint(x: 100, y: 50)); send(.leftMouseDragged, CGPoint(x: 300, y: 150)); send(.leftMouseUp, CGPoint(x: 300, y: 150))
+        note("crop by mouse: \(editor.edits.crop.map { "\($0)" } ?? "none")")
+        send(.leftMouseDown, CGPoint(x: 300, y: 150)); send(.leftMouseDragged, CGPoint(x: 400, y: 200)); send(.leftMouseUp, CGPoint(x: 400, y: 200))
+        note("drag crop corner: \(editor.edits.crop.map { "\($0)" } ?? "none")")
+        editor.pick(.cut(.vertical))
+        send(.leftMouseDown, CGPoint(x: 150, y: 100)); send(.leftMouseDragged, CGPoint(x: 200, y: 100)); send(.leftMouseUp, CGPoint(x: 200, y: 100))
+        note("cut by mouse: \(editor.edits.cuts.map { "\($0.axis.rawValue) \(Int($0.from))–\(Int($0.to)) \($0.seam.rawValue)" })")
+        editor.pick(.select)
+        // In the strip, away from the sample's marks.
+        send(.leftMouseDown, CGPoint(x: 175, y: 200)); send(.leftMouseUp, CGPoint(x: 175, y: 200))
+        let deleteKey = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: win.windowNumber,
+                                         context: nil, characters: "\u{7f}", charactersIgnoringModifiers: "\u{7f}", isARepeat: false, keyCode: 51)
+        if let deleteKey { layer.keyDown(with: deleteKey) }
+        note("select cut and Delete: \(editor.edits.cuts.isEmpty)")
+        editor.undo()
+        note("undo brings it back: \(editor.edits.cuts.count == 1)")
+        editor.commitEdits(.none, action: "Reset")
+
+        // Smart Redact on a capture full of things to hide.
+        if let image = DebugImage.make(text: "Contact jane.doe@example.com\nCard 4111 1111 1111 1111\nServer 10.0.0.12", size: CGSize(width: 900, height: 300)),
+           let item = store.add(image: image, kind: .region, scale: 2, source: .init(appName: "DebugHook"), cursor: nil) {
+            editor.open(item.id)
+            editor.smartRedact(with: .redact)
+            for _ in 0..<40 where editor.redacting || store.entry(item.id)?.annotations.isEmpty == true {
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            let marks = store.entry(item.id)?.annotations ?? []
+            note("smart redact: \(marks.count) boxes \(marks.map { "\(Int($0.rect.minX)),\(Int($0.rect.minY)) \(Int($0.rect.width))×\(Int($0.rect.height))" })")
+            if let final = store.entry(item.id), let flat = Flattener.image(final) {
+                try? NSBitmapImageRep(cgImage: flat).representation(using: .png, properties: [:])?.write(to: out.appending(path: "redacted.png"))
+            }
+        }
+
+        // Background removal on a shape on a plain background.
+        let subject = NSImage(size: CGSize(width: 600, height: 400), flipped: false) { rect in
+            NSColor(white: 0.93, alpha: 1).setFill(); rect.fill()
+            NSColor.systemOrange.setFill(); NSBezierPath(ovalIn: CGRect(x: 180, y: 90, width: 240, height: 220)).fill()
+            NSColor.systemBlue.setFill(); NSBezierPath(rect: CGRect(x: 260, y: 160, width: 80, height: 80)).fill()
+            return true
+        }.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        if let subject, var item = store.add(image: subject, kind: .region, scale: 2, source: .init(appName: "DebugHook"), cursor: nil) {
+            item.edits.removeBackground = true
+            store.update(item)
+            if let flat = Flattener.image(store.entry(item.id)!) {
+                let corner = Self.alpha(flat, x: 5, y: 5), middle = Self.alpha(flat, x: flat.width / 2, y: flat.height / 2)
+                note("remove background: corner alpha \(corner), middle alpha \(middle)")
+                try? NSBitmapImageRep(cgImage: flat).representation(using: .png, properties: [:])?.write(to: out.appending(path: "no-background.png"))
+            }
+        }
+    }
+
+    private static func alpha(_ image: CGImage, x: Int, y: Int) -> Int {
+        guard let ctx = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return -1 }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let data = ctx.data!.assumingMemoryBound(to: UInt8.self)
+        return Int(data[(y * image.width + x) * 4 + 3])
     }
 
     /// Settings that sync survive the trip through a sealed record; per-Mac ones stay out.

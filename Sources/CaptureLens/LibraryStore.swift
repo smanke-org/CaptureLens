@@ -29,6 +29,8 @@ final class LibraryStore {
     private(set) var thumbnailRevision = 0
 
     @ObservationIgnored private var thumbnailCache: [UUID: NSImage] = [:]
+    /// Subjects found for background removal, kept since finding one takes a moment.
+    @ObservationIgnored private var subjectMasks: [UUID: CGImage] = [:]
     @ObservationIgnored private(set) var db: LibraryDatabase?
 
     let folder: URL = {
@@ -210,7 +212,7 @@ final class LibraryStore {
         }
         let before = items[index]
         items[index] = item
-        if before.annotations != item.annotations || before.cursor != item.cursor { refreshThumbnail(item) }
+        if before.annotations != item.annotations || before.cursor != item.cursor || before.edits != item.edits { refreshThumbnail(item) }
         LibrarySync.shared.localDidChange([item.id])
         FolderSync.shared.localDidChange([item.id])
     }
@@ -241,7 +243,7 @@ final class LibraryStore {
             if image != nil { thumbnailCache[item.id] = nil }
             // Thumbnails show the annotations: draw them again when those changed elsewhere.
             if Flattener.needsDrawing(item) || before.map(Flattener.needsDrawing) == true,
-               before?.annotations != item.annotations || before?.cursor != item.cursor || image != nil {
+               before?.annotations != item.annotations || before?.cursor != item.cursor || before?.edits != item.edits || image != nil {
                 redraw.append(item)
             }
         }
@@ -295,6 +297,14 @@ final class LibraryStore {
     }
 
     func pngData(_ id: UUID) -> Data? { db?.image(id) }
+
+    /// The capture's subject, found once and kept for later drawing.
+    func subjectMask(_ id: UUID, image: CGImage) -> CGImage? {
+        if let mask = subjectMasks[id] { return mask }
+        let mask = Recognizer.subjectMask(for: image)
+        subjectMasks[id] = mask
+        return mask
+    }
 
     // MARK: - Encryption at rest
 

@@ -7,6 +7,8 @@ import Foundation
 public struct Annotation: Codable, Identifiable, Equatable, Sendable {
     public enum Kind: String, Codable, CaseIterable, Sendable {
         case rectangle, ellipse, line, arrow, text, callout, step, pen, highlighter, spotlight, magnify, stamp
+        /// Hide what's under them: softened, in big squares, or covered in a solid box.
+        case blur, pixelate, redact
 
         public var title: String {
             switch self {
@@ -22,6 +24,9 @@ public struct Annotation: Codable, Identifiable, Equatable, Sendable {
             case .spotlight: "Spotlight"
             case .magnify: "Magnify"
             case .stamp: "Stamp"
+            case .blur: "Blur"
+            case .pixelate: "Pixelate"
+            case .redact: "Redact"
             }
         }
 
@@ -39,8 +44,14 @@ public struct Annotation: Codable, Identifiable, Equatable, Sendable {
             case .spotlight: "light.max"
             case .magnify: "plus.magnifyingglass"
             case .stamp: "seal"
+            case .blur: "drop"
+            case .pixelate: "squareshape.split.3x3"
+            case .redact: "rectangle.fill"
             }
         }
+
+        /// Hides what's under it.
+        public var hides: Bool { self == .blur || self == .pixelate || self == .redact }
 
         /// Drawn from one point to another rather than as a box.
         public var isLinear: Bool { self == .line || self == .arrow }
