@@ -182,6 +182,7 @@ enum Help {
                 ("Return", "Rename the selected capture"),
                 ("Delete", "Delete the selected captures (asks first)"),
                 ("Drag a capture", "Into another app, or a pictures file onto the library to import it"),
+                ("⋯ under the picture", "In a narrow window, Copy, Save As, Share, zoom and the rest move into this menu"),
                 ("⌄ and ⌃ under the picture", "Fold away the details (more room to annotate) or the picture (more room for the details); the slim bar left behind brings it back"),
                 ("Pinch or ⌘-scroll", "Zoom the picture; or use the zoom slider, − and + below it, or pick a level from the percentage"),
                 ("Slider below the captures, or ⌘+ / ⌘−", "Make the thumbnails bigger or smaller"),
