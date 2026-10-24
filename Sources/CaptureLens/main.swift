@@ -215,6 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(item("Import Pictures…", #selector(importPictures)))
         menu.addItem(toggle("Copy Captures to Clipboard", prefs.copyToClipboard, #selector(toggleClipboard)))
+        menu.addItem(toggle("Open Captures in Library", prefs.afterCapture == .openLibrary, #selector(toggleOpenInLibrary)))
 
         menu.addItem(.separator())
         let helpEntry = NSMenuItem(title: "CaptureLens Help", action: #selector(showHelp), keyEquivalent: "")
@@ -312,6 +313,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Notice.shared.show("Added \(count) picture\(count == 1 ? "" : "s") to the library", symbol: "photo.on.rectangle")
     }
     @objc func toggleClipboard() { Preferences.shared.copyToClipboard.toggle() }
+    @objc func toggleOpenInLibrary() {
+        let prefs = Preferences.shared
+        prefs.afterCapture = prefs.afterCapture == .openLibrary ? .preview : .openLibrary
+    }
     @objc func allowScreenRecording() {
         if !ScreenAccess.request() { ScreenAccess.openSettings() }
     }

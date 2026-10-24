@@ -91,11 +91,13 @@ enum Help {
                 ("Click", "Capture the highlighted window on its own, even where other windows cover it"),
                 ("Drag", "Capture an area"),
                 ("Return", "Capture the whole screen"),
+                ("Hold ⌥ while clicking or dragging", "Open this capture in the library straight away"),
                 ("Esc or right-click", "Cancel"),
                 ("{hotkey:again}", "Capture the same area again, without selecting"),
             ]),
             .heading("What happens next"),
             .text("The capture goes into the library, and, if you like, onto the clipboard (Settings › Capture). A preview slides into the corner of the screen: click it to open the capture, or drag it straight into another app."),
+            .text("To have every capture open in the library right away instead, choose \"Open Captures in Library\" in the menu bar menu (or \"After capturing\" in Settings › Capture). A preset can choose for itself, and holding ⌥ as you click or finish dragging opens just that one."),
             .heading("The pointer"),
             .text("The mouse pointer is kept as a separate layer instead of being drawn into the picture. In the library, show or hide it, drag it somewhere else, or make it bigger. It's added when you copy, drag or save the capture."),
             .heading("Delayed and exact-size captures"),
@@ -103,7 +105,7 @@ enum Help {
         ]),
 
         HelpTopic(id: "presets", title: "Presets and Shortcuts", symbol: "keyboard", blocks: [
-            .text("A preset is a saved way to capture: what to capture, a countdown, an exact size, whether to copy, and its own keyboard shortcut. Edit them in Settings › Presets."),
+            .text("A preset is a saved way to capture: what to capture, a countdown, an exact size, whether to copy, whether to open the capture in the library, and its own keyboard shortcut. Edit them in Settings › Presets."),
             .keys(presetRows),
             .keys([
                 ("{hotkey:library}", "Open the library"),

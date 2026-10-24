@@ -4,7 +4,7 @@ import Observation
 import SwiftUI
 
 /// What happens on screen once a capture is saved.
-enum AfterCapture: String, CaseIterable {
+enum AfterCapture: String, Codable, CaseIterable {
     case preview, openLibrary, nothing
 
     var title: String {
@@ -71,10 +71,12 @@ struct CapturePreset: Codable, Identifiable, Equatable {
     var width: Int
     var height: Int
     var clipboard: ClipboardChoice
+    /// What happens once it's saved; nil follows Capture settings.
+    var afterCapture: AfterCapture?
     var hotKey: HotKey?
 
     init(id: UUID = UUID(), name: String, mode: CaptureMode, delay: Int = 0, width: Int = 1280, height: Int = 720,
-         clipboard: ClipboardChoice = .setting, hotKey: HotKey? = nil) {
+         clipboard: ClipboardChoice = .setting, afterCapture: AfterCapture? = nil, hotKey: HotKey? = nil) {
         self.id = id
         self.name = name
         self.mode = mode
@@ -82,6 +84,7 @@ struct CapturePreset: Codable, Identifiable, Equatable {
         self.width = width
         self.height = height
         self.clipboard = clipboard
+        self.afterCapture = afterCapture
         self.hotKey = hotKey
     }
 
@@ -94,6 +97,7 @@ struct CapturePreset: Codable, Identifiable, Equatable {
         width = try c.decodeIfPresent(Int.self, forKey: .width) ?? 1280
         height = try c.decodeIfPresent(Int.self, forKey: .height) ?? 720
         clipboard = try c.decodeIfPresent(ClipboardChoice.self, forKey: .clipboard) ?? .setting
+        afterCapture = try c.decodeIfPresent(AfterCapture.self, forKey: .afterCapture)
         hotKey = try c.decodeIfPresent(HotKey.self, forKey: .hotKey)
     }
 
@@ -105,6 +109,12 @@ struct CapturePreset: Codable, Identifiable, Equatable {
         case .always: parts.append("copies")
         case .never: parts.append("doesn't copy")
         case .setting: break
+        }
+        switch afterCapture {
+        case .openLibrary: parts.append("opens in library")
+        case .preview: parts.append("shows preview")
+        case .nothing: parts.append("no preview")
+        case nil: break
         }
         return parts.joined(separator: " · ")
     }

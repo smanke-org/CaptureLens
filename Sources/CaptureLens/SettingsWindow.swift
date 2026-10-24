@@ -174,7 +174,7 @@ struct CaptureSettings: View {
             } header: {
                 Text("Every capture goes to the library")
             } footer: {
-                Text("A preset can override the clipboard choice in Presets.").font(.caption).foregroundStyle(.secondary)
+                Text("Presets can override both choices. Hold ⌥ as you click or finish dragging to open that one capture in the library.").font(.caption).foregroundStyle(.secondary)
             }
             Section {
                 Toggle("Keep the pointer as a separate layer", isOn: $prefs.captureCursor)
@@ -311,6 +311,11 @@ struct PresetEditor: View {
                 }
                 Picker("Clipboard", selection: $preset.clipboard) {
                     ForEach(ClipboardChoice.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                Picker("After capturing", selection: $preset.afterCapture) {
+                    Text("As in Capture settings").tag(nil as AfterCapture?)
+                    Divider()
+                    ForEach(AfterCapture.allCases, id: \.self) { Text($0.title).tag($0 as AfterCapture?) }
                 }
                 LabeledContent("Shortcut") { ShortcutRecorder(hotKey: $preset.hotKey) }
                 Text(help).font(.caption).foregroundStyle(.secondary)

@@ -109,6 +109,7 @@ enum DebugSelfTest {
         var first = prefs.presets[0]
         first.name = "Synced Preset"
         first.delay = 3
+        first.afterCapture = .openLibrary
         prefs.update(first)
         prefs.libraryHotKey = nil
         AppDefaults.store.set(AppAppearance.dark.rawValue, forKey: AppAppearance.key)
@@ -127,6 +128,7 @@ enum DebugSelfTest {
         let checks: [(String, Bool)] = [
             ("clipboard", prefs.copyToClipboard == false), ("after", prefs.afterCapture == .openLibrary),
             ("preset name", prefs.presets[0].name == "Synced Preset"), ("preset delay", prefs.presets[0].delay == 3),
+            ("preset after", prefs.presets[0].afterCapture == .openLibrary && prefs.presets[1].afterCapture == nil),
             ("library key", prefs.libraryHotKey == nil), ("appearance", AppAppearance.current == .dark),
             ("policy", AutoUpdater.shared.policy == .off),
             ("interval", AutoUpdater.shared.interval == UpdateInterval(value: 3, unit: .days)),

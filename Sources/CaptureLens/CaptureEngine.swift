@@ -9,6 +9,8 @@ final class CaptureEngine {
 
     private(set) var isCounting = false
     private var busy = false
+    /// ⌥ was down when the area or window was picked (it may be up by the time it's saved).
+    var optionHeld = false
 
     /// The area last captured, for "Capture Same Area Again".
     private(set) var lastRegion: ScreenRegion? {
@@ -56,7 +58,7 @@ final class CaptureEngine {
             do {
                 let image = try await region.capture()
                 await save(image, kind: .region, frame: frame, display: region.displayID, window: nil, windows: windows,
-                           cursor: cursor, clipboard: .setting)
+                           cursor: cursor, preset: nil)
             } catch {
                 Notice.shared.show(error: "Couldn't capture that area", near: frame)
             }
@@ -72,6 +74,7 @@ final class CaptureEngine {
 
     private func capture(_ preset: CapturePreset) async {
         let prefs = Preferences.shared
+        optionHeld = false
         // The pointer as it was before the overlay took over, and the windows as they were.
         let cursor = prefs.captureCursor ? CursorSnapshot.current() : nil
         let windows = ScreenWindow.onScreen()
@@ -82,7 +85,7 @@ final class CaptureEngine {
             do {
                 let image = try await ScreenGrabber.captureDisplay(screen.displayID)
                 await save(image, kind: .screen, frame: screen.frame, display: screen.displayID, window: nil,
-                           windows: windows, cursor: cursor, clipboard: preset.clipboard)
+                           windows: windows, cursor: cursor, preset: preset)
             } catch {
                 fail(error)
             }
@@ -101,17 +104,17 @@ final class CaptureEngine {
         case .region(let region, let image, let frame):
             lastRegion = region
             await save(image, kind: .region, frame: frame, display: region.displayID, window: nil, windows: windows,
-                       cursor: cursor, clipboard: preset.clipboard)
+                       cursor: cursor, preset: preset)
         case .screen(let display, let image, let frame):
             await save(image, kind: .screen, frame: frame, display: display, window: nil, windows: windows,
-                       cursor: cursor, clipboard: preset.clipboard)
+                       cursor: cursor, preset: preset)
         case .window(let window):
             // The overlay has to be gone before the window is captured on its own.
             try? await Task.sleep(for: .milliseconds(60))
             do {
                 let (image, frame) = try await ScreenGrabber.captureWindow(window.id, shadow: prefs.windowShadow)
                 await save(image, kind: .window, frame: frame, display: nil, window: window, windows: windows,
-                           cursor: cursor, clipboard: preset.clipboard)
+                           cursor: cursor, preset: preset)
             } catch {
                 fail(error)
             }
@@ -127,7 +130,7 @@ final class CaptureEngine {
     /// Saves a picture covering `frame` (global Cocoa coordinates) to the library.
     private func save(_ image: CGImage, kind: CaptureItem.Kind, frame: CGRect, display: CGDirectDisplayID?,
                       window: ScreenWindow?, windows: [ScreenWindow], cursor: CursorSnapshot?,
-                      clipboard: ClipboardChoice) async {
+                      preset: CapturePreset?) async {
         let prefs = Preferences.shared
         Sounds.shutter()
         Activity.shared.touch()
@@ -145,9 +148,14 @@ final class CaptureEngine {
             Notice.shared.show(error: "Couldn't save the capture to the library")
             return
         }
+        let clipboard = preset?.clipboard ?? .setting
         let copy = clipboard == .always || (clipboard == .setting && prefs.copyToClipboard)
         if copy, let png = Flattener.png(item) { Clipboard.copy(png: png) }
-        switch prefs.afterCapture {
+        // Holding ⌥ while picking the area or window opens this one in the library, whatever
+        // the settings. (Not ⌥ held now: the default shortcuts include it.)
+        let after = optionHeld ? .openLibrary : preset?.afterCapture ?? prefs.afterCapture
+        optionHeld = false
+        switch after {
         case .preview: CapturePreview.shared.show(item, near: frame, copied: copy)
         case .openLibrary: LibraryWindow.shared.show(select: item.id)
         case .nothing: if copy { Notice.shared.show("Saved and copied", symbol: "camera.viewfinder", near: frame) }

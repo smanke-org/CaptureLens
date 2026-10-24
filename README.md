@@ -37,7 +37,8 @@ Requires macOS 26 or later. Automatic names need Apple Intelligence turned on.
 | ⌥⇧⌘L | Open the library |
 
 Every capture goes into the library, and onto the clipboard if you like. A preview slides into the corner:
-click it to open the capture, or drag it straight into another app.
+click it to open the capture, or drag it straight into another app. To open every capture in the library right
+away, choose Open Captures in Library in the menu bar menu; hold ⌥ while clicking or dragging to open just one.
 
 Presets are saved ways to capture, each with its own shortcut: what to capture, a countdown, an exact size, and
 whether to copy. Make and change them in Settings › Presets.
