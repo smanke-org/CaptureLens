@@ -139,6 +139,8 @@ enum DebugSelfTest {
         note("settings sync round trip: \(ok ? "ok" : "FAILED") (\(keys.count) keys)")
         note("synced keys missing: \(Set(SettingsSync.syncedKeys).subtracting(keys).sorted())")
         note("per-Mac keys leaked: \(["lock.enabled", "library.encrypt", "lock.afterMinutes", "lastRegion", "welcomed"].filter(keys.contains))")
+        // Set only to prove it doesn't sync; left on, the library window would open locked.
+        AppDefaults.store.removeObject(forKey: "lock.enabled")
     }
 
     /// Asks GitHub for the latest release (of `CAPTURELENS_UPDATE_REPOSITORY`, if set) and,

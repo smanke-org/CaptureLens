@@ -105,11 +105,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return menu
     }
 
-    /// Opening the app again (from Applications, Spotlight, or the Dock tile) shows the
-    /// library, or Settings when CaptureLens has no icon anywhere to reach them from.
+    /// Clicking the Dock icon (or opening the app again from Applications or Spotlight)
+    /// brings up the library, even when Settings or Help is open. With no icon anywhere,
+    /// it opens Settings instead, the only way back to them.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !AppPresence.showInMenuBar && !AppPresence.showInDock { showSettings() } else if !flag { showLibrary() }
-        return true
+        if !AppPresence.showInMenuBar && !AppPresence.showInDock { showSettings() } else { showLibrary() }
+        return false
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }

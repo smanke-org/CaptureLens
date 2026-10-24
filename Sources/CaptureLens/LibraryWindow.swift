@@ -63,8 +63,19 @@ final class LibraryState {
     var selection: Set<UUID> = []
     /// The item last clicked, for Shift-click ranges and the keyboard.
     var anchor: UUID?
-    var thumbnailSize: Double = AppDefaults.store.object(forKey: "library.thumbnailSize") as? Double ?? 190 {
+    /// The width of a thumbnail in the grid, set with the slider below it.
+    var thumbnailSize: Double = LibraryState.clampSize(AppDefaults.store.object(forKey: "library.thumbnailSize") as? Double ?? 190) {
         didSet { AppDefaults.store.set(thumbnailSize, forKey: "library.thumbnailSize") }
+    }
+    static let thumbnailRange: ClosedRange<Double> = 100...420
+
+    static func clampSize(_ size: Double) -> Double {
+        min(max(size, thumbnailRange.lowerBound), thumbnailRange.upperBound)
+    }
+
+    /// One step of the size buttons and ⌘+ / ⌘−.
+    func stepThumbnails(bigger: Bool) {
+        thumbnailSize = Self.clampSize(thumbnailSize + (bigger ? 40 : -40))
     }
     var showInspector = AppDefaults.store.object(forKey: "library.inspector") as? Bool ?? true {
         didSet { AppDefaults.store.set(showInspector, forKey: "library.inspector") }
@@ -162,6 +173,8 @@ struct LibraryView: View {
                         FilterBar(state: state)
                         Divider()
                         CaptureGrid(state: state)
+                        Divider()
+                        GridStatusBar(state: state)
                     }
                     .frame(minWidth: 360)
                     if state.showInspector {
@@ -227,16 +240,14 @@ struct LibraryToolbar: ToolbarContent {
                 }
                 .pickerStyle(.inline)
                 Divider()
-                Picker("Thumbnail Size", selection: $state.thumbnailSize) {
-                    Text("Small").tag(140.0)
-                    Text("Medium").tag(190.0)
-                    Text("Large").tag(260.0)
-                }
-                .pickerStyle(.inline)
+                Button("Bigger Thumbnails") { state.stepThumbnails(bigger: true) }
+                    .keyboardShortcut("+", modifiers: .command)
+                Button("Smaller Thumbnails") { state.stepThumbnails(bigger: false) }
+                    .keyboardShortcut("-", modifiers: .command)
             } label: {
-                Label("View", systemImage: "square.grid.2x2")
+                Label("View", systemImage: "arrow.up.arrow.down")
             }
-            .help("Sort and thumbnail size")
+            .help("Sort, and thumbnail size")
             Button { state.showInspector.toggle() } label: { Label("Details", systemImage: "sidebar.right") }
                 .help(state.showInspector ? "Hide the selected capture" : "Show the selected capture")
             Button { SettingsWindow.shared.show() } label: { Label("Settings", systemImage: "gearshape") }
@@ -582,6 +593,33 @@ struct CaptureGrid: View {
     private func dragProvider(_ item: CaptureItem) -> NSItemProvider {
         guard let url = Flattener.temporaryFile(item) else { return NSItemProvider() }
         return NSItemProvider(contentsOf: url) ?? NSItemProvider()
+    }
+}
+
+/// Below the grid: how many captures are showing, and the thumbnail size slider.
+struct GridStatusBar: View {
+    @Bindable var state: LibraryState
+
+    var body: some View {
+        let shown = state.results.count
+        HStack(spacing: 8) {
+            Text(state.selection.count > 1 ? "\(state.selection.count) of \(shown) selected"
+                 : "\(shown) capture\(shown == 1 ? "" : "s")")
+                .font(.callout).foregroundStyle(.secondary).monospacedDigit()
+            Spacer()
+            Button { state.stepThumbnails(bigger: false) } label: { Image(systemName: "photo").font(.caption) }
+                .buttonStyle(.borderless)
+                .help("Smaller thumbnails (⌘−)")
+            Slider(value: $state.thumbnailSize, in: LibraryState.thumbnailRange)
+                .controlSize(.small)
+                .frame(width: 140)
+                .help("Thumbnail size")
+            Button { state.stepThumbnails(bigger: true) } label: { Image(systemName: "photo").font(.body) }
+                .buttonStyle(.borderless)
+                .help("Bigger thumbnails (⌘+)")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
     }
 }
 

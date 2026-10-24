@@ -78,6 +78,7 @@ enum Help {
                 ("{hotkey:window}", "Capture a window"),
                 ("{hotkey:library}", "Open the library"),
                 ("Menu bar icon", "Every preset, the library, and Settings"),
+                ("Dock icon", "Open the library (turn on Show in Dock in Settings › General)"),
             ]),
             .heading("Allow Screen Recording"),
             .text("CaptureLens needs Screen Recording permission to see the screen. If the menu bar menu shows \"Allow Screen Recording…\", choose it, switch CaptureLens on, and open CaptureLens again."),
@@ -143,6 +144,7 @@ enum Help {
                 ("Delete", "Delete the selected captures (asks first)"),
                 ("Drag a capture", "Into another app, or a pictures file onto the library to import it"),
                 ("Pinch or ⌘-scroll", "Zoom the picture"),
+                ("Slider below the captures, or ⌘+ / ⌘−", "Make the thumbnails bigger or smaller"),
             ]),
         ]),
 
