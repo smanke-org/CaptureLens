@@ -124,7 +124,8 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
         pixelHeight = try c.decodeIfPresent(Int.self, forKey: .pixelHeight) ?? 0
         scale = try c.decodeIfPresent(Double.self, forKey: .scale) ?? 2
         cursor = try c.decodeIfPresent(CursorLayer.self, forKey: .cursor)
-        annotations = try c.decodeIfPresent([Annotation].self, forKey: .annotations) ?? []
+        // A mark this version doesn't know (made by a newer one) is skipped, not the whole capture.
+        annotations = (try c.decodeIfPresent([Lossy<Annotation>].self, forKey: .annotations) ?? []).compactMap(\.value)
         edits = try c.decodeIfPresent(ImageEdits.self, forKey: .edits) ?? .none
         origin = try c.decodeIfPresent(String.self, forKey: .origin)
     }
@@ -161,4 +162,13 @@ public struct CursorLayer: Codable, Equatable, Sendable {
 
     /// The pointer's frame in the capture's points, origin at the top left.
     public var frame: CGRect { CGRect(x: x, y: y, width: width * size, height: height * size) }
+}
+
+/// Decodes to nil instead of failing, so one bad element doesn't sink a whole array.
+struct Lossy<Value: Decodable>: Decodable {
+    let value: Value?
+
+    init(from decoder: Decoder) throws {
+        value = try? Value(from: decoder)
+    }
 }

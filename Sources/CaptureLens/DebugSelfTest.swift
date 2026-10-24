@@ -85,6 +85,7 @@ enum DebugSelfTest {
             await annotationTest(note, out: out)
             await adjustTest(note, out: out)
             await phase3Test(note, out: out)
+            await phase4Test(note, out: out)
 
             CapturePreview.shared.show(store.items[0], near: NSScreen.main?.frame ?? .zero, copied: true)
             try? await Task.sleep(for: .seconds(1))
@@ -322,6 +323,111 @@ enum DebugSelfTest {
                 try? NSBitmapImageRep(cgImage: flat).representation(using: .png, properties: [:])?.write(to: out.appending(path: "no-background.png"))
             }
         }
+    }
+
+    /// Edit Text, Smart Move and Simplify on a made-up settings window.
+    private static func phase4Test(_ note: (String) -> Void, out: URL) async {
+        let store = LibraryStore.shared
+        let editor = AnnotationEditor.shared
+        let window = LibraryWindow.shared
+        let screen = NSImage(size: CGSize(width: 800, height: 500), flipped: true) { rect in
+            NSColor(white: 0.95, alpha: 1).setFill(); rect.fill()
+            NSAttributedString(string: "Account Settings", attributes: [.font: NSFont.systemFont(ofSize: 22, weight: .bold), .foregroundColor: NSColor.black])
+                .draw(at: CGPoint(x: 40, y: 30))
+            NSAttributedString(string: "Your plan renews on November 1", attributes: [.font: NSFont.systemFont(ofSize: 15), .foregroundColor: NSColor.darkGray])
+                .draw(at: CGPoint(x: 40, y: 90))
+            NSColor.systemRed.setFill(); NSBezierPath(ovalIn: CGRect(x: 640, y: 30, width: 48, height: 48)).fill()
+            NSColor.white.setFill(); NSBezierPath(roundedRect: CGRect(x: 40, y: 160, width: 320, height: 34), xRadius: 6, yRadius: 6).fill()
+            NSColor.gray.setStroke(); NSBezierPath(roundedRect: CGRect(x: 40, y: 160, width: 320, height: 34), xRadius: 6, yRadius: 6).stroke()
+            NSColor.systemBlue.setFill(); NSBezierPath(roundedRect: CGRect(x: 40, y: 400, width: 160, height: 40), xRadius: 8, yRadius: 8).fill()
+            NSAttributedString(string: "Save Changes", attributes: [.font: NSFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: NSColor.white])
+                .draw(at: CGPoint(x: 70, y: 410))
+            return true
+        }
+        // At 2×, as a Retina capture would be.
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 1600, pixelsHigh: 1000, bitsPerSample: 8, samplesPerPixel: 4,
+                                   hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        rep.size = screen.size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        screen.draw(in: CGRect(origin: .zero, size: screen.size))
+        NSGraphicsContext.restoreGraphicsState()
+        guard let image = rep.cgImage, let item = store.add(image: image, kind: .region, scale: 2, source: .init(appName: "DebugHook"), cursor: nil),
+              let copy = store.add(image: image, kind: .region, scale: 2, source: .init(appName: "DebugHook"), cursor: nil) else {
+            return note("phase 4: couldn't add the sample")
+        }
+        window.show(select: item.id)
+        try? await Task.sleep(for: .seconds(1))
+        editor.open(item.id)
+        editor.pick(.draw(.move))
+        for _ in 0..<60 where editor.analysis == nil { try? await Task.sleep(for: .milliseconds(250)) }
+        guard let analysis = editor.analysis else { return note("phase 4: no analysis") }
+        for line in analysis.lines {
+            note("smart line \"\(line.text)\" at \(Int(line.box.minX)),\(Int(line.box.minY)) \(Int(line.box.width))×\(Int(line.box.height)) → text size \(TextMatch.fontSize(forLineHeight: line.box.height))")
+        }
+        note("smart parts: \(analysis.objects.count) \(analysis.objects.map { "\(Int($0.minX)),\(Int($0.minY)) \(Int($0.width))×\(Int($0.height))" })")
+
+        func find(_ view: NSView?) -> AnnotationLayerView? {
+            guard let view else { return nil }
+            if let layer = view as? AnnotationLayerView { return layer }
+            for sub in view.subviews { if let hit = find(sub) { return hit } }
+            return nil
+        }
+        guard let layer = find(window.window?.contentView), let win = window.window else { return note("phase 4: no layer") }
+        func send(_ type: NSEvent.EventType, _ point: CGPoint) {
+            guard let event = NSEvent.mouseEvent(with: type, location: layer.convert(point, to: nil), modifierFlags: [],
+                                                 timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: win.windowNumber,
+                                                 context: nil, eventNumber: 0, clickCount: 1, pressure: 1) else { return }
+            switch type {
+            case .leftMouseDown: layer.mouseDown(with: event)
+            case .leftMouseDragged: layer.mouseDragged(with: event)
+            case .mouseMoved: layer.mouseMoved(with: event)
+            default: layer.mouseUp(with: event)
+            }
+        }
+        send(.mouseMoved, CGPoint(x: 120, y: 420))
+        try? await Task.sleep(for: .seconds(0.5))
+        render(win, to: out.appending(path: "smart-move-tool.png"))
+        // Pick up the button and put it down to the right.
+        send(.leftMouseDown, CGPoint(x: 120, y: 420)); send(.leftMouseDragged, CGPoint(x: 320, y: 400)); send(.leftMouseDragged, CGPoint(x: 520, y: 400))
+        send(.leftMouseUp, CGPoint(x: 520, y: 400))
+        let moved = store.entry(item.id)?.annotations.filter { $0.kind == .move } ?? []
+        note("smart move: \(moved.map { "from \(Int($0.source.minX)),\(Int($0.source.minY)) to \(Int($0.rect.minX)),\(Int($0.rect.minY))" })")
+        editor.undo()
+        note("undo smart move: \(store.entry(item.id)?.annotations.isEmpty == true)")
+        editor.redo()
+
+        // Retype the date.
+        editor.pick(.draw(.editText))
+        send(.leftMouseDown, CGPoint(x: 120, y: 100)); send(.leftMouseUp, CGPoint(x: 120, y: 100))
+        if let field = win.firstResponder as? NSTextView {
+            field.string = "Your plan renews on December 15"
+            layer.endTextEditing()
+        }
+        let retyped = store.entry(item.id)?.annotations.filter { $0.kind == .editText } ?? []
+        note("edit text: \(retyped.map { "\"\($0.text)\" size \($0.style.fontSize) bold \($0.style.bold) color \(String(format: "%.2f", $0.style.color.r))" })")
+        editor.pick(.select)
+        if let final = store.entry(item.id), let flat = Flattener.image(final) {
+            try? NSBitmapImageRep(cgImage: flat).representation(using: .png, properties: [:])?.write(to: out.appending(path: "smart-edited.png"))
+        }
+
+        // Simplify the untouched copy, both ways.
+        window.show(select: copy.id)
+        try? await Task.sleep(for: .seconds(1))
+        editor.open(copy.id)
+        for colors in Simplifier.Colors.allCases {
+            editor.simplify(colors)
+            try? await Task.sleep(for: .milliseconds(300))
+            for _ in 0..<60 where editor.simplifying { try? await Task.sleep(for: .milliseconds(250)) }
+            let marks = store.entry(copy.id)?.annotations ?? []
+            note("simplify \(colors.rawValue): \(marks.filter { $0.shape != .textBar }.map(\.shape.rawValue)) shapes, \(marks.filter { $0.shape == .textBar }.count) bars")
+            if let final = store.entry(copy.id), let flat = Flattener.image(final) {
+                try? NSBitmapImageRep(cgImage: flat).representation(using: .png, properties: [:])?.write(to: out.appending(path: "simplified-\(colors.rawValue).png"))
+            }
+        }
+        render(win, to: out.appending(path: "simplify-view.png"))
+        editor.removeSimplify()
+        note("remove simplify: \(store.entry(copy.id)?.annotations.isEmpty == true)")
     }
 
     /// Scrolling capture's stitching and saving, step labels, guides and batch export.

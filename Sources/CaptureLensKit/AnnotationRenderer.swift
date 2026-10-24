@@ -10,7 +10,14 @@ public enum AnnotationRenderer {
     /// Draws `annotations` into `ctx`, whose space is the capture's points with the origin at
     /// the top left. `base` is the picture (for magnifiers), `canvas` its size in points.
     public static func draw(_ annotations: [Annotation], in ctx: CGContext, canvas: CGSize, base: CGImage?) {
-        // Spotlights first, so every other mark stays bright on top of the dimming.
+        // The smart tools' patches go under everything, so a part moved onto another's old
+        // spot isn't painted over by that spot's patch.
+        if let base {
+            for annotation in annotations where annotation.kind.patches {
+                drawPatch(annotation.source, in: ctx, canvas: canvas, base: base)
+            }
+        }
+        // Spotlights next, so every other mark stays bright on top of the dimming.
         let spots = annotations.filter { $0.kind == .spotlight }
         if !spots.isEmpty { drawSpotlights(spots, in: ctx, canvas: canvas) }
         let numbers = Annotation.stepNumbers(annotations)
@@ -186,9 +193,68 @@ public enum AnnotationRenderer {
             ctx.setShadow(offset: .zero, blur: 0, color: nil)
             ctx.fill(a.rect.standardized)
 
+        case .editText:
+            ctx.setShadow(offset: .zero, blur: 0, color: nil)
+            let rect = a.rect.standardized
+            // On one line unless it has line breaks, centered up and down, so it sits where
+            // the original line did.
+            let size = textSize(a.text, style: style, width: 10_000)
+            let box = CGRect(x: rect.minX, y: rect.midY - size.height / 2, width: max(rect.width, size.width), height: size.height)
+            drawText(a.text, in: box, color: style.color, style: style, ctx: ctx)
+
+        case .move:
+            let rect = a.rect.standardized
+            guard let base, rect.width >= 1, rect.height >= 1,
+                  let piece = crop(base, to: a.source, canvas: canvas) else { return }
+            ctx.interpolationQuality = .high
+            drawImage(piece, in: rect, ctx: ctx)
+
+        case .simplify:
+            ctx.setShadow(offset: .zero, blur: 0, color: nil)
+            let rect = a.rect.standardized
+            switch a.shape {
+            case .box, .outline:
+                let radius = min(6, min(rect.width, rect.height) / 4)
+                let path = CGPath(roundedRect: a.shape == .outline ? rect.insetBy(dx: 1.5, dy: 1.5) : rect,
+                                  cornerWidth: radius, cornerHeight: radius, transform: nil)
+                ctx.addPath(path)
+                if a.shape == .outline {
+                    ctx.setLineWidth(2)
+                    ctx.strokePath()
+                    return
+                }
+            case .round:
+                let radius = min(rect.width, rect.height) / 2
+                ctx.addPath(CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil))
+            case .textBar:
+                let height = max(3, rect.height * 0.45)
+                let bar = CGRect(x: rect.minX, y: rect.midY - height / 2, width: rect.width, height: height)
+                ctx.addPath(CGPath(roundedRect: bar, cornerWidth: height / 2, cornerHeight: height / 2, transform: nil))
+            }
+            ctx.fillPath()
+
         case .spotlight:
             break
         }
+    }
+
+    /// Covers `source` with the background around it.
+    static func drawPatch(_ source: CGRect, in ctx: CGContext, canvas: CGSize, base: CGImage) {
+        guard source.width >= 1, source.height >= 1,
+              let patch = PatchFill.patch(base: base, rect: source, canvas: canvas) else { return }
+        ctx.saveGState()
+        ctx.interpolationQuality = .none
+        drawImage(patch.image, in: patch.rect, ctx: ctx)
+        ctx.restoreGState()
+    }
+
+    /// The part of `base` under `rect` (points).
+    static func crop(_ base: CGImage, to rect: CGRect, canvas: CGSize) -> CGImage? {
+        let scale = CGFloat(base.width) / max(canvas.width, 1)
+        let pixels = CGRect(x: rect.minX * scale, y: rect.minY * scale, width: rect.width * scale, height: rect.height * scale)
+            .standardized.integral.intersection(CGRect(x: 0, y: 0, width: base.width, height: base.height))
+        guard !pixels.isNull, !pixels.isEmpty else { return nil }
+        return base.cropping(to: pixels)
     }
 
     private static let ciContext = CIContext(options: [.cacheIntermediates: false])

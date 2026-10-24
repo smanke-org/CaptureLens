@@ -117,7 +117,7 @@ enum Help {
         ]),
 
         HelpTopic(id: "annotate", title: "Annotating", symbol: "pencil.and.outline", blocks: [
-            .text("Select a capture in the library and mark it up right on the picture. The tools are in the column beside it, grouped as Shapes, Text, Draw, Focus, Hide and Adjust; color, size, quick styles and undo are in the row above: boxes, ellipses, arrows, lines, text, callouts, numbered steps, a pen, a highlighter, a spotlight, a magnifier and stamps. Marks stay separate from the picture, so you can move, resize, restyle or delete them any time, and the original is never changed."),
+            .text("Select a capture in the library and mark it up right on the picture. The tools are in the column beside it, grouped as Shapes, Text, Draw, Focus, Hide, Smart and Adjust; color, size, quick styles and undo are in the row above: boxes, ellipses, arrows, lines, text, callouts, numbered steps, a pen, a highlighter, a spotlight, a magnifier and stamps. Marks stay separate from the picture, so you can move, resize, restyle or delete them any time, and the original is never changed."),
             .keys([
                 ("V", "Select: click a mark to select it, drag to move it, drag its handles to resize it"),
                 ("R  O  A  L", "Box, ellipse, arrow, line: drag to draw (hold ⇧ for squares, circles and 45° lines)"),
@@ -127,6 +127,8 @@ enum Help {
                 ("F  M", "Spotlight (dims everything else) and magnifier: drag over the spot"),
                 ("K", "Stamp: pick ✅, ⭐️, Approved and others from the toolbar, then click"),
                 ("B  X  D", "Blur, pixelate or black out an area: drag over it"),
+                ("E", "Edit Text: click a line of text in the picture and retype it"),
+                ("G", "Smart Move: click a part of the picture and drag it somewhere else"),
                 ("Y", "Crop: drag out the part to keep, drag its corners to adjust, Return when done"),
                 ("Delete", "Delete the selected mark"),
                 ("Arrow keys", "Nudge the selected mark (with ⇧, 10 points at a time)"),
@@ -135,6 +137,11 @@ enum Help {
             ]),
             .heading("Color, size and style"),
             .text("The color button and the size menu set how new marks look, and change the selected mark. The size menu also has bold text, filled shapes and text, shadows, and Bring to Front / Send to Back. Quick styles (the palette button) keep favorite combinations one click away; Save Current Style adds yours."),
+            .heading("Smart tools"),
+            .text("Edit Text changes words in the picture itself. Pick the tool and the lines of text CaptureLens found are outlined; click one and type. The old words are painted out with the background around them, and the new ones are set in a matching size, weight and color. Leave the line empty to just paint it out, or drag over any area to paint it out and type something new there."),
+            .text("Smart Move picks up parts of the picture (buttons, icons, lines of text, fields) and puts them down elsewhere. Pick the tool, click a part and drag it; the spot it leaves is filled in with the background. Drag its handles to make it bigger or smaller, or drag over an area by hand to move something CaptureLens didn't outline."),
+            .text("Simplify (the shapes button) redraws the picture as plain shapes: a bar for each line of text and a box, circle or outline for each other part, in their own colors or in grays. It's handy for showing a layout without its details, or for keeping attention on one part: delete the shapes over the part that matters. Remove Simplify takes them all away."),
+            .tip("These work best on screenshots of apps and web pages, with plain backgrounds. Everything they do is an ordinary mark: select it to recolor, move or delete it, and the original picture is never changed."),
             .heading("Adjusting the picture"),
             .text("The Adjust button (the sliders) crops, rotates and resizes the picture, cuts strips out of it (drag across or down the strip; torn, wavy or straight seams), adds a border with rounded corners and a shadow, gives it torn, wavy or faded edges, and removes the background to keep just the subject. None of it changes the original: each adjustment can be changed, undone, or reset with Reset All Adjustments."),
             .text("Smart Redact (also in Adjust) finds email addresses, phone numbers, card numbers, ID numbers, IP addresses, street addresses and keys or tokens in the picture and covers each with a black box, blur or pixels. The covers are ordinary marks: move, resize or delete any of them."),

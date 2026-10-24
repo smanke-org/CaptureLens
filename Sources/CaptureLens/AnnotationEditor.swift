@@ -39,6 +39,10 @@ final class AnnotationEditor {
     var showResult = false
     var showResize = false
     var redacting = false
+    /// What the smart tools found in the capture (its text and its separate parts), once looked.
+    private(set) var analysis: SmartAnalysis?
+    private(set) var analyzing = false
+    var simplifying = false
     /// Off shows the picture as captured, without marks (copying and saving still include them).
     var showAnnotations = true
     /// The capture being edited.
@@ -63,6 +67,7 @@ final class AnnotationEditor {
     func open(_ id: UUID) {
         guard id != itemID else { return }
         itemID = id
+        analysis = nil
         selection = nil
         selectedCut = nil
         // Undo belongs to the capture it was made on.
@@ -74,6 +79,77 @@ final class AnnotationEditor {
         tool = newTool
         if newTool != .select { selection = nil; selectedCut = nil }
         if newTool != .select { showResult = false }
+        if case .draw(let kind) = newTool, kind.patches { analyze() }
+    }
+
+    // MARK: Smart tools
+
+    struct SmartAnalysis {
+        let itemID: UUID
+        /// Lines of text, with their boxes in points.
+        let lines: [(text: String, box: CGRect)]
+        /// The separate parts of the picture, in points.
+        let objects: [CGRect]
+    }
+
+    /// The capture's picture as stored, and its size in points.
+    private var picture: (image: CGImage, canvas: CGSize)? {
+        guard let item, let data = LibraryStore.shared.pngData(item.id), let image = AnnotationRenderer.image(from: data) else { return nil }
+        return (image, item.pointSize)
+    }
+
+    /// Finds the capture's text and parts for Edit Text, Smart Move and Simplify (once per capture).
+    func analyze(then done: ((SmartAnalysis) -> Void)? = nil) {
+        if let analysis, analysis.itemID == itemID { done?(analysis); return }
+        guard let id = itemID, let picture else { return }
+        analyzing = true
+        Task {
+            let lines = (try? await Recognizer.lines(in: picture.image)) ?? []
+            let canvas = picture.canvas
+            let boxes = lines.map { line in
+                (text: line.text, box: CGRect(x: line.box.minX * canvas.width, y: (1 - line.box.maxY) * canvas.height,
+                                              width: line.box.width * canvas.width, height: line.box.height * canvas.height))
+            }
+            let image = picture.image
+            let objects = await Task.detached(priority: .userInitiated) { ObjectFinder.objects(in: image, canvas: canvas) }.value
+            guard itemID == id else { return }
+            let result = SmartAnalysis(itemID: id, lines: boxes, objects: objects)
+            analysis = result
+            analyzing = false
+            revision += 1
+            done?(result)
+        }
+    }
+
+    /// The Edit Text mark for a recognized line, styled to match the picture.
+    func editTextMark(text: String, box: CGRect) -> Annotation? {
+        guard let picture else { return nil }
+        return TextMatch.mark(text: text, box: box, in: picture.image, canvas: picture.canvas)
+    }
+
+    /// Redraws the capture as plain shapes (replacing an earlier Simplify).
+    func simplify(_ colors: Simplifier.Colors) {
+        guard let id = itemID, let picture else { return }
+        simplifying = true
+        analyze { analysis in
+            let image = picture.image
+            let canvas = picture.canvas, lines = analysis.lines.map(\.box)
+            Task {
+                defer { self.simplifying = false }
+                let marks = await Task.detached(priority: .userInitiated) {
+                    Simplifier.marks(in: image, canvas: canvas, textLines: lines, colors: colors)
+                }.value
+                guard self.itemID == id else { return }
+                self.commit(self.annotations.filter { $0.kind != .simplify } + marks, action: "Simplify")
+                Notice.shared.show(marks.isEmpty ? "Nothing to simplify" : "Simplified \(marks.count) part\(marks.count == 1 ? "" : "s")",
+                                   symbol: "rectangle.3.group")
+            }
+        }
+        if analyzing == false && analysis?.itemID != id { simplifying = false }
+    }
+
+    func removeSimplify() {
+        commit(annotations.filter { $0.kind != .simplify }, action: "Remove Simplify")
     }
 
     /// Selecting a mark shows its style in the toolbar, so changes apply to it.
@@ -235,10 +311,14 @@ final class AnnotationLayerView: NSView, NSTextViewDelegate, NSMenuItemValidatio
     private var drag: Drag?
     private var textView: NSTextView?
     private var editingID: UUID?
+    /// Where the pointer is, for highlighting what the smart tools would pick.
+    private var hover: CGPoint?
 
     private enum Drag {
         case drawing(Annotation, start: CGPoint)
         case moving(UUID, last: CGPoint, original: [Annotation])
+        /// A part just picked up with Smart Move, saved when it's put down.
+        case placing(UUID, last: CGPoint)
         case handle(UUID, Handle, original: [Annotation])
         case cropping(start: CGPoint, original: CGRect?, mode: CropMode)
         case cutting(CutOut.Axis, start: CGPoint)
@@ -271,13 +351,79 @@ final class AnnotationLayerView: NSView, NSTextViewDelegate, NSMenuItemValidatio
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         if editor.showAnnotations || live != nil {
-            AnnotationRenderer.draw(marks, in: ctx, canvas: bounds.size, base: baseImage)
+            // The text being typed shows in the text box, not twice.
+            let shown = editingID.map { id in marks.map { $0.id == id ? $0.withoutText : $0 } } ?? marks
+            AnnotationRenderer.draw(shown, in: ctx, canvas: bounds.size, base: baseImage)
         }
+        drawSmartTargets(in: ctx)
         if let id = editor.selection, let mark = marks.first(where: { $0.id == id }), editingID != id {
             drawSelection(mark, in: ctx)
         }
         drawCuts(in: ctx)
         drawCrop(in: ctx)
+    }
+
+    /// With Edit Text or Smart Move, what they'd pick is outlined, the one under the pointer filled.
+    private func drawSmartTargets(in ctx: CGContext) {
+        guard drag == nil, textView == nil, case .draw(let kind) = editor.tool, kind == .editText || kind == .move else { return }
+        let targets = smartTargets(for: kind)
+        guard !targets.isEmpty else { return }
+        let hovered = hover.flatMap { point in target(in: targets, at: point) }
+        ctx.saveGState()
+        ctx.setLineWidth(onScreen)
+        ctx.setLineDash(phase: 0, lengths: [3 * onScreen, 3 * onScreen])
+        ctx.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.55).cgColor)
+        for target in targets { ctx.stroke(target) }
+        if let hovered {
+            ctx.setFillColor(NSColor.controlAccentColor.withAlphaComponent(0.15).cgColor)
+            ctx.fill(hovered)
+            ctx.setLineDash(phase: 0, lengths: [])
+            ctx.setLineWidth(2 * onScreen)
+            ctx.setStrokeColor(NSColor.controlAccentColor.cgColor)
+            ctx.stroke(hovered)
+        }
+        ctx.restoreGState()
+    }
+
+    /// What Edit Text (lines of text) or Smart Move (parts) can pick, leaving out what's already been taken.
+    private func smartTargets(for kind: Annotation.Kind) -> [CGRect] {
+        guard let analysis = editor.analysis, analysis.itemID == editor.item?.id else { return [] }
+        let taken = marks.filter { $0.kind == kind }.map(\.source)
+        let all = kind == .editText ? analysis.lines.map { $0.box.insetBy(dx: -2, dy: -2) } : analysis.objects
+        return all.filter { target in
+            !taken.contains { used in
+                let overlap = used.intersection(target)
+                return !overlap.isNull && overlap.width * overlap.height > target.width * target.height * 0.5
+            }
+        }
+    }
+
+    /// The target under `point`: the smallest one there, or what snugly wraps it (a button
+    /// around its label, a tag around its word), since that's what's usually meant.
+    private func target(in targets: [CGRect], at point: CGPoint) -> CGRect? {
+        func area(_ r: CGRect) -> CGFloat { r.width * r.height }
+        let here = targets.filter { $0.contains(point) }.sorted { area($0) < area($1) }
+        guard var best = here.first else { return nil }
+        for outer in here.dropFirst() where outer.contains(best) && area(outer) <= area(best) * 4 { best = outer }
+        return best
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                       owner: self, userInfo: nil))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard case .draw(let kind) = editor.tool, kind == .editText || kind == .move else { hover = nil; return }
+        hover = convert(event.locationInWindow, from: nil)
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hover = nil
+        needsDisplay = true
     }
 
     /// Strips to be cut out, hatched so it's clear they won't be in the result.
@@ -359,6 +505,12 @@ final class AnnotationLayerView: NSView, NSTextViewDelegate, NSMenuItemValidatio
         ctx.setStrokeColor(NSColor.controlAccentColor.cgColor)
         ctx.setLineDash(phase: 0, lengths: [4 * line, 3 * line])
         ctx.stroke(mark.bounds.insetBy(dx: -4 * line, dy: -4 * line))
+        if mark.kind.patches, mark.source != mark.rect {
+            // Where it was taken from.
+            ctx.setStrokeColor(NSColor.secondaryLabelColor.cgColor)
+            ctx.stroke(mark.source)
+            ctx.setStrokeColor(NSColor.controlAccentColor.cgColor)
+        }
         ctx.setLineDash(phase: 0, lengths: [])
         for (_, point) in handles(of: mark) {
             let size = 8 * line
@@ -451,11 +603,13 @@ final class AnnotationLayerView: NSView, NSTextViewDelegate, NSMenuItemValidatio
         case .cut(let axis):
             drag = .cutting(axis, start: point)
         case .draw(let kind):
+            if kind == .editText || kind == .move, smartPick(kind, at: point, event: event) { break }
             editor.select(nil)
             var mark = Annotation(kind: kind, rect: CGRect(origin: point, size: .zero), from: point, to: point,
                                   tail: point, points: [point], stamp: editor.stamp, style: editor.style)
             if kind == .magnify { mark.zoom = 2 }
             if kind == .redact { mark.style = AnnotationStyle(color: .black, lineWidth: 0, shadow: false) }
+            if kind.patches { mark.style.shadow = false; mark.style.filled = false }
             drag = .drawing(mark, start: point)
             live = editor.annotations + [mark]
         }
@@ -486,6 +640,11 @@ final class AnnotationLayerView: NSView, NSTextViewDelegate, NSMenuItemValidatio
             if let index = marks.firstIndex(where: { $0.id == id }) { marks[index].offset(dx: point.x - last.x, dy: point.y - last.y) }
             live = marks
             drag = .moving(id, last: point, original: original)
+        case .placing(let id, let last):
+            var marks = live ?? editor.annotations
+            if let index = marks.firstIndex(where: { $0.id == id }) { marks[index].offset(dx: point.x - last.x, dy: point.y - last.y) }
+            live = marks
+            drag = .placing(id, last: point)
         case .handle(let id, let handle, let original):
             var marks = original
             if let index = marks.firstIndex(where: { $0.id == id }) {
@@ -542,12 +701,17 @@ final class AnnotationLayerView: NSView, NSTextViewDelegate, NSMenuItemValidatio
         case .drawing(var mark, let start):
             let size = mark.kind.isLinear ? hypot(mark.to.x - mark.from.x, mark.to.y - mark.from.y)
                 : mark.kind.isFreehand ? CGFloat(mark.points.count) * 3 : max(mark.rect.width, mark.rect.height)
+            if mark.kind.patches {
+                // Dragged over an area by hand: that's what's taken (and painted out).
+                guard size >= 4 else { return }
+                mark.source = mark.rect.standardized
+            }
             if size < 4 {
                 guard mark.kind.placesWithClick || mark.kind == .magnify || mark.kind == .spotlight else { return }
                 mark.rect = Self.defaultRect(for: mark, at: start)
                 if mark.kind == .callout { mark.tail = CGPoint(x: start.x - 30, y: start.y + 50) }
             }
-            if mark.kind.hasText && mark.text.isEmpty {
+            if mark.kind.hasText && mark.text.isEmpty && mark.kind != .editText {
                 // Wide enough to type in; it grows to fit the words.
                 mark.rect.size.width = max(mark.rect.width, 160)
                 mark.rect.size.height = max(mark.rect.height, AnnotationRenderer.textSize("Ag", style: mark.style, width: 400).height + (mark.kind == .callout ? 16 : 0))
@@ -558,6 +722,9 @@ final class AnnotationLayerView: NSView, NSTextViewDelegate, NSMenuItemValidatio
                 live = nil
                 beginTextEditing(mark)
             }
+        case .placing(let id, _):
+            if let final = live { editor.commit(final, action: "Smart Move") }
+            editor.select(id)
         case .moving(let id, _, let original), .handle(let id, _, let original):
             if let final = live, final != original {
                 editor.commit(final, action: drag.map { if case .moving = $0 { "Move Annotation" } else { "Resize Annotation" } } ?? "")
@@ -566,6 +733,32 @@ final class AnnotationLayerView: NSView, NSTextViewDelegate, NSMenuItemValidatio
         case nil:
             break
         }
+    }
+
+    /// Edit Text and Smart Move pick what's under a click: an existing mark of theirs, or a
+    /// line of text or part the picture was found to have. False leaves the click to drag out
+    /// an area by hand.
+    private func smartPick(_ kind: Annotation.Kind, at point: CGPoint, event: NSEvent) -> Bool {
+        if let hit = mark(at: point), hit.kind == kind {
+            editor.select(hit.id)
+            if kind == .editText { beginTextEditing(hit) } else { drag = .moving(hit.id, last: point, original: editor.annotations) }
+            return true
+        }
+        guard let picked = target(in: smartTargets(for: kind), at: point) else { return false }
+        editor.select(nil)
+        if kind == .editText {
+            guard let line = editor.analysis?.lines.first(where: { $0.box.insetBy(dx: -2, dy: -2) == picked }),
+                  let mark = editor.editTextMark(text: line.text, box: line.box) else { return false }
+            editor.commit(editor.annotations + [mark], action: "Edit Text")
+            editor.select(mark.id)
+            beginTextEditing(mark)
+        } else {
+            let mark = Annotation(kind: .move, rect: picked, source: picked,
+                                  style: AnnotationStyle(color: editor.style.color, lineWidth: 0, shadow: false))
+            live = editor.annotations + [mark]
+            drag = .placing(mark.id, last: point)
+        }
+        return true
     }
 
     static func defaultRect(for mark: Annotation, at point: CGPoint) -> CGRect {
@@ -657,7 +850,7 @@ final class AnnotationLayerView: NSView, NSTextViewDelegate, NSMenuItemValidatio
         "v": .select, "r": .draw(.rectangle), "o": .draw(.ellipse), "l": .draw(.line), "a": .draw(.arrow),
         "t": .draw(.text), "c": .draw(.callout), "s": .draw(.step), "p": .draw(.pen), "h": .draw(.highlighter),
         "f": .draw(.spotlight), "m": .draw(.magnify), "k": .draw(.stamp), "b": .draw(.blur), "x": .draw(.pixelate),
-        "d": .draw(.redact), "y": .crop,
+        "d": .draw(.redact), "y": .crop, "e": .draw(.editText), "g": .draw(.move),
     ]
 
     override func resetCursorRects() {
@@ -670,7 +863,12 @@ final class AnnotationLayerView: NSView, NSTextViewDelegate, NSMenuItemValidatio
         endTextEditing()
         editingID = mark.id
         let callout = mark.kind == .callout
-        let frame = callout ? mark.rect.standardized.insetBy(dx: 10, dy: 8) : mark.rect.standardized
+        var frame = callout ? mark.rect.standardized.insetBy(dx: 10, dy: 8) : mark.rect.standardized
+        if mark.kind == .editText {
+            // Where the retyped line is drawn: centered up and down in its box.
+            let line = AnnotationRenderer.textSize(mark.text.isEmpty ? "Ag" : mark.text, style: mark.style, width: 10_000)
+            frame = CGRect(x: frame.minX, y: frame.midY - line.height / 2, width: max(frame.width, line.width), height: line.height)
+        }
         let view = NSTextView(frame: frame)
         view.delegate = self
         view.drawsBackground = false
@@ -685,6 +883,14 @@ final class AnnotationLayerView: NSView, NSTextViewDelegate, NSMenuItemValidatio
         view.string = mark.text
         view.isVerticallyResizable = true
         view.maxSize = CGSize(width: frame.width, height: .greatestFiniteMagnitude)
+        if mark.kind == .editText {
+            // One line that grows sideways, as the original was.
+            view.isHorizontallyResizable = true
+            view.textContainer?.widthTracksTextView = false
+            view.textContainer?.containerSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+            view.minSize = frame.size
+            view.maxSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+        }
         addSubview(view)
         textView = view
         window?.makeFirstResponder(view)
@@ -694,7 +900,8 @@ final class AnnotationLayerView: NSView, NSTextViewDelegate, NSMenuItemValidatio
 
     func textDidChange(_ notification: Notification) {
         // Grow the box to fit as the words come.
-        guard let view = textView, let id = editingID, let mark = editor.annotations.first(where: { $0.id == id }) else { return }
+        guard let view = textView, let id = editingID, let mark = editor.annotations.first(where: { $0.id == id }),
+              mark.kind != .editText else { return }
         let padding: CGFloat = mark.kind == .callout ? 16 : 0
         let needed = AnnotationRenderer.textSize(view.string, style: mark.style, width: view.frame.width).height
         if needed + padding > mark.rect.height {
@@ -720,7 +927,13 @@ final class AnnotationLayerView: NSView, NSTextViewDelegate, NSMenuItemValidatio
         view.removeFromSuperview()
         var marks = editor.annotations
         if let index = marks.firstIndex(where: { $0.id == id }) {
-            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if marks[index].kind == .editText {
+                // Left empty, it still paints out what was there.
+                marks[index].text = text
+                let size = AnnotationRenderer.textSize(text, style: marks[index].style, width: 10_000)
+                marks[index].rect.size.width = max(marks[index].rect.width, size.width)
+                marks[index].rect.size.height = max(marks[index].rect.height, size.height)
+            } else if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 // An empty text box isn't worth keeping.
                 marks.remove(at: index)
             } else {
@@ -933,6 +1146,7 @@ struct ToolPalette: View {
         case rotate(clockwise: Bool)
         case adjustMenu
         case smartRedact
+        case simplify
     }
 
     static let groups: [(title: String, items: [Item])] = [
@@ -941,6 +1155,7 @@ struct ToolPalette: View {
         ("Draw", [.pen, .highlighter].map(drawItem)),
         ("Focus", [.spotlight, .magnify].map(drawItem)),
         ("Hide", [.blur, .pixelate, .redact].map(drawItem) + [.smartRedact]),
+        ("Smart", [.editText, .move].map(drawItem) + [.simplify]),
         ("Adjust", [
             .tool(.crop, symbol: "crop", help: "Crop: drag out the part to keep, drag the corners to adjust, Return when done (Y)"),
             .tool(.cut(.horizontal), symbol: "rectangle.split.1x2", help: "Cut out a strip across: drag over the rows to take out"),
@@ -1002,6 +1217,21 @@ struct ToolPalette: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .help("Smart Redact: find email addresses, phone numbers, card numbers and more, and hide them")
+        case .simplify:
+            Menu {
+                Button("Simplify in Its Own Colors") { editor.simplify(.original) }
+                Button("Simplify in Grays") { editor.simplify(.grays) }
+                if editor.annotations.contains(where: { $0.kind == .simplify }) {
+                    Divider()
+                    Button("Remove Simplify") { editor.removeSimplify() }
+                }
+            } label: {
+                if editor.simplifying { ProgressView().controlSize(.small).frame(width: 36, height: 34) } else { icon("rectangle.3.group", on: false) }
+            }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Simplify: redraw the picture as plain shapes, a bar for each line of text and a box for each part")
         }
     }
 

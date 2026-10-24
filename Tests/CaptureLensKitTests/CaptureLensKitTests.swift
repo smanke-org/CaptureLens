@@ -700,3 +700,131 @@ private func item(_ name: String, daysAgo: Double = 0, now: Date, tags: [String]
         #expect(blocks[1].height <= 712, "the step fits on one page")
     }
 }
+
+@Suite struct SmartToolTests {
+    /// A 1× picture `size` points large: `background` (a function of x for gradients), with
+    /// boxes of color drawn on it (rects with the origin at the top left).
+    func picture(_ size: CGSize = CGSize(width: 300, height: 200), background: (Int) -> RGBA = { _ in .white },
+                 boxes: [(CGRect, RGBA)] = []) -> CGImage {
+        let w = Int(size.width), h = Int(size.height)
+        let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        for x in 0..<w {
+            ctx.setFillColor(background(x).cgColor)
+            ctx.fill(CGRect(x: x, y: 0, width: 1, height: h))
+        }
+        for (rect, color) in boxes {
+            ctx.setFillColor(color.cgColor)
+            ctx.fill(CGRect(x: rect.minX, y: CGFloat(h) - rect.maxY, width: rect.width, height: rect.height))
+        }
+        return ctx.makeImage()!
+    }
+
+    func color(_ image: CGImage, _ x: Int, _ y: Int) -> SIMD4<Float> {
+        Pixels(image, crop: CGRect(x: x, y: y, width: 1, height: 1))!.pixel(0, 0)
+    }
+
+    @Test func patchCarriesAGradientAcross() throws {
+        let gray: (Int) -> RGBA = { RGBA(Double($0) / 300, Double($0) / 300, Double($0) / 300) }
+        let base = picture(background: gray, boxes: [(CGRect(x: 100, y: 60, width: 80, height: 60), .red)])
+        let patch = try #require(PatchFill.patch(base: base, rect: CGRect(x: 96, y: 56, width: 88, height: 68), canvas: CGSize(width: 300, height: 200)))
+        #expect(patch.image.width == 88 && patch.image.height == 68)
+        // Each column comes out the gray of its x, and no red is left.
+        for x in [0, 30, 60, 87] {
+            let p = color(patch.image, x, 34)
+            let expected = Float(96 + x) / 300 * 255
+            #expect(abs(p[0] - expected) < 6 && abs(p[1] - expected) < 6, "column \(x): \(p) vs \(expected)")
+        }
+    }
+
+    @Test func movedPartLeavesBackgroundBehind() throws {
+        let base = picture(boxes: [(CGRect(x: 20, y: 20, width: 40, height: 30), .blue)])
+        let part = CGRect(x: 18, y: 18, width: 44, height: 34)
+        var moved = Annotation(kind: .move, rect: part, source: part, style: AnnotationStyle(color: .red, lineWidth: 0, shadow: false))
+        moved.offset(dx: 180, dy: 100)
+        #expect(moved.source == part, "the source stays put")
+        let out = try #require(AnnotationRenderer.flatten(base: base, scale: 1, annotations: [moved], cursor: nil))
+        let old = color(out, 40, 35), new = color(out, 220, 135)
+        #expect(old[0] > 240 && old[1] > 240 && old[2] > 240, "old spot is white: \(old)")
+        #expect(new[2] > 200 && new[0] < 40, "new spot is blue: \(new)")
+    }
+
+    @Test func swappedPartsDontPaintOverEachOther() throws {
+        let a = CGRect(x: 20, y: 20, width: 40, height: 30), b = CGRect(x: 200, y: 20, width: 40, height: 30)
+        let base = picture(boxes: [(a, .blue), (b, .green)])
+        let style = AnnotationStyle(color: .red, lineWidth: 0, shadow: false)
+        let marks = [Annotation(kind: .move, rect: b, source: a, style: style), Annotation(kind: .move, rect: a, source: b, style: style)]
+        let out = try #require(AnnotationRenderer.flatten(base: base, scale: 1, annotations: marks, cursor: nil))
+        #expect(color(out, 220, 35)[2] > 200, "blue now on the right")
+        let left = color(out, 40, 35)
+        #expect(left[1] > 150 && left[2] < 150, "green now on the left: \(left)")
+    }
+
+    @Test func findsSeparatePartsAndSkipsDividers() {
+        let boxes: [(CGRect, RGBA)] = [
+            (CGRect(x: 20, y: 20, width: 60, height: 24), .blue),
+            (CGRect(x: 120, y: 20, width: 24, height: 24), .red),
+            (CGRect(x: 20, y: 120, width: 200, height: 1), RGBA(0.2, 0.2, 0.2)),  // a dividing line
+        ]
+        // "Words": little blocks 2 points apart make one line.
+        let word = (0..<8).map { (CGRect(x: 20 + CGFloat($0) * 9, y: 80, width: 7, height: 10), RGBA.black) }
+        let found = ObjectFinder.objects(in: picture(boxes: boxes + word), canvas: CGSize(width: 300, height: 200))
+        #expect(found.count == 3, "\(found)")
+        for target in [boxes[0].0, boxes[1].0, CGRect(x: 20, y: 80, width: 70, height: 10)] {
+            #expect(found.contains { $0.contains(target) }, "\(target) in \(found)")
+        }
+    }
+
+    @Test func colorsOfAButton() {
+        // A blue button with a white label, on a light gray window.
+        let window = RGBA(0.93, 0.93, 0.93)
+        let base = picture(background: { _ in window }, boxes: [(CGRect(x: 40, y: 40, width: 120, height: 32), .blue),
+                                                                (CGRect(x: 70, y: 52, width: 60, height: 8), .white)])
+        let canvas = CGSize(width: 300, height: 200)
+        let around = ObjectFinder.backgroundColor(around: CGRect(x: 38, y: 38, width: 124, height: 36), in: base, canvas: canvas)
+        #expect(abs(around.r - 0.93) < 0.02)
+        let main = ObjectFinder.mainColor(in: CGRect(x: 40, y: 40, width: 120, height: 32), of: base, canvas: canvas, background: around)
+        #expect(main.b > 0.9 && main.r < 0.1, "\(main)")
+    }
+
+    @Test func simplifyDrawsBarsForTextAndBoxesForTheRest() {
+        let word = (0..<8).map { (CGRect(x: 20 + CGFloat($0) * 9, y: 80, width: 7, height: 10), RGBA.black) }
+        let base = picture(boxes: [(CGRect(x: 160, y: 120, width: 60, height: 40), .orange)] + word)
+        let marks = Simplifier.marks(in: base, canvas: CGSize(width: 300, height: 200),
+                                     textLines: [CGRect(x: 20, y: 80, width: 70, height: 10)], colors: .original)
+        #expect(marks.filter { $0.shape == .textBar }.count == 1)
+        let boxes = marks.filter { $0.shape != .textBar }
+        #expect(boxes.count == 1 && boxes[0].shape == .box && boxes[0].style.color.r > 0.9, "\(boxes)")
+        #expect(marks.allSatisfy { $0.kind == .simplify && $0.source == $0.rect })
+        let grays = Simplifier.marks(in: base, canvas: CGSize(width: 300, height: 200), textLines: [], colors: .grays)
+        #expect(grays.allSatisfy { $0.style.color.r == $0.style.color.g && $0.style.color.g == $0.style.color.b })
+    }
+
+    @Test func textSizeFromLineHeight() {
+        #expect(TextMatch.fontSize(forLineHeight: 24) == 20)
+        #expect(TextMatch.fontSize(forLineHeight: 16) == 13.5)
+    }
+
+    @Test func newerMarksDontSinkTheCapture() throws {
+        let item = CaptureItem(kind: .region, name: "Marked", pixelWidth: 10, pixelHeight: 10, scale: 1,
+                               annotations: [Annotation(kind: .move, rect: CGRect(x: 1, y: 1, width: 2, height: 2), source: .zero, style: .standard),
+                                             Annotation(kind: .arrow, style: .standard)])
+        var json = String(decoding: try JSONEncoder().encode(item), as: UTF8.self)
+        json = json.replacingOccurrences(of: "\"move\"", with: "\"hologram\"")
+        let decoded = try JSONDecoder().decode(CaptureItem.self, from: Data(json.utf8))
+        #expect(decoded.annotations.map(\.kind) == [.arrow])
+        #expect(decoded.name == "Marked")
+    }
+
+    @Test func simplifiedShapes() {
+        let canvas = CGSize(width: 300, height: 200), white = RGBA.white
+        // A filled box, a frame around the background, and a round dot (drawn as a plus of boxes).
+        let base = picture(boxes: [(CGRect(x: 20, y: 20, width: 60, height: 30), .blue),
+                                   (CGRect(x: 120, y: 20, width: 100, height: 2), .black), (CGRect(x: 120, y: 48, width: 100, height: 2), .black),
+                                   (CGRect(x: 120, y: 20, width: 2, height: 30), .black), (CGRect(x: 218, y: 20, width: 2, height: 30), .black),
+                                   (CGRect(x: 40, y: 110, width: 20, height: 40), .red), (CGRect(x: 30, y: 120, width: 40, height: 20), .red)])
+        #expect(ObjectFinder.shape(of: CGRect(x: 18, y: 18, width: 64, height: 34), in: base, canvas: canvas, background: white) == .box)
+        #expect(ObjectFinder.shape(of: CGRect(x: 118, y: 18, width: 104, height: 34), in: base, canvas: canvas, background: white) == .outline)
+        #expect(ObjectFinder.shape(of: CGRect(x: 28, y: 108, width: 44, height: 44), in: base, canvas: canvas, background: white) == .round)
+    }
+}

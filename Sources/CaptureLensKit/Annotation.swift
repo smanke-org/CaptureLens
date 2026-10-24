@@ -9,6 +9,14 @@ public struct Annotation: Codable, Identifiable, Equatable, Sendable {
         case rectangle, ellipse, line, arrow, text, callout, step, pen, highlighter, spotlight, magnify, stamp
         /// Hide what's under them: softened, in big squares, or covered in a solid box.
         case blur, pixelate, redact
+        /// Smart tools: each lifts something off the picture (filling the spot it leaves with
+        /// the background around it) and puts back something editable.
+        /// Text in the picture, retyped: the original words are painted over.
+        case editText
+        /// A part of the picture, picked up and put down somewhere else (or resized).
+        case move
+        /// A part of the picture redrawn as a plain shape: a bar for text, a box for the rest.
+        case simplify
 
         public var title: String {
             switch self {
@@ -27,6 +35,9 @@ public struct Annotation: Codable, Identifiable, Equatable, Sendable {
             case .blur: "Blur"
             case .pixelate: "Pixelate"
             case .redact: "Redact"
+            case .editText: "Edit Text"
+            case .move: "Smart Move"
+            case .simplify: "Simplify"
             }
         }
 
@@ -47,6 +58,9 @@ public struct Annotation: Codable, Identifiable, Equatable, Sendable {
             case .blur: "drop"
             case .pixelate: "squareshape.split.3x3"
             case .redact: "rectangle.fill"
+            case .editText: "character.cursor.ibeam"
+            case .move: "arrow.up.and.down.and.arrow.left.and.right"
+            case .simplify: "rectangle.3.group"
             }
         }
 
@@ -60,7 +74,9 @@ public struct Annotation: Codable, Identifiable, Equatable, Sendable {
         /// Placed with a click at a default size (dragging sizes them too).
         public var placesWithClick: Bool { self == .text || self == .callout || self == .step || self == .stamp }
         /// Holds text the user types.
-        public var hasText: Bool { self == .text || self == .callout }
+        public var hasText: Bool { self == .text || self == .callout || self == .editText }
+        /// Covers the spot it came from (`source`) with the background around it.
+        public var patches: Bool { self == .editText || self == .move || self == .simplify }
     }
 
     public var id: UUID
@@ -79,11 +95,26 @@ public struct Annotation: Codable, Identifiable, Equatable, Sendable {
     public var stamp: String
     /// How much a magnifier enlarges.
     public var zoom: Double
+    /// Where the smart tools took it from in the picture; stays put when the mark moves.
+    public var source: CGRect
+    /// What a simplified part is drawn as.
+    public var shape: SimpleShape
     public var style: AnnotationStyle
+
+    public enum SimpleShape: String, Codable, Sendable {
+        /// A rounded box in the part's main color.
+        case box
+        /// A circle or pill, for round parts.
+        case round
+        /// Just the outline, for parts that are a frame around the background (a text field).
+        case outline
+        /// A rounded bar, standing in for a line of text.
+        case textBar
+    }
 
     public init(id: UUID = UUID(), kind: Kind, rect: CGRect = .zero, from: CGPoint = .zero, to: CGPoint = .zero,
                 tail: CGPoint = .zero, points: [CGPoint] = [], text: String = "", stamp: String = "", zoom: Double = 2,
-                style: AnnotationStyle) {
+                source: CGRect = .zero, shape: SimpleShape = .box, style: AnnotationStyle) {
         self.id = id
         self.kind = kind
         self.rect = rect
@@ -94,6 +125,8 @@ public struct Annotation: Codable, Identifiable, Equatable, Sendable {
         self.text = text
         self.stamp = stamp
         self.zoom = zoom
+        self.source = source
+        self.shape = shape
         self.style = style
     }
 
@@ -109,6 +142,8 @@ public struct Annotation: Codable, Identifiable, Equatable, Sendable {
         text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
         stamp = try c.decodeIfPresent(String.self, forKey: .stamp) ?? ""
         zoom = try c.decodeIfPresent(Double.self, forKey: .zoom) ?? 2
+        source = try c.decodeIfPresent(CGRect.self, forKey: .source) ?? .zero
+        shape = (try? c.decodeIfPresent(SimpleShape.self, forKey: .shape)) ?? .box
         style = try c.decodeIfPresent(AnnotationStyle.self, forKey: .style) ?? .standard
     }
 
@@ -127,7 +162,14 @@ public struct Annotation: Codable, Identifiable, Equatable, Sendable {
         }
     }
 
-    /// Moves it by `dx`, `dy`.
+    /// The same mark with no text (while its text is being typed in a box over it).
+    public var withoutText: Annotation {
+        var copy = self
+        copy.text = ""
+        return copy
+    }
+
+    /// Moves it by `dx`, `dy` (a smart mark's `source` stays where it was).
     public mutating func offset(dx: CGFloat, dy: CGFloat) {
         rect = rect.offsetBy(dx: dx, dy: dy)
         from = CGPoint(x: from.x + dx, y: from.y + dy)
