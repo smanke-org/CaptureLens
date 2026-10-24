@@ -704,7 +704,7 @@ struct FlowLayout: Layout {
 @MainActor
 enum Exporter {
     enum Format: String, CaseIterable {
-        case png = "PNG", jpeg = "JPEG", heic = "HEIC", tiff = "TIFF", webp = "WebP", gif = "GIF", bmp = "BMP", pdf = "PDF"
+        case png = "PNG", jpeg = "JPEG", heic = "HEIC", tiff = "TIFF", gif = "GIF", bmp = "BMP", pdf = "PDF"
 
         var type: UTType {
             switch self {
@@ -712,14 +712,13 @@ enum Exporter {
             case .jpeg: .jpeg
             case .heic: .heic
             case .tiff: .tiff
-            case .webp: .webP
             case .gif: .gif
             case .bmp: .bmp
             case .pdf: .pdf
             }
         }
 
-        /// The formats this Mac can write (WebP needs a recent macOS).
+        /// The formats this Mac can write.
         static var available: [Format] {
             let writable = Set((CGImageDestinationCopyTypeIdentifiers() as? [String]) ?? [])
             return allCases.filter { $0 == .pdf || writable.contains($0.type.identifier) }
