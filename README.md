@@ -32,6 +32,8 @@ CaptureLens also:
 - **Remembers where a capture came from**: the app, the window, and in a browser, the web page.
 - **Brings your old library along**: Import from Snagit moves Snagit captures in with their dates, apps, web
   addresses and tags, and their markup editable where CaptureLens has the same tool. Videos can come too.
+- **Shows your activity**: Settings › Activity graphs your captures by kind, with recording time, the apps and
+  websites you capture most, and how often you mark up and share, on this Mac or added up across all your Macs.
 - **Keeps the library private**: encrypted on your Mac, optionally locked behind Touch ID, and synced between
   your Macs end-to-end encrypted through iCloud, or through a Dropbox, OneDrive or Google Drive folder.
 
