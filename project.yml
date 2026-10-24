@@ -1,0 +1,79 @@
+# Source of truth for the Xcode project: run `xcodegen generate` after adding files or
+# changing settings. CaptureLensKit (Package.swift) holds the testable logic.
+#
+# Configurations:
+#   Debug     Signed for development (CloudKit's Development environment), not sandboxed.
+#   Release   GitHub build: archived, then exported for Developer ID by build_app.sh, which
+#             has Xcode fetch the Developer ID provisioning profile CloudKit needs. Not
+#             sandboxed, so it can replace itself when updating.
+#   AppStore  Sandboxed, no updater (APPSTORE flag). Archive it from Xcode.
+# All three sync through CloudKit (container iCloud.com.smanke.CaptureLens), so the app is
+# signed automatically with a provisioning profile.
+name: CaptureLens
+options:
+  bundleIdPrefix: com.smanke
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+packages:
+  CaptureLensKit:
+    path: .
+configs:
+  Debug: debug
+  Release: release
+  AppStore: release
+settings:
+  base:
+    DEVELOPMENT_TEAM: 32CWL275JJ
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "Developer ID Application"
+    OTHER_CODE_SIGN_FLAGS: "--timestamp"
+    ARCHS: "arm64 x86_64"
+    ONLY_ACTIVE_ARCH: NO
+    DEAD_CODE_STRIPPING: YES
+  configs:
+    Debug:
+      ONLY_ACTIVE_ARCH: YES
+    Release:
+      # Xcode otherwise adds get-task-allow, which notarization rejects.
+      CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+    AppStore:
+      CODE_SIGN_STYLE: Automatic
+      CODE_SIGN_IDENTITY: "Apple Development"
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: APPSTORE
+targets:
+  CaptureLens:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/CaptureLens
+      - path: Resources/AppIcon.icns
+        buildPhase: resources
+    dependencies:
+      - package: CaptureLensKit
+    settings:
+      base:
+        PRODUCT_NAME: CaptureLens
+        PRODUCT_BUNDLE_IDENTIFIER: com.smanke.CaptureLens
+        INFOPLIST_FILE: Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Resources/CaptureLens.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "Apple Development"
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: Resources/CaptureLens-Debug.entitlements
+        AppStore:
+          CODE_SIGN_ENTITLEMENTS: Resources/CaptureLens-AppStore.entitlements
+schemes:
+  CaptureLens:
+    build:
+      targets:
+        CaptureLens: all
+    run:
+      config: Debug
+    archive:
+      config: Release

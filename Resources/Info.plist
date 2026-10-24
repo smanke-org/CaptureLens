@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>CaptureLens</string>
+	<key>CFBundleExecutable</key>
+	<string>CaptureLens</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.smanke.CaptureLens</string>
+	<key>CFBundleName</key>
+	<string>CaptureLens</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>CaptureLens</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>capturelens</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>1.0.0</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>CaptureLens asks your browser for the address of the page you capture, so the library can show where it came from and you can search by website.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Steve Manke</string>
+	<key>ToolHUDActions</key>
+	<array>
+		<dict>
+			<key>activates</key>
+			<false/>
+			<key>id</key>
+			<string>capture</string>
+			<key>shortTitle</key>
+			<string>Capture</string>
+			<key>symbol</key>
+			<string>camera.viewfinder</string>
+			<key>title</key>
+			<string>Capture a window or an area</string>
+		</dict>
+		<dict>
+			<key>activates</key>
+			<false/>
+			<key>id</key>
+			<string>screen</string>
+			<key>shortTitle</key>
+			<string>Full screen</string>
+			<key>symbol</key>
+			<string>display</string>
+			<key>title</key>
+			<string>Capture the whole screen</string>
+		</dict>
+		<dict>
+			<key>activates</key>
+			<false/>
+			<key>id</key>
+			<string>window</string>
+			<key>shortTitle</key>
+			<string>Window</string>
+			<key>symbol</key>
+			<string>macwindow</string>
+			<key>title</key>
+			<string>Capture a window</string>
+		</dict>
+		<dict>
+			<key>activates</key>
+			<false/>
+			<key>id</key>
+			<string>area</string>
+			<key>shortTitle</key>
+			<string>Area</string>
+			<key>symbol</key>
+			<string>rectangle.dashed</string>
+			<key>title</key>
+			<string>Capture an area</string>
+		</dict>
+		<dict>
+			<key>activates</key>
+			<false/>
+			<key>id</key>
+			<string>recapture</string>
+			<key>shortTitle</key>
+			<string>Capture again</string>
+			<key>symbol</key>
+			<string>arrow.clockwise</string>
+			<key>title</key>
+			<string>Capture the same area again</string>
+		</dict>
+		<dict>
+			<key>activates</key>
+			<true/>
+			<key>id</key>
+			<string>library</string>
+			<key>shortTitle</key>
+			<string>Library</string>
+			<key>symbol</key>
+			<string>photo.on.rectangle</string>
+			<key>title</key>
+			<string>Open the capture library</string>
+		</dict>
+	</array>
+</dict>
+</plist>

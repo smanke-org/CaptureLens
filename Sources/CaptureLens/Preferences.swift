@@ -1,0 +1,270 @@
+import AppKit
+import Carbon.HIToolbox
+import Observation
+import SwiftUI
+
+/// What happens on screen once a capture is saved.
+enum AfterCapture: String, CaseIterable {
+    case preview, openLibrary, nothing
+
+    var title: String {
+        switch self {
+        case .preview: "Show a preview in the corner"
+        case .openLibrary: "Open it in the library"
+        case .nothing: "Nothing (just play the sound)"
+        }
+    }
+}
+
+/// How a capture is taken.
+enum CaptureMode: String, Codable, CaseIterable {
+    /// Point at a window and click it, or drag out an area.
+    case allInOne
+    case region
+    case window
+    case screen
+    /// A frame of a set size that follows the pointer; click to place it.
+    case fixedSize
+
+    var title: String {
+        switch self {
+        case .allInOne: "Window or area"
+        case .region: "Area"
+        case .window: "Window"
+        case .screen: "Full screen"
+        case .fixedSize: "Exact size"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .allInOne: "viewfinder"
+        case .region: "rectangle.dashed"
+        case .window: "macwindow"
+        case .screen: "display"
+        case .fixedSize: "aspectratio"
+        }
+    }
+}
+
+/// Whether a preset copies its capture, or follows the setting.
+enum ClipboardChoice: String, Codable, CaseIterable {
+    case setting, always, never
+
+    var title: String {
+        switch self {
+        case .setting: "As in Capture settings"
+        case .always: "Always copy"
+        case .never: "Never copy"
+        }
+    }
+}
+
+/// A saved way to capture, with its own shortcut: "Window, after 3 seconds".
+struct CapturePreset: Codable, Identifiable, Equatable {
+    var id: UUID
+    var name: String
+    var mode: CaptureMode
+    /// Seconds to count down before capturing.
+    var delay: Int
+    /// The frame for `.fixedSize`, in points.
+    var width: Int
+    var height: Int
+    var clipboard: ClipboardChoice
+    var hotKey: HotKey?
+
+    init(id: UUID = UUID(), name: String, mode: CaptureMode, delay: Int = 0, width: Int = 1280, height: Int = 720,
+         clipboard: ClipboardChoice = .setting, hotKey: HotKey? = nil) {
+        self.id = id
+        self.name = name
+        self.mode = mode
+        self.delay = delay
+        self.width = width
+        self.height = height
+        self.clipboard = clipboard
+        self.hotKey = hotKey
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Capture"
+        mode = try c.decodeIfPresent(CaptureMode.self, forKey: .mode) ?? .allInOne
+        delay = try c.decodeIfPresent(Int.self, forKey: .delay) ?? 0
+        width = try c.decodeIfPresent(Int.self, forKey: .width) ?? 1280
+        height = try c.decodeIfPresent(Int.self, forKey: .height) ?? 720
+        clipboard = try c.decodeIfPresent(ClipboardChoice.self, forKey: .clipboard) ?? .setting
+        hotKey = try c.decodeIfPresent(HotKey.self, forKey: .hotKey)
+    }
+
+    /// "Window · 3 s delay", for menus and lists.
+    var summary: String {
+        var parts = [mode == .fixedSize ? "\(width) × \(height)" : mode.title]
+        if delay > 0 { parts.append("\(delay) s delay") }
+        switch clipboard {
+        case .always: parts.append("copies")
+        case .never: parts.append("doesn't copy")
+        case .setting: break
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private static let optionShiftCommand = UInt32(optionKey | shiftKey | cmdKey)
+
+    /// The presets a new install starts with. Fixed IDs, so two Macs adopting each
+    /// other's settings never end up with two copies.
+    static let defaults: [CapturePreset] = [
+        CapturePreset(id: UUID(uuidString: "6C1D0E2A-0001-4C6E-9C1A-CA9701E50001")!, name: "Capture", mode: .allInOne,
+                      hotKey: HotKey(keyCode: UInt32(kVK_ANSI_4), modifiers: optionShiftCommand, display: "⌥⇧⌘4")),
+        CapturePreset(id: UUID(uuidString: "6C1D0E2A-0002-4C6E-9C1A-CA9701E50002")!, name: "Full Screen", mode: .screen,
+                      hotKey: HotKey(keyCode: UInt32(kVK_ANSI_3), modifiers: optionShiftCommand, display: "⌥⇧⌘3")),
+        CapturePreset(id: UUID(uuidString: "6C1D0E2A-0003-4C6E-9C1A-CA9701E50003")!, name: "Window", mode: .window,
+                      hotKey: HotKey(keyCode: UInt32(kVK_ANSI_5), modifiers: optionShiftCommand, display: "⌥⇧⌘5")),
+        CapturePreset(id: UUID(uuidString: "6C1D0E2A-0004-4C6E-9C1A-CA9701E50004")!, name: "Area After 5 Seconds",
+                      mode: .region, delay: 5),
+        CapturePreset(id: UUID(uuidString: "6C1D0E2A-0005-4C6E-9C1A-CA9701E50005")!, name: "1280 × 720",
+                      mode: .fixedSize, width: 1280, height: 720),
+    ]
+}
+
+/// Every setting, persisted to UserDefaults as it changes. Settings that belong to one Mac
+/// (encryption at rest, the library lock) live with `LibraryStore`/`LibraryLock` instead.
+@Observable
+@MainActor
+final class Preferences {
+    static let shared = Preferences()
+
+    // MARK: Capture
+    /// Each new capture also goes on the clipboard.
+    var copyToClipboard = true { didSet { save(copyToClipboard, "copyToClipboard") } }
+    var afterCapture = AfterCapture.preview { didSet { save(afterCapture.rawValue, "afterCapture") } }
+    /// Keep the mouse pointer as a separate layer (hidden or shown later).
+    var captureCursor = true { didSet { save(captureCursor, "captureCursor") } }
+    /// New captures start with the pointer showing.
+    var showCursorByDefault = false { didSet { save(showCursorByDefault, "showCursorByDefault") } }
+    var windowShadow = true { didSet { save(windowShadow, "windowShadow") } }
+    var playSound = true { didSet { save(playSound, "playSound") } }
+    var showNotice = true { didSet { save(showNotice, "showNotice") } }
+
+    // MARK: Naming and source
+    /// Name each capture from what's in it, with on-device Apple Intelligence.
+    var autoName = true { didSet { save(autoName, "autoName") } }
+    /// Read the text in each capture, so the library can search it.
+    var recognizeText = true { didSet { save(recognizeText, "recognizeText") } }
+    /// Ask the front browser for the page's address.
+    var recordWebAddress = true { didSet { save(recordWebAddress, "recordWebAddress") } }
+
+    // MARK: Library
+    /// The library travels between Macs too, while sync is on.
+    var librarySync = true { didSet { save(librarySync, "librarySync"); librarySyncChanged() } }
+
+    // MARK: Presets and shortcuts
+    var presets: [CapturePreset] = CapturePreset.defaults { didSet { saveCodable(presets, "presets") } }
+    var libraryHotKey: HotKey? = Defaults.libraryHotKey { didSet { saveCodable(libraryHotKey, "libraryHotKey") } }
+    /// "Capture Again" repeats the last area without selecting.
+    var captureAgainHotKey: HotKey? = nil { didSet { saveCodable(captureAgainHotKey, "captureAgainHotKey") } }
+
+    enum Defaults {
+        static let libraryHotKey: HotKey? = HotKey(keyCode: UInt32(kVK_ANSI_L), modifiers: UInt32(optionKey | shiftKey | cmdKey),
+                                                   display: "⌥⇧⌘L")
+    }
+
+    /// Every key this class writes, so a reset can clear them all. All of them sync.
+    static let keys = [
+        "copyToClipboard", "afterCapture", "captureCursor", "showCursorByDefault", "windowShadow", "playSound", "showNotice",
+        "autoName", "recognizeText", "recordWebAddress", "librarySync", "presets", "libraryHotKey", "captureAgainHotKey",
+    ]
+
+    @ObservationIgnored private var loading = false
+
+    private init() { load() }
+
+    /// Puts every setting back to how a new install starts. Where the app appears,
+    /// open-at-login and update checks are left alone.
+    func resetToDefaults() {
+        for key in Self.keys { AppDefaults.store.removeObject(forKey: key) }
+        load()
+        SettingsSync.shared.localDidChange()
+    }
+
+    /// Every setting's current value, in the form UserDefaults stores it, defaults included.
+    var snapshot: [String: Any] {
+        func data<T: Encodable>(_ value: T) -> Data { (try? JSONEncoder().encode(value)) ?? Data() }
+        return [
+            "copyToClipboard": copyToClipboard, "afterCapture": afterCapture.rawValue, "captureCursor": captureCursor,
+            "showCursorByDefault": showCursorByDefault, "windowShadow": windowShadow, "playSound": playSound,
+            "showNotice": showNotice, "autoName": autoName, "recognizeText": recognizeText,
+            "recordWebAddress": recordWebAddress, "librarySync": librarySync, "presets": data(presets),
+            "libraryHotKey": data(libraryHotKey), "captureAgainHotKey": data(captureAgainHotKey),
+        ]
+    }
+
+    /// Re-reads every setting after another Mac's settings were written into UserDefaults.
+    func reload() {
+        load()
+        librarySyncChanged(force: true)
+    }
+
+    /// Library sync follows its own switch. Deferred, since it reads Preferences.
+    private func librarySyncChanged(force: Bool = false) {
+        guard !loading || force else { return }
+        DispatchQueue.main.async { MainActor.assumeIsolated { LibrarySync.shared.start() } }
+    }
+
+    private func load() {
+        loading = true
+        defer { loading = false }
+        let d = AppDefaults.store
+        func bool(_ key: String, _ fallback: Bool) -> Bool { d.object(forKey: key) as? Bool ?? fallback }
+        func string(_ key: String) -> String { d.string(forKey: key) ?? "" }
+        func codable<T: Decodable>(_ key: String, _ fallback: T) -> T {
+            guard let data = d.data(forKey: key) else { return fallback }
+            return (try? JSONDecoder().decode(T.self, from: data)) ?? fallback
+        }
+
+        copyToClipboard = bool("copyToClipboard", true)
+        afterCapture = AfterCapture(rawValue: string("afterCapture")) ?? .preview
+        captureCursor = bool("captureCursor", true)
+        showCursorByDefault = bool("showCursorByDefault", false)
+        windowShadow = bool("windowShadow", true)
+        playSound = bool("playSound", true)
+        showNotice = bool("showNotice", true)
+        autoName = bool("autoName", true)
+        recognizeText = bool("recognizeText", true)
+        recordWebAddress = bool("recordWebAddress", true)
+        librarySync = bool("librarySync", true)
+        presets = codable("presets", CapturePreset.defaults)
+        libraryHotKey = codable("libraryHotKey", Defaults.libraryHotKey)
+        captureAgainHotKey = codable("captureAgainHotKey", nil as HotKey?)
+    }
+
+    private func save(_ value: Any, _ key: String) {
+        guard !loading else { return }
+        store(value as? NSObject, key)
+    }
+
+    private func saveCodable<T: Encodable>(_ value: T, _ key: String) {
+        guard !loading else { return }
+        store((try? JSONEncoder().encode(value)) as NSObject?, key)
+    }
+
+    /// Writes only real changes, and reports them for iCloud sync. SwiftUI controls write
+    /// their current value back when settings arrive from another Mac; counting those as
+    /// edits would send the same settings back and forth between Macs forever.
+    private func store(_ value: NSObject?, _ key: String) {
+        let defaults = AppDefaults.store
+        if let old = defaults.object(forKey: key) as? NSObject, let value, old.isEqual(value) { return }
+        defaults.set(value, forKey: key)
+        SettingsSync.shared.localDidChange()
+        if key == "presets" || key.hasSuffix("HotKey") { HotKeyCenter.shared.apply() }
+    }
+
+    // MARK: Presets
+
+    func preset(_ id: UUID) -> CapturePreset? { presets.first { $0.id == id } }
+
+    func update(_ preset: CapturePreset) {
+        guard let index = presets.firstIndex(where: { $0.id == preset.id }) else { return }
+        presets[index] = preset
+    }
+}
