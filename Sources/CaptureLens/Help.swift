@@ -117,7 +117,7 @@ enum Help {
         ]),
 
         HelpTopic(id: "annotate", title: "Annotating", symbol: "pencil.and.outline", blocks: [
-            .text("Select a capture in the library and mark it up right on the picture: boxes, ellipses, arrows, lines, text, callouts, numbered steps, a pen, a highlighter, a spotlight, a magnifier and stamps. Marks stay separate from the picture, so you can move, resize, restyle or delete them any time, and the original is never changed."),
+            .text("Select a capture in the library and mark it up right on the picture. The tools are in the column beside it, grouped as Shapes, Text, Draw, Focus, Hide and Adjust; color, size, quick styles and undo are in the row above: boxes, ellipses, arrows, lines, text, callouts, numbered steps, a pen, a highlighter, a spotlight, a magnifier and stamps. Marks stay separate from the picture, so you can move, resize, restyle or delete them any time, and the original is never changed."),
             .keys([
                 ("V", "Select: click a mark to select it, drag to move it, drag its handles to resize it"),
                 ("R  O  A  L", "Box, ellipse, arrow, line: drag to draw (hold ⇧ for squares, circles and 45° lines)"),
@@ -182,7 +182,7 @@ enum Help {
                 ("Return", "Rename the selected capture"),
                 ("Delete", "Delete the selected captures (asks first)"),
                 ("Drag a capture", "Into another app, or a pictures file onto the library to import it"),
-                ("Pinch or ⌘-scroll", "Zoom the picture"),
+                ("Pinch or ⌘-scroll", "Zoom the picture; or use the zoom slider, − and + below it, or pick a level from the percentage"),
                 ("Slider below the captures, or ⌘+ / ⌘−", "Make the thumbnails bigger or smaller"),
             ]),
         ]),

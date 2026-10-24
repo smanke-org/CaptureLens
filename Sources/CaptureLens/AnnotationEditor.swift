@@ -11,7 +11,7 @@ import SwiftUI
 final class AnnotationEditor {
     static let shared = AnnotationEditor()
 
-    enum Tool: Equatable {
+    enum Tool: Hashable {
         case select
         case draw(Annotation.Kind)
         /// Drag out (or adjust) the part to keep.
@@ -750,33 +750,23 @@ struct AnnotationToolbar: View {
     @State private var editor = AnnotationEditor.shared
     @State private var prefs = Preferences.shared
 
-    private static let tools: [Annotation.Kind] = [.rectangle, .ellipse, .arrow, .line, .text, .callout, .step, .pen,
-                                                   .highlighter, .spotlight, .magnify, .stamp, .blur, .pixelate, .redact]
-
     var body: some View {
-        HStack(spacing: 2) {
-            // The tools scroll sideways in a narrow window; undo, delete and show stay put.
+        HStack(spacing: 6) {
+            // Style and context controls scroll sideways in a narrow window; undo, delete and show stay put.
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 2) { tools }
+                HStack(spacing: 6) { styleControls }
             }
             Spacer(minLength: 4)
             trailing
         }
         .buttonStyle(.borderless)
+        .font(.system(size: 16))
+        .imageScale(.large)
         .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .padding(.vertical, 6)
     }
 
-    @ViewBuilder private var tools: some View {
-            toolButton(.select, symbol: "cursorarrow", help: "Select, move and resize (V)")
-            Divider().frame(height: 18).padding(.horizontal, 3)
-            ForEach(Self.tools, id: \.self) { kind in
-                toolButton(.draw(kind), symbol: kind.symbol, help: "\(kind.title) (\(key(for: kind)))")
-            }
-            Divider().frame(height: 18).padding(.horizontal, 3)
-            toolButton(.crop, symbol: "crop", help: "Crop: drag out the part to keep, drag the corners to adjust, Return when done (Y)")
-            AdjustMenu()
-            Divider().frame(height: 18).padding(.horizontal, 3)
+    @ViewBuilder private var styleControls: some View {
             colorMenu
             sizeMenu
             if editor.tool == .draw(.stamp) || editor.selected?.kind == .stamp {
@@ -811,20 +801,6 @@ struct AnnotationToolbar: View {
             .help(editor.showAnnotations ? "Hide annotations to see the picture as captured" : "Show annotations")
     }
 
-    private func key(for kind: Annotation.Kind) -> String {
-        AnnotationLayerView.toolKeys.first { $0.value == .draw(kind) }?.key.uppercased() ?? "–"
-    }
-
-    private func toolButton(_ tool: AnnotationEditor.Tool, symbol: String, help: String) -> some View {
-        let on = editor.tool == tool
-        return Button { editor.pick(tool) } label: {
-            Image(systemName: symbol)
-                .frame(width: 24, height: 22)
-                .background(on ? Color.accentColor.opacity(0.22) : .clear, in: RoundedRectangle(cornerRadius: 5))
-                .foregroundStyle(on ? Color.accentColor : .primary)
-        }
-        .help(help)
-    }
 
     private var colorMenu: some View {
         Menu {
@@ -836,7 +812,7 @@ struct AnnotationToolbar: View {
             Divider()
             Button("Other Color…") { ColorPanelBridge.shared.open() }
         } label: {
-            Image(nsImage: Self.swatch(editor.style.color, size: 16))
+            Image(nsImage: Self.swatch(editor.style.color, size: 20))
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -947,6 +923,98 @@ struct AnnotationToolbar: View {
     }
 }
 
+/// The tools, in a column beside the picture, grouped by what they're for. Select is on
+/// top; each group's tools follow under a small heading.
+struct ToolPalette: View {
+    @State private var editor = AnnotationEditor.shared
+
+    enum Item: Hashable {
+        case tool(AnnotationEditor.Tool, symbol: String, help: String)
+        case rotate(clockwise: Bool)
+        case adjustMenu
+        case smartRedact
+    }
+
+    static let groups: [(title: String, items: [Item])] = [
+        ("Shapes", [.rectangle, .ellipse, .line, .arrow].map(drawItem)),
+        ("Text", [.text, .callout, .step, .stamp].map(drawItem)),
+        ("Draw", [.pen, .highlighter].map(drawItem)),
+        ("Focus", [.spotlight, .magnify].map(drawItem)),
+        ("Hide", [.blur, .pixelate, .redact].map(drawItem) + [.smartRedact]),
+        ("Adjust", [
+            .tool(.crop, symbol: "crop", help: "Crop: drag out the part to keep, drag the corners to adjust, Return when done (Y)"),
+            .tool(.cut(.horizontal), symbol: "rectangle.split.1x2", help: "Cut out a strip across: drag over the rows to take out"),
+            .tool(.cut(.vertical), symbol: "rectangle.split.2x1", help: "Cut out a strip down: drag over the columns to take out"),
+            .rotate(clockwise: false), .rotate(clockwise: true), .adjustMenu,
+        ]),
+    ]
+
+    static func drawItem(_ kind: Annotation.Kind) -> Item {
+        let key = AnnotationLayerView.toolKeys.first { $0.value == .draw(kind) }?.key.uppercased()
+        return .tool(.draw(kind), symbol: kind.symbol, help: kind.title + (key.map { " (\($0))" } ?? ""))
+    }
+
+    private let columns = [GridItem(.fixed(36), spacing: 4), GridItem(.fixed(36), spacing: 4)]
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 10) {
+                button(.tool(.select, symbol: "cursorarrow", help: "Select, move and resize (V)"))
+                ForEach(Self.groups, id: \.title) { group in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(group.title.uppercased())
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 2)
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: 4) {
+                            ForEach(group.items, id: \.self) { item in button(item) }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 10)
+        }
+        .frame(width: 92)
+        .buttonStyle(.borderless)
+    }
+
+    @ViewBuilder private func button(_ item: Item) -> some View {
+        switch item {
+        case .tool(let tool, let symbol, let help):
+            let on = editor.tool == tool
+            Button { editor.pick(tool) } label: { icon(symbol, on: on) }
+                .help(help)
+        case .rotate(let clockwise):
+            Button {
+                editor.editEdits(clockwise ? "Rotate Right" : "Rotate Left") { $0 = $0.rotated(clockwise: clockwise) }
+            } label: { icon(clockwise ? "rotate.right" : "rotate.left", on: false) }
+                .help(clockwise ? "Rotate right" : "Rotate left")
+        case .adjustMenu:
+            AdjustMenu(compact: true)
+        case .smartRedact:
+            Menu {
+                Button("Hide Sensitive Info with Black Boxes") { editor.smartRedact(with: .redact) }
+                Button("Hide Sensitive Info with Blur") { editor.smartRedact(with: .blur) }
+                Button("Hide Sensitive Info with Pixels") { editor.smartRedact(with: .pixelate) }
+            } label: { icon("wand.and.stars", on: false) }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Smart Redact: find email addresses, phone numbers, card numbers and more, and hide them")
+        }
+    }
+
+    private func icon(_ symbol: String, on: Bool) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 18))
+            .frame(width: 36, height: 34)
+            .background(on ? Color.accentColor.opacity(0.22) : Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+            .foregroundStyle(on ? Color.accentColor : .primary)
+            .contentShape(Rectangle())
+    }
+}
+
 /// The system color panel, feeding the annotation color.
 @MainActor
 final class ColorPanelBridge: NSObject {
@@ -973,6 +1041,8 @@ final class ColorPanelBridge: NSObject {
 /// Crop, cut-outs, rotation, size, border, edges, background and Smart Redact: changes to
 /// the finished picture, each undoable and none touching the original.
 struct AdjustMenu: View {
+    /// Drawn as a large palette button, rather than a small toolbar one.
+    var compact = false
     @State private var editor = AnnotationEditor.shared
 
     var body: some View {
@@ -1044,9 +1114,15 @@ struct AdjustMenu: View {
                 Button("Reset All Adjustments") { editor.commitEdits(.none, action: "Reset Adjustments") }
             }
         } label: {
-            if editor.redacting { ProgressView().controlSize(.small) } else { Image(systemName: "slider.horizontal.3") }
+            if editor.redacting { ProgressView().controlSize(.small) } else if compact {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 18))
+                    .frame(width: 36, height: 34)
+                    .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+            } else { Image(systemName: "slider.horizontal.3") }
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(compact ? .hidden : .visible)
         .fixedSize()
         .help("Adjust: crop, cut out, rotate, resize, border, edges, remove background, hide sensitive info")
     }
