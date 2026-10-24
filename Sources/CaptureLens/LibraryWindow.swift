@@ -83,6 +83,18 @@ final class LibraryState {
     /// Asks the grid to scroll to an item.
     var scrollTarget: UUID?
     var confirmDelete: Set<UUID> = []
+    /// A guide being made, and captures being exported together (their sheets show).
+    var guide: GuideRequest?
+    var export: ExportRequest?
+
+    /// Opens the guide sheet on these captures, oldest first.
+    func makeGuide(from items: [CaptureItem]) {
+        let ordered = items.sorted { $0.created < $1.created }
+        // A tag they all share (a step recording's, say) makes a good title.
+        let shared = ordered.dropFirst().reduce(Set(ordered.first?.tags ?? [])) { $0.intersection($1.tags) }
+        let title = shared.sorted().first ?? "Guide · " + Date().formatted(date: .abbreviated, time: .omitted)
+        guide = GuideRequest(items: ordered.map(\.id), title: title, template: .steps)
+    }
     var renaming: UUID?
 
     /// The filter with the sidebar's choice folded in.
@@ -187,6 +199,8 @@ struct LibraryView: View {
             .searchable(text: $state.filter.text, placement: .toolbar,
                         prompt: "Name, text, tag:, app:, site:, or a date")
             .toolbar { LibraryToolbar(state: state) }
+            .sheet(item: $state.guide) { GuideSheet(request: $0) }
+            .sheet(item: $state.export) { BatchExportSheet(request: $0) }
             .confirmationDialog(deleteTitle, isPresented: Binding(get: { !state.confirmDelete.isEmpty },
                                                                    set: { if !$0 { state.confirmDelete = [] } })) {
                 Button("Delete", role: .destructive) {
@@ -715,6 +729,11 @@ struct CaptureMenu: View {
             }
         }
         Divider()
+        if targets.count > 1 {
+            Button("Make a Guide from \(targets.count) Captures…") { state.makeGuide(from: store.items.filter { targets.contains($0.id) }) }
+            Button("Export \(targets.count) Captures…") { state.export = ExportRequest(items: store.items.filter { targets.contains($0.id) }.map(\.id)) }
+            Divider()
+        }
         Button(targets.count == 1 ? "Delete…" : "Delete \(targets.count) Captures…", role: .destructive) {
             state.confirmDelete = targets
         }

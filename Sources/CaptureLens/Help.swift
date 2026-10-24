@@ -40,14 +40,14 @@ enum Help {
         func preset(_ index: Int) -> HotKey? { p.preset(CapturePreset.defaults[index].id)?.hotKey }
         let keys: [(String, HotKey?)] = [
             ("capture", preset(0)), ("screen", preset(1)), ("window", preset(2)),
-            ("library", p.libraryHotKey), ("again", p.captureAgainHotKey),
+            ("library", p.libraryHotKey), ("again", p.captureAgainHotKey), ("scrolling", preset(5)),
         ]
         var out = text
         for (name, key) in keys { out = out.replacingOccurrences(of: "{hotkey:\(name)}", with: key?.display ?? "(no shortcut set)") }
         return out
     }
 
-    static var debugTokens: String { resolve("{hotkey:capture} {hotkey:screen} {hotkey:window} {hotkey:library} {hotkey:again}") }
+    static var debugTokens: String { resolve("{hotkey:capture} {hotkey:screen} {hotkey:window} {hotkey:library} {hotkey:again} {hotkey:scrolling}") }
 
     /// The Settings tabs, for the Debug self-test.
     static let testTabs = ["Capture", "Presets", "Library", "Privacy", "General"]
@@ -142,6 +142,19 @@ enum Help {
             .text("Copy, Save As, dragging a capture out and the thumbnails all include the marks. The eye button hides them to show the picture as captured. Marks sync with the capture to your other Macs."),
         ]),
 
+        HelpTopic(id: "long", title: "Long Captures and Guides", symbol: "arrow.down.doc", blocks: [
+            .heading("Scrolling capture"),
+            .text("Press {hotkey:scrolling} (the Scrolling Capture preset), then click a window or drag over an area. Scroll down slowly over the outlined area and press Done: the frames are stitched into one tall picture. Toolbars and headers that stay put appear once, at the top."),
+            .text("Scroll for Me scrolls the area for you and stops at the end of the page. It needs your permission to send scroll events (System Settings › Privacy & Security); macOS asks the first time. It moves the pointer to the middle of the area while it scrolls."),
+            .tip("If you scroll too fast, the panel says so: scroll back a little and carry on. Nothing is lost."),
+            .heading("Recording steps"),
+            .text("Choose Record Steps… in the menu bar menu, then do what you want to show. Each click captures the window you clicked in, marks the spot with a numbered step and a ring, and names the step from the words under the pointer, such as \"Click “Save”\". Stop and Make a Guide turns the steps into a guide. The steps are tagged together in the library."),
+            .heading("Guides"),
+            .text("Select several captures and choose Make a Guide… (or right-click them). Pick Step-by-Step, Reference Sheet or Timeline, give it a title, drag the captures into order, then export a PDF or a picture, or save the guide into the library. Each capture's name is its heading, and its More Info notes go under it."),
+            .heading("Exporting many"),
+            .text("Select several captures and choose Export…: pick a format, a size, a frame (a border, rounded corners and a shadow, or a torn edge) and how to name the files, then a folder. The captures themselves don't change."),
+        ]),
+
         HelpTopic(id: "naming", title: "Automatic Names", symbol: "apple.intelligence", blocks: [
             .text("Each new capture is named from what's in it, like \"Quarterly Revenue Chart\" or \"Xcode Build Error\", using Apple Intelligence on this Mac. The name appears a moment after the capture; until then it's named after the app and window."),
             .text("To rename a capture, type in its Name field. Click the Apple Intelligence button beside the name (or choose Suggest a Name from the right-click menu) for a fresh suggestion."),
@@ -214,6 +227,8 @@ enum Help {
                 ("capturelens://screen", "Capture the whole screen"),
                 ("capturelens://window", "Capture a window"),
                 ("capturelens://area", "Capture an area"),
+                ("capturelens://scrolling", "Capture a scrolling area"),
+                ("capturelens://steps", "Start (or stop) recording steps"),
                 ("capturelens://recapture", "Capture the same area again"),
                 ("capturelens://library", "Open the library"),
                 ("capturelens://preset/<name>", "Run a preset by its name"),

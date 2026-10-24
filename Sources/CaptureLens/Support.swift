@@ -15,6 +15,8 @@ final class Activity {
     var busyReason: String? {
         if CaptureOverlay.shared.isSelecting { return "a capture is being taken" }
         if CaptureEngine.shared.isCounting { return "a capture is counting down" }
+        if ScrollCapture.shared.isRunning { return "a scrolling capture is under way" }
+        if StepRecorder.shared.isRecording { return "steps are being recorded" }
         if !LibraryStore.shared.analyzing.isEmpty { return "a capture is being named" }
         if LibraryStore.shared.isResealing { return "the library is being encrypted" }
         return nil

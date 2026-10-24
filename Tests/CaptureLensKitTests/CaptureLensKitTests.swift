@@ -584,3 +584,119 @@ private func item(_ name: String, daysAgo: Double = 0, now: Date, tags: [String]
         #expect(!SensitiveText.luhn("4111111111111112"))
     }
 }
+
+@Suite struct ScrollStitcherTests {
+    /// A tall "page": a header bar, rows of varied stripes and blocks (so every height is
+    /// distinct), and a footer bar. Returns the page and how to cut viewport frames from it.
+    func page(width: Int = 300, contentHeight: Int = 1600, header: Int = 40, footer: Int = 30) -> CGImage {
+        let height = header + contentHeight + footer
+        let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(CGColor(gray: 1, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        // Content: a different pattern on each 10-row band (top-left origin thinking).
+        for band in 0..<(contentHeight / 10) {
+            let y = height - header - (band + 1) * 10
+            let shade = CGFloat((band * 37) % 200) / 255
+            ctx.setFillColor(CGColor(gray: shade, alpha: 1))
+            let x = (band * 53) % (width - 60)
+            ctx.fill(CGRect(x: x, y: y, width: 40 + (band * 11) % 20, height: 10))
+            ctx.fill(CGRect(x: (x + 120) % (width - 30), y: y + 3, width: 25, height: 4))
+        }
+        ctx.setFillColor(CGColor(srgbRed: 0.2, green: 0.3, blue: 0.8, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: height - header, width: width, height: header))
+        ctx.setFillColor(CGColor(srgbRed: 0.8, green: 0.3, blue: 0.2, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: width, height: footer))
+        return ctx.makeImage()!
+    }
+
+    /// What a window `viewport` rows tall shows when its content is scrolled by `offset`:
+    /// the fixed header and footer, and the content in between.
+    func frame(of page: CGImage, offset: Int, viewport: Int, header: Int = 40, footer: Int = 30) -> CGImage {
+        let width = page.width
+        let ctx = CGContext(data: nil, width: width, height: viewport, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        let visible = viewport - header - footer
+        let content = page.cropping(to: CGRect(x: 0, y: header + offset, width: width, height: visible))!
+        let top = page.cropping(to: CGRect(x: 0, y: 0, width: width, height: header))!
+        let bottom = page.cropping(to: CGRect(x: 0, y: page.height - footer, width: width, height: footer))!
+        ctx.draw(top, in: CGRect(x: 0, y: viewport - header, width: width, height: header))
+        ctx.draw(content, in: CGRect(x: 0, y: footer, width: width, height: visible))
+        ctx.draw(bottom, in: CGRect(x: 0, y: 0, width: width, height: footer))
+        return ctx.makeImage()!
+    }
+
+    func rowsEqual(_ a: CGImage, _ b: CGImage) -> Bool {
+        guard a.width == b.width, a.height == b.height,
+              let sa = ScrollStitcher.signatures(of: a), let sb = ScrollStitcher.signatures(of: b) else { return false }
+        return zip(sa, sb).allSatisfy { ScrollStitcher.difference($0, $1) <= 2 }
+    }
+
+    @Test func stitchesScrolledFramesBackIntoThePage() throws {
+        let full = page()
+        let stitcher = ScrollStitcher()
+        var offset = 0
+        let viewport = 400, visible = 400 - 70
+        var results: [ScrollStitcher.Result] = []
+        // Uneven scroll steps, as a person scrolls; the last one stops at the end.
+        for step in [0, 90, 133, 61, 200, 150, 77, 240, 199, 300, 500] {
+            offset = min(offset + step, 1600 - visible)
+            results.append(stitcher.add(frame(of: full, offset: offset, viewport: viewport)))
+        }
+        #expect(results.first == .first)
+        #expect(results.contains(.unchanged), "the frame after reaching the end didn't move")
+        #expect(!results.contains(.lost))
+        let stitched = try #require(stitcher.image())
+        #expect(stitched.height == full.height, "header + all content + footer: \(stitched.height) vs \(full.height)")
+        #expect(rowsEqual(stitched, full))
+    }
+
+    @Test func aStillFrameAddsNothingAndAJumpIsSkipped() throws {
+        let full = page()
+        let stitcher = ScrollStitcher()
+        stitcher.add(frame(of: full, offset: 0, viewport: 400))
+        #expect(stitcher.add(frame(of: full, offset: 0, viewport: 400)) == .unchanged)
+        #expect(stitcher.add(frame(of: full, offset: 100, viewport: 400)) == .moved(100))
+        // A jump with no overlap can't be placed.
+        #expect(stitcher.add(frame(of: full, offset: 1200, viewport: 400)) == .lost)
+        #expect(stitcher.image()?.height == 400 + 100)
+        // Scrolling back to overlap the last frame that fit carries on from there, nothing lost.
+        #expect(stitcher.add(frame(of: full, offset: 180, viewport: 400)) == .moved(80))
+        #expect(stitcher.image()?.height == 400 + 180)
+    }
+}
+
+@Suite struct GuideTests {
+    func entries(_ count: Int) -> [GuideEntry] {
+        let helper = EditTests()
+        return (1...count).map { GuideEntry(image: helper.picture(), pointSize: CGSize(width: 200, height: 100), title: "Step title \($0)",
+                                            text: $0 % 2 == 0 ? "Some notes about this step." : "", date: Date(timeIntervalSince1970: 1_800_000_000 + Double($0) * 60)) }
+    }
+
+    @Test func everyTemplateRendersAPicture() throws {
+        for template in GuideTemplate.allCases {
+            let doc = GuideRenderer.Document(template: template, title: "How to do it", subtitle: "October 2026", entries: entries(5))
+            let image = try #require(GuideRenderer.image(doc, width: 900, scale: 1))
+            #expect(image.width == 900)
+            #expect(image.height > 300, "\(template): \(image.height)")
+        }
+        // Two to a row makes the reference sheet shorter than the steps.
+        let steps = GuideRenderer.image(.init(template: .steps, title: "T", entries: entries(6)), scale: 1)!
+        let sheet = GuideRenderer.image(.init(template: .reference, title: "T", entries: entries(6)), scale: 1)!
+        #expect(sheet.height < steps.height)
+    }
+
+    @Test func pdfPagesKeepStepsWhole() throws {
+        let doc = GuideRenderer.Document(template: .steps, title: "Long guide", entries: entries(12))
+        let pdf = try #require(GuideRenderer.pdf(doc))
+        #expect(pdf.starts(with: Data("%PDF".utf8)))
+        let pages = GuideRenderer.pageCount(pdf)
+        #expect(pages >= 3 && pages <= 12, "\(pages) pages")
+        // A picture taller than a page is shrunk to fit one page rather than cut: with the
+        // title on page 1, the whole step goes to page 2.
+        let tall = GuideEntry(image: EditTests().picture(), pointSize: CGSize(width: 400, height: 3000), title: "Tall")
+        #expect(GuideRenderer.pageCount(GuideRenderer.pdf(.init(template: .steps, title: "T", entries: [tall]))!) == 2)
+        let blocks = GuideRenderer.layout(.init(template: .steps, title: "T", entries: [tall]), contentWidth: 532, maxImageHeight: 712 - 80)
+        #expect(blocks[1].height <= 712, "the step fits on one page")
+    }
+}

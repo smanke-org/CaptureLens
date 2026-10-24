@@ -242,6 +242,10 @@ private struct MultipleCapturesView: View {
             TagPicker(placeholder: "Add a tag to all") { tags in store.setTags(Set(items.map(\.id)), add: tags) }
                 .frame(maxWidth: 360)
             HStack {
+                Button("Make a Guide…") { state.makeGuide(from: items) }
+                Button("Export…") { state.export = ExportRequest(items: items.map(\.id)) }
+            }
+            HStack {
                 Button(items.allSatisfy(\.favorite) ? "Remove from Favorites" : "Add to Favorites") {
                     store.toggleFavorite(Set(items.map(\.id)))
                 }

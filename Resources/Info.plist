@@ -93,6 +93,30 @@
 			<key>activates</key>
 			<false/>
 			<key>id</key>
+			<string>scrolling</string>
+			<key>shortTitle</key>
+			<string>Scrolling</string>
+			<key>symbol</key>
+			<string>arrow.down.doc</string>
+			<key>title</key>
+			<string>Capture a scrolling area</string>
+		</dict>
+		<dict>
+			<key>activates</key>
+			<false/>
+			<key>id</key>
+			<string>steps</string>
+			<key>shortTitle</key>
+			<string>Record steps</string>
+			<key>symbol</key>
+			<string>record.circle</string>
+			<key>title</key>
+			<string>Record steps (again to stop)</string>
+		</dict>
+		<dict>
+			<key>activates</key>
+			<false/>
+			<key>id</key>
 			<string>recapture</string>
 			<key>shortTitle</key>
 			<string>Capture again</string>

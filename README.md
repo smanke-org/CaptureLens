@@ -8,6 +8,10 @@ you can find it again by its name, the date, its tags or notes, or any text that
 CaptureLens also:
 - **Captures** the whole screen, one window (even where others cover it), an area you drag out, or a frame of an
   exact size, now or after a countdown, each from its own preset and shortcut.
+- **Captures long pages** by stitching a scrolling area into one tall picture, and **records how-tos**: a
+  capture at every click, each step numbered and named from what you clicked, ready to become a guide.
+- **Makes guides**: lay captures out as a step-by-step guide, reference sheet or timeline, as a PDF or picture,
+  and export many captures at once with the same format, size and frame.
 - **Keeps the pointer separate**, so you can show, hide, move or resize it after the capture.
 - **Marks captures up** with boxes, arrows, text, callouts, numbered steps, a pen, a highlighter, a spotlight, a
   magnifier and stamps, in any color and size. The marks stay separate from the picture, so they can be moved,
@@ -41,6 +45,7 @@ Requires macOS 26 or later. Automatic names need Apple Intelligence turned on.
 | ⌥⇧⌘4 | Capture: click a window, or drag over an area (Return for the whole screen) |
 | ⌥⇧⌘3 | Capture the whole screen |
 | ⌥⇧⌘5 | Capture a window |
+| ⌥⇧⌘6 | Scrolling capture: pick an area, scroll, and it's stitched into one tall picture |
 | ⌥⇧⌘L | Open the library |
 
 Every capture goes into the library, and onto the clipboard if you like. A preview slides into the corner:
@@ -54,7 +59,8 @@ In the library, search finds words in names, tags, notes and the text in the pic
 `tag:work`, `app:safari`, `site:example.com` and dates such as `yesterday` or `March 3`.
 
 Actions can also be run from a URL, for ToolHUD, Shortcuts or scripts: `capturelens://capture`, `screen`,
-`window`, `area`, `recapture`, `library` and `preset/<name>` (for example `open capturelens://screen`).
+`window`, `area`, `scrolling`, `steps`, `recapture`, `library` and `preset/<name>` (for example
+`open capturelens://screen`).
 
 ## Privacy
 

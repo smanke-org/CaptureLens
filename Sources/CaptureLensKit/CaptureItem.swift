@@ -111,7 +111,8 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
         id = try c.decode(UUID.self, forKey: .id)
         created = try c.decode(Date.self, forKey: .created)
         modified = try c.decodeIfPresent(Date.self, forKey: .modified) ?? created
-        kind = try c.decodeIfPresent(Kind.self, forKey: .kind) ?? .region
+        // An unknown kind (from a newer version) reads as an area rather than failing the item.
+        kind = (try? c.decodeIfPresent(String.self, forKey: .kind)).flatMap { $0.flatMap(Kind.init) } ?? .region
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
         nameIsAutomatic = try c.decodeIfPresent(Bool.self, forKey: .nameIsAutomatic) ?? true
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []

@@ -46,6 +46,8 @@ enum CaptureMode: String, Codable, CaseIterable {
     case screen
     /// A frame of a set size that follows the pointer; click to place it.
     case fixedSize
+    /// Pick an area or window, then scroll it: the frames are stitched into one tall picture.
+    case scrolling
 
     var title: String {
         switch self {
@@ -54,6 +56,7 @@ enum CaptureMode: String, Codable, CaseIterable {
         case .window: "Window"
         case .screen: "Full screen"
         case .fixedSize: "Exact size"
+        case .scrolling: "Scrolling area"
         }
     }
 
@@ -64,6 +67,7 @@ enum CaptureMode: String, Codable, CaseIterable {
         case .window: "macwindow"
         case .screen: "display"
         case .fixedSize: "aspectratio"
+        case .scrolling: "arrow.down.doc"
         }
     }
 }
@@ -113,7 +117,7 @@ struct CapturePreset: Codable, Identifiable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Capture"
-        mode = try c.decodeIfPresent(CaptureMode.self, forKey: .mode) ?? .allInOne
+        mode = (try? c.decodeIfPresent(String.self, forKey: .mode)).flatMap { $0.flatMap(CaptureMode.init) } ?? .allInOne
         delay = try c.decodeIfPresent(Int.self, forKey: .delay) ?? 0
         width = try c.decodeIfPresent(Int.self, forKey: .width) ?? 1280
         height = try c.decodeIfPresent(Int.self, forKey: .height) ?? 720
@@ -156,6 +160,8 @@ struct CapturePreset: Codable, Identifiable, Equatable {
                       mode: .region, delay: 5),
         CapturePreset(id: UUID(uuidString: "6C1D0E2A-0005-4C6E-9C1A-CA9701E50005")!, name: "1280 × 720",
                       mode: .fixedSize, width: 1280, height: 720),
+        CapturePreset(id: UUID(uuidString: "6C1D0E2A-0006-4C6E-9C1A-CA9701E50006")!, name: "Scrolling Capture", mode: .scrolling,
+                      hotKey: HotKey(keyCode: UInt32(kVK_ANSI_6), modifiers: optionShiftCommand, display: "⌥⇧⌘6")),
     ]
 }
 
@@ -217,7 +223,30 @@ final class Preferences {
 
     @ObservationIgnored private var loading = false
 
-    private init() { load() }
+    private init() {
+        load()
+        // Not from here: saving presets updates the shortcuts, which read `shared`, which is
+        // still being made.
+        DispatchQueue.main.async { MainActor.assumeIsolated { Preferences.shared.addNewDefaultPresets() } }
+    }
+
+    /// Presets added to the defaults after a version shipped join existing lists once (by
+    /// their fixed IDs, so Macs syncing settings can't end up with two). Deleting one later
+    /// is respected.
+    private func addNewDefaultPresets() {
+        let key = "presets.addedDefaults"
+        var added = Set(AppDefaults.store.stringArray(forKey: key) ?? [])
+        let newer = CapturePreset.defaults.filter { $0.mode == .scrolling }
+        for preset in newer where !added.contains(preset.id.uuidString) {
+            added.insert(preset.id.uuidString)
+            guard !presets.contains(where: { $0.id == preset.id }) else { continue }
+            // Without a shortcut if another preset already uses those keys.
+            var copy = preset
+            if let key = copy.hotKey, presets.contains(where: { $0.hotKey == key }) || libraryHotKey == key { copy.hotKey = nil }
+            presets.append(copy)
+        }
+        AppDefaults.store.set(Array(added), forKey: key)
+    }
 
     /// Puts every setting back to how a new install starts. Where the app appears,
     /// open-at-login and update checks are left alone.
