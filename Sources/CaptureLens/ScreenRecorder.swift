@@ -308,6 +308,8 @@ final class ScreenRecorder: NSObject {
                 throw GrabError(message: "Couldn't save it to the library.")
             }
             for piece in pieces where piece != movie { try? FileManager.default.removeItem(at: piece) }
+            ActivityStore.shared.record(ActivityKey.video)
+            ActivityStore.shared.record(ActivityKey.recordingSeconds, count: Int(duration.rounded()))
             Sounds.shutter()
             let after = preset?.afterCapture ?? Preferences.shared.afterCapture
             if after.opensLibrary || after == .preview || after == .previewAndLibrary { LibraryWindow.shared.show(select: item.id) }

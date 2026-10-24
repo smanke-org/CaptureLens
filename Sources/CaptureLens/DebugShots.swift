@@ -85,13 +85,15 @@ enum DebugShots {
 
             // Settings, as a new install has them.
             prefs.autoName = true
-            for tab in ["Capture", "Library"] {
+            let small = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SCREEN_HEIGHT"] != nil
+            for tab in small ? ["Capture", "Presets", "Library", "Privacy", "Activity", "General"] : ["Capture", "Library", "Activity"] {
                 SettingsWindow.shared.show(tab: tab)
                 try? await Task.sleep(for: .seconds(1.5))
                 if let settings = SettingsWindow.shared.debugWindow {
                     settings.setFrameTopLeftPoint(CGPoint(x: screen.visibleFrame.minX + 60, y: screen.visibleFrame.maxY - 20))
                     try? await Task.sleep(for: .seconds(0.5))
                     await shoot(settings, "settings-\(tab.lowercased())", out: out, note: note)
+                    note("settings-\(tab.lowercased()) window \(Int(settings.frame.width))×\(Int(settings.frame.height)) pt")
                     settings.orderOut(nil)
                 }
             }

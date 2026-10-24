@@ -31,6 +31,7 @@ final class SettingsSync {
                 stop()
                 LibrarySync.shared.start()
                 FolderSync.shared.start()
+                ActivitySync.shared.start()
             }
         }
     }

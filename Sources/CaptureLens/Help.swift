@@ -61,6 +61,7 @@ enum Help {
         case "Library": "sync"
         case "Privacy": "privacy"
         case "General": "settings-sync"
+        case "Activity": "activity"
         default: "getting-started"
         }
     }
@@ -180,6 +181,12 @@ enum Help {
             .heading("Syncing videos"),
             .text("Every recording's name, tags, notes and first frame sync like any capture. The video files themselves stay on the Mac that recorded them unless you turn on \"Sync video files\" in Settings › Library; then they go to your other Macs too, encrypted, through iCloud or your sync folder. Long recordings take a lot of space."),
             .tip("The first time, macOS asks to allow CaptureLens to use the microphone or camera, and Keys needs CaptureLens turned on in Privacy & Security › Accessibility."),
+        ]),
+
+        HelpTopic(id: "activity", title: "Activity", symbol: "chart.bar.xaxis", blocks: [
+            .text("Settings › Activity shows how many captures you've made, by kind (area, window, full screen, scrolling, steps and video), in a graph that starts at a week and widens to 30, 90 and 180 days, then a year, as you use CaptureLens. Hover over a bar to see its count."),
+            .text("Below the graph: how many videos you recorded and for how long, the apps and websites you captured most, and how many marks you added and how often you copied, saved, exported, dragged out and shared captures. Imported pictures, such as those brought over from Snagit, are counted apart, so an import doesn't swamp the graph."),
+            .text("With settings sync on, This Mac and All Macs switch between this Mac's numbers and every Mac's added together, and All Macs lists each Mac's captures. Only the numbers are kept and shared, encrypted like your settings, never what you captured. The first time, Activity starts from the captures this Mac already took."),
         ]),
 
         HelpTopic(id: "naming", title: "Automatic Names", symbol: "apple.intelligence", blocks: [

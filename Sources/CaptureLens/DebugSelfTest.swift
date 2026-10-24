@@ -450,6 +450,8 @@ enum DebugSelfTest {
         importer.start()
         for _ in 0..<120 where importer.phase != .done { try? await Task.sleep(for: .milliseconds(250)) }
         note("snagit import again: \(importer.summary.imported) imported, \(importer.summary.alreadyImported) already imported")
+        let counted = ActivityStore.shared.log.lifetimeTotals
+        note("activity counted: \(ActivityKey.captureKinds.map { "\($0) \(counted[$0] ?? 0)" }.joined(separator: ", ")); imported \(counted[ActivityKey.imported] ?? 0), marks \(counted[ActivityKey.marks] ?? 0), seconds \(counted[ActivityKey.recordingSeconds] ?? 0), exports \(counted[ActivityKey.exports] ?? 0)")
         importer.debugWindow?.orderOut(nil)
     }
 

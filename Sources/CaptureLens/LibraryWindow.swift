@@ -23,7 +23,7 @@ final class LibraryWindow: NSObject, NSWindowDelegate {
             window.title = "CaptureLens"
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
             window.toolbarStyle = .unified
-            window.setContentSize(NSSize(width: 1180, height: 760))
+            window.setContentSize(NSScreen.fitting(NSSize(width: 1180, height: 760)))
             window.minSize = NSSize(width: 860, height: 520)
             window.isReleasedWhenClosed = false
             window.delegate = self
@@ -642,6 +642,7 @@ struct CaptureGrid: View {
 
     private func dragProvider(_ item: CaptureItem) -> NSItemProvider {
         guard let url = Flattener.temporaryFile(item) else { return NSItemProvider() }
+        ActivityStore.shared.record(ActivityKey.drags)
         return NSItemProvider(contentsOf: url) ?? NSItemProvider()
     }
 }
@@ -755,7 +756,10 @@ struct CaptureMenu: View {
     var body: some View {
         let store = LibraryStore.shared
         if targets.count == 1 {
-            Button("Copy") { if let png = Flattener.png(item) { Clipboard.copy(png: png) } }
+            Button("Copy") {
+                if item.kind == .video { return VideoExport.copy(item) }
+                if let png = Flattener.png(item) { Clipboard.copy(png: png); ActivityStore.shared.record(ActivityKey.copies) }
+            }
             Button("Copy Text") { Clipboard.copy(text: item.recognizedText) }.disabled(item.recognizedText.isEmpty)
             Button("Save As…") { Exporter.save(item) }
             Button("Share…") { ShareButton.shareAtPointer([item]) }
@@ -830,7 +834,7 @@ struct ShareButton: NSViewRepresentable {
         let files = items.compactMap(Flattener.temporaryFile)
         guard !files.isEmpty else { return NSSound.beep() }
         let point = view.convert(window.mouseLocationOutsideOfEventStream, from: nil)
-        NSSharingServicePicker(items: files).show(relativeTo: CGRect(origin: point, size: CGSize(width: 1, height: 1)), of: view, preferredEdge: .maxY)
+        SharePicker.show(files, relativeTo: CGRect(origin: point, size: CGSize(width: 1, height: 1)), of: view, edge: .maxY)
     }
 
     func makeNSView(context: Context) -> NSButton {
@@ -854,7 +858,7 @@ struct ShareButton: NSViewRepresentable {
         @objc func share(_ sender: NSButton) {
             let files = items().compactMap(Flattener.temporaryFile)
             guard !files.isEmpty else { return NSSound.beep() }
-            NSSharingServicePicker(items: files).show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
+            SharePicker.show(files, relativeTo: sender.bounds, of: sender, edge: .minY)
         }
     }
 }

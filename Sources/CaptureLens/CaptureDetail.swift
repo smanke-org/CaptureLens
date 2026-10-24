@@ -131,7 +131,7 @@ struct SingleCaptureView: View {
 
     private func copy() {
         if item.kind == .video { return VideoExport.copy(item) }
-        if let png = Flattener.png(item) { Clipboard.copy(png: png); Notice.shared.show("Copied") }
+        if let png = Flattener.png(item) { Clipboard.copy(png: png); Notice.shared.show("Copied"); ActivityStore.shared.record(ActivityKey.copies) }
     }
 
     private var pictureArea: some View {
@@ -1048,7 +1048,7 @@ enum Exporter {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let format = Format(rawValue: popup.titleOfSelectedItem ?? "") ?? .png
         AppDefaults.store.set(format.rawValue, forKey: "export.format")
-        if !write(image, of: item, as: format, to: url) { Notice.shared.show(error: "Couldn't save the picture") }
+        if write(image, of: item, as: format, to: url) { ActivityStore.shared.record(ActivityKey.saves) } else { Notice.shared.show(error: "Couldn't save the picture") }
         withExtendedLifetime(handler) {}
     }
 
@@ -1099,7 +1099,7 @@ final class EditorWindow: NSObject, NSWindowDelegate {
             hosting.sizingOptions = []
             let window = NSWindow(contentViewController: hosting)
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-            window.setContentSize(NSSize(width: 1100, height: 800))
+            window.setContentSize(NSScreen.fitting(NSSize(width: 1100, height: 800)))
             window.minSize = NSSize(width: 520, height: 420)
             window.isReleasedWhenClosed = false
             window.delegate = self

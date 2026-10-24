@@ -1012,3 +1012,51 @@ extension CGImage {
         return data as Data
     }
 }
+
+@Suite struct ActivityTests {
+    let calendar: Calendar = { var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: "UTC")!; return c }()
+    func day(_ n: Int) -> Date { Date(timeIntervalSince1970: 1_790_000_000 + Double(n) * 86_400) }
+
+    @Test func countsByKindAndInBulk() {
+        var log = ActivityLog()
+        log.record(ActivityKey.area, at: day(0), calendar: calendar)
+        log.record(ActivityKey.area, at: day(1), calendar: calendar)
+        log.record(ActivityKey.video, at: day(1), calendar: calendar)
+        log.record(ActivityKey.recordingSeconds, count: 95, at: day(1), calendar: calendar)
+        log.record(ActivityKey.marks, count: 0, at: day(1), calendar: calendar)
+        #expect(log.lifetimeTotals == [ActivityKey.area: 2, ActivityKey.video: 1, ActivityKey.recordingSeconds: 95])
+        #expect(log.totals(since: day(1), calendar: calendar)[ActivityKey.area] == 1)
+        #expect(log.counts(kinds: Set(ActivityKey.captureKinds), calendar: calendar).values.reduce(0, +) == 3)
+    }
+
+    @Test func barsSplitByKindAddUp() {
+        var log = ActivityLog()
+        for n in 0..<6 { log.record(n % 2 == 0 ? ActivityKey.window : ActivityKey.screen, at: day(n), calendar: calendar) }
+        let range = CaptureStats.range(firstDay: day(0), today: day(5), calendar: calendar)
+        let total = CaptureStats.bars(counts: log.counts(kinds: Set(ActivityKey.captureKinds), calendar: calendar), range: range, today: day(5), calendar: calendar)
+        let split = CaptureStats.bars(log: log, kinds: ActivityKey.captureKinds, range: range, today: day(5), calendar: calendar)
+        #expect(split.count == ActivityKey.captureKinds.count)
+        for (i, bar) in total.enumerated() { #expect(split.reduce(0) { $0 + $1.bars[i].count } == bar.count) }
+        #expect(range == .week && total.map(\.count).reduce(0, +) == 6)
+    }
+
+    @Test func macsAddUp() {
+        var a = ActivityLog(), b = ActivityLog()
+        a.record(ActivityKey.area, at: day(3), calendar: calendar)
+        b.record(ActivityKey.area, at: day(3), calendar: calendar)
+        b.record(ActivityKey.copies, at: day(1), calendar: calendar)
+        let both = ActivityLog.combined([a, b])
+        #expect(both.lifetimeTotals[ActivityKey.area] == 2 && both.lifetimeTotals[ActivityKey.copies] == 1)
+        #expect(both.firstDay == ActivityLog.key(for: day(1), calendar: calendar))
+    }
+
+    @Test func topAppsAndSites() {
+        func item(_ app: String, _ url: String?, _ n: Int) -> CaptureItem {
+            CaptureItem(created: day(n), kind: .region, name: "x", source: .init(appName: app, url: url), pixelWidth: 1, pixelHeight: 1)
+        }
+        let items = [item("Safari", "https://www.example.com/a", 2), item("Safari", "https://docs.example.org", 3), item("Xcode", nil, 3),
+                     item("Notes", nil, 0)]
+        #expect(TopSources.apps(items, since: day(1)).map(\.name) == ["Safari", "Xcode"])
+        #expect(TopSources.websites(items, since: day(1)).map(\.site).sorted() == ["docs.example.org", "example.com"])
+    }
+}

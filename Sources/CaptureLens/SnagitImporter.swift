@@ -251,6 +251,7 @@ final class SnagitImporter {
                 let ids = store.addImported(batch)
                 for prepared in batch { try? db.set(Data([1]), forKey: Self.importedKey(prepared.fingerprint)) }
                 summary.imported += ids.count
+                ActivityStore.shared.record(ActivityKey.imported, count: ids.count)
                 summary.editable += batch.filter(\.editable).count
                 summary.asDrawn += batch.filter { !$0.editable && $0.hadMarkup }.count
                 named += ids
@@ -312,6 +313,7 @@ final class SnagitImporter {
                 try? db.set(Data([1]), forKey: key)
                 summary.videos += 1
                 summary.imported += 1
+                ActivityStore.shared.record(ActivityKey.imported)
             } catch {
                 try? FileManager.default.removeItem(at: target)
                 summary.failed += 1

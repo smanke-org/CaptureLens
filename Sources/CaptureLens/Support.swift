@@ -100,3 +100,13 @@ class FloatingPanel: NSPanel {
         setFrameOrigin(origin)
     }
 }
+
+extension NSScreen {
+    /// `size` for a window's content, made smaller where the main screen (less the menu
+    /// bar, the Dock and room for a title bar and toolbar) can't fit it: a 13-inch
+    /// MacBook Air has about 870 points of height to give.
+    @MainActor static func fitting(_ size: NSSize, chrome: CGFloat = 90) -> NSSize {
+        guard let visible = NSScreen.main?.visibleFrame else { return size }
+        return NSSize(width: min(size.width, visible.width - 40), height: min(size.height, visible.height - chrome))
+    }
+}

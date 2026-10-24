@@ -109,6 +109,7 @@ final class LibraryStore {
             item.name = CaptureNaming.clean(url.deletingPathExtension().lastPathComponent) ?? item.name
             save(item, touch: false)
             added += 1
+            ActivityStore.shared.record(ActivityKey.imported)
         }
         return added
     }

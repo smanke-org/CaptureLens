@@ -360,6 +360,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let id = sender.representedObject as? UUID, let entry = LibraryStore.shared.entry(id),
               let png = Flattener.png(entry) else { return }
         Clipboard.copy(png: png)
+        ActivityStore.shared.record(ActivityKey.copies)
         Notice.shared.show("Copied “\(entry.name)”", symbol: "doc.on.doc")
     }
     @objc func openRecent(_ sender: NSMenuItem) {

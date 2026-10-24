@@ -51,6 +51,7 @@ final class SettingsTabs: NSTabViewController {
         add("Presets", "keyboard", PresetSettings())
         add("Library", "photo.on.rectangle", LibrarySettings())
         add("Privacy", "hand.raised", PrivacySettings())
+        add("Activity", "chart.bar.xaxis", ActivitySettings())
         add("General", "gearshape", GeneralSettings())
     }
 
@@ -95,7 +96,11 @@ final class SettingsTabs: NSTabViewController {
     private func fit(_ item: NSTabViewItem) {
         guard let height = naturalHeight[item]?() else { return }
         let screen = (isViewLoaded ? view.window?.screen : nil) ?? NSScreen.main
-        let available = (screen?.visibleFrame.height ?? 800) - 120
+        var available = (screen?.visibleFrame.height ?? 800) - 120
+        #if DEBUG
+        // `CAPTURELENS_DEBUG_SCREEN_HEIGHT=<points>` sizes panes as if for a smaller screen.
+        if let height = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SCREEN_HEIGHT"].flatMap(Double.init) { available = height - 120 }
+        #endif
         item.viewController?.preferredContentSize = NSSize(width: 520, height: min(height, available))
     }
 

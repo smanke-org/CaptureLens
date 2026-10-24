@@ -183,6 +183,7 @@ final class CaptureEngine {
             Notice.shared.show(error: "Couldn't save the capture to the library")
             return
         }
+        ActivityStore.shared.recordCapture(kind, scrolling: preset?.mode == .scrolling)
         let clipboard = preset?.clipboard ?? .setting
         let copy = clipboard == .always || (clipboard == .setting && prefs.copyToClipboard)
         if copy, let png = Flattener.png(item) { Clipboard.copy(png: png) }

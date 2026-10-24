@@ -114,6 +114,7 @@ private struct PreviewView: View {
 
     private func dragProvider() -> NSItemProvider {
         guard let item, let url = Flattener.temporaryFile(item) else { return NSItemProvider() }
+        ActivityStore.shared.record(ActivityKey.drags)
         return NSItemProvider(contentsOf: url) ?? NSItemProvider()
     }
 }

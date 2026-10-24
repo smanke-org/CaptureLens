@@ -101,6 +101,7 @@ final class StepRecorder {
         let action = label.map { "Click “\($0)”" } ?? "Click in \(source.windowTitle ?? source.appName ?? "the window")"
         let store = LibraryStore.shared
         guard var item = store.add(image: image, kind: window == nil ? .screen : .window, scale: scale, source: source, cursor: nil) else { return }
+        ActivityStore.shared.recordCapture(item.kind, steps: true)
         item.name = "Step \(number): \(action)"
         item.nameIsAutomatic = false
         item.notes = action + (source.appName.map { " in \($0)" } ?? "") + "."
@@ -423,6 +424,7 @@ struct BatchExportSheet: View {
             used.insert(candidate.lowercased())
             if Exporter.write(image, of: item, as: format, to: target) { written += 1 }
         }
+        ActivityStore.shared.record(ActivityKey.exports, count: written)
         return written
     }
 

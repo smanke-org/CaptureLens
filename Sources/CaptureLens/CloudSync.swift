@@ -45,6 +45,8 @@ final class CloudSync: CKSyncEngineDelegate {
         static let settings = "Settings"
         static let capturePrefix = "Capture_"
         static func capture(_ id: UUID) -> String { capturePrefix + id.uuidString }
+        static let devicePrefix = "Device_"
+        static func device(_ id: String) -> String { devicePrefix + id }
         static let videoPrefix = "Video_"
         static func video(_ id: UUID) -> String { videoPrefix + id.uuidString }
         static func videoID(_ name: String) -> UUID? {
@@ -132,6 +134,7 @@ final class CloudSync: CKSyncEngineDelegate {
         }
         LibrarySync.shared.start()
         FolderSync.shared.start()
+        ActivitySync.shared.start()
     }
 
     func stopEngine() {
@@ -432,6 +435,9 @@ final class CloudSync: CKSyncEngineDelegate {
                 if let keyring = Self.keyring(from: record) { SettingsSync.shared.receivedKeyring(keyring) }
             case RecordType.settings:
                 if let data = record["data"] as? Data { SettingsSync.shared.receivedSettings(data) }
+            case RecordType.capture where name.hasPrefix(Name.devicePrefix):
+                // Another Mac's Activity counts.
+                if let meta = record["meta"] as? Data { ActivitySync.shared.received(meta) }
             case RecordType.capture where Name.videoID(name) != nil:
                 // A movie: kept as a file (it can be big), and only if this Mac wants movies.
                 if let id = Name.videoID(name), let asset = (record["image"] as? CKAsset)?.fileURL {
@@ -452,7 +458,9 @@ final class CloudSync: CKSyncEngineDelegate {
         for id in deletions {
             let name = id.recordName
             removeSystemFields(name)
-            if name.hasPrefix(Name.capturePrefix) {
+            if name.hasPrefix(Name.devicePrefix) {
+                ActivitySync.shared.removed(deviceID: String(name.dropFirst(Name.devicePrefix.count)))
+            } else if name.hasPrefix(Name.capturePrefix) {
                 deletedCaptures.append(name)
             } else if name == Name.keyring {
                 SettingsSync.shared.keyringChangedElsewhere()
@@ -464,6 +472,18 @@ final class CloudSync: CKSyncEngineDelegate {
     private func handleFailedSave(_ record: CKRecord, _ error: CKError) {
         let name = record.recordID.recordName
         DebugLog.write("failed save \(name): \(error.code.rawValue) \(error.localizedDescription)")
+        if name.hasPrefix(Name.devicePrefix) {
+            // Only this Mac writes its record: take the server's change tag and send it again.
+            if error.code == .serverRecordChanged, let server = error.serverRecord { saveSystemFields(server) }
+            switch error.code {
+            case .serverRecordChanged, .unknownItem, .networkFailure, .networkUnavailable, .serviceUnavailable, .requestRateLimited, .zoneBusy:
+                if error.code == .unknownItem { removeSystemFields(name) }
+                queueSave([name])
+            default:
+                NSLog("CaptureLens: couldn't save activity: \(error.localizedDescription)")
+            }
+            return
+        }
         if let id = Name.videoID(name) {
             // A movie is the same everywhere: if the server has one, it's done; otherwise retry
             // only what passes.
@@ -565,6 +585,12 @@ final class CloudSync: CKSyncEngineDelegate {
             guard let sealed = SettingsSync.shared.sealedSettings(using: key) else { return drop() }
             let record = existingRecord(name, type: RecordType.settings)
             record["data"] = sealed as CKRecordValue
+            return record
+        }
+        if name.hasPrefix(Name.devicePrefix) {
+            guard name == Name.device(DeviceIdentity.deviceID), let sealed = ActivitySync.shared.sealedOwnRecord(using: key) else { return drop() }
+            let record = existingRecord(name, type: RecordType.capture)
+            record["meta"] = sealed as CKRecordValue
             return record
         }
         if let uuid = Name.videoID(name) {

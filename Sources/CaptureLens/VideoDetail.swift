@@ -504,6 +504,7 @@ enum VideoExport {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.writeObjects([url as NSURL])
                 Notice.shared.show("Copied the video")
+                ActivityStore.shared.record(ActivityKey.copies)
             } catch {
                 Notice.shared.show(error: "Couldn't copy the video: \(error.localizedDescription)")
             }
@@ -538,6 +539,7 @@ enum VideoExport {
                 if format == .gif { try await writeGIF(source: source, info: info, to: url) }
                 else { try await writeMP4(source: source, info: info, to: url) }
                 Notice.shared.show("Saved", symbol: "checkmark.circle")
+                ActivityStore.shared.record(ActivityKey.saves)
             } catch {
                 Notice.shared.show(error: "Couldn't save the video: \(error.localizedDescription)")
             }

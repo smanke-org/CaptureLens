@@ -177,6 +177,11 @@ final class AnnotationEditor {
         let old = item.annotations
         item.annotations = new
         LibraryStore.shared.update(item)
+        // Marks added (not ones brought back by Undo or Redo).
+        if !undoManager.isUndoing && !undoManager.isRedoing {
+            let before = Set(old.map(\.id))
+            ActivityStore.shared.record(ActivityKey.marks, count: new.filter { !before.contains($0.id) }.count)
+        }
         undoManager.beginUndoGrouping()
         undoManager.registerUndo(withTarget: self) { editor in
             MainActor.assumeIsolated {
