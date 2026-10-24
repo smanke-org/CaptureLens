@@ -76,8 +76,7 @@ private struct SingleCaptureView: View {
                     }
                     .help(item.favorite ? "Remove from Favorites" : "Add to Favorites")
                     Spacer()
-                    Button { zoomToFit += 1 } label: { Label("Fit", systemImage: "arrow.up.left.and.down.right.magnifyingglass") }
-                        .help("Zoom to fit. Pinch or ⌘-scroll to zoom.")
+                    ZoomControls(fit: { zoomToFit += 1 })
                     Button(role: .destructive) { state.confirmDelete = [item.id] } label: { Label("Delete", systemImage: "trash") }
                 }
                 .labelStyle(.iconOnly)
@@ -145,6 +144,7 @@ struct ResultCanvas: NSViewRepresentable {
         scroll.contentView = clip
         context.coordinator.scroll = scroll
         scroll.documentView = context.coordinator.imageView
+        CanvasZoom.shared.attach(scroll)
         context.coordinator.show(item)
         return scroll
     }
@@ -286,6 +286,7 @@ struct CaptureCanvas: NSViewRepresentable {
         scroll.contentView = clip
         context.coordinator.attach(to: scroll)
         context.coordinator.load(item)
+        CanvasZoom.shared.attach(scroll)
         return scroll
     }
 
@@ -391,6 +392,91 @@ struct CaptureCanvas: NSViewRepresentable {
             let available = scroll.contentSize
             let factor = min(1, min((available.width - 24) / canvas.bounds.width, (available.height - 24) / canvas.bounds.height))
             scroll.magnification = max(scroll.minMagnification, factor)
+        }
+    }
+}
+
+/// How far the picture is zoomed, shared by whichever canvas is showing (Edit or Result),
+/// so the zoom slider and buttons work on it and follow pinches and ⌘-scrolls.
+@Observable
+@MainActor
+final class CanvasZoom {
+    static let shared = CanvasZoom()
+
+    static let range: ClosedRange<Double> = 0.05...8
+    private(set) var magnification: Double = 1
+    @ObservationIgnored private weak var scroll: NSScrollView?
+    @ObservationIgnored private var observer: NSObjectProtocol?
+
+    /// The canvas now showing.
+    func attach(_ scroll: NSScrollView) {
+        self.scroll = scroll
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        scroll.contentView.postsBoundsChangedNotifications = true
+        observer = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: scroll.contentView,
+                                                          queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.noteChange() }
+        }
+        noteChange()
+    }
+
+    func noteChange() {
+        guard let scroll, abs(scroll.magnification - magnification) > 0.0005 else { return }
+        magnification = scroll.magnification
+    }
+
+    /// Zooms to `value`, keeping the middle of what's in view in the middle.
+    func set(_ value: Double) {
+        guard let scroll else { return }
+        let clamped = min(max(value, Self.range.lowerBound), Self.range.upperBound)
+        let visible = scroll.contentView.bounds
+        let center = CGPoint(x: visible.midX, y: visible.midY)
+        scroll.setMagnification(clamped, centeredAt: scroll.contentView.convert(center, to: scroll.documentView))
+        noteChange()
+    }
+
+    /// Steps through the usual zoom levels.
+    func step(in zoomIn: Bool) {
+        let levels: [Double] = [0.05, 0.1, 0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8]
+        let current = magnification
+        let next = zoomIn ? levels.first { $0 > current + 0.001 } : levels.last { $0 < current - 0.001 }
+        set(next ?? current)
+    }
+}
+
+/// Zoom out, a zoom slider, zoom in, the zoom level, and Fit.
+struct ZoomControls: View {
+    let fit: () -> Void
+    @State private var zoom = CanvasZoom.shared
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button { zoom.step(in: false) } label: { Label("Zoom Out", systemImage: "minus.magnifyingglass") }
+                .disabled(zoom.magnification <= CanvasZoom.range.lowerBound + 0.001)
+                .help("Zoom out")
+            Slider(value: Binding(get: { log2(zoom.magnification) }, set: { zoom.set(pow(2, $0)) }),
+                   in: log2(CanvasZoom.range.lowerBound)...log2(CanvasZoom.range.upperBound))
+                .controlSize(.small)
+                .frame(width: 110)
+                .help("Zoom. Pinch or ⌘-scroll also zoom.")
+            Button { zoom.step(in: true) } label: { Label("Zoom In", systemImage: "plus.magnifyingglass") }
+                .disabled(zoom.magnification >= CanvasZoom.range.upperBound - 0.001)
+                .help("Zoom in")
+            Menu {
+                ForEach([0.25, 0.5, 1, 2, 4], id: \.self) { level in
+                    Button("\(Int(level * 100))%") { zoom.set(level) }
+                }
+                Divider()
+                Button("Zoom to Fit", action: fit)
+            } label: {
+                Text("\(Int((zoom.magnification * 100).rounded()))%").monospacedDigit().frame(minWidth: 38)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Pick a zoom level")
+            Button(action: fit) { Label("Fit", systemImage: "arrow.up.left.and.down.right.magnifyingglass") }
+                .help("Zoom to fit")
         }
     }
 }

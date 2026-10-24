@@ -149,6 +149,16 @@ enum DebugSelfTest {
         AnnotationEditor.shared.select(item.annotations[3].id)
         try? await Task.sleep(for: .seconds(1))
         render(window.window, to: out.appending(path: "annotated.png"))
+        let zoom = CanvasZoom.shared
+        let fitted = zoom.magnification
+        zoom.set(2)
+        let two = zoom.magnification
+        zoom.step(in: true)
+        let up = zoom.magnification
+        zoom.step(in: false); zoom.step(in: false)
+        note("zoom: fitted \(String(format: "%.2f", fitted)), set 2 → \(two), step in → \(up), two steps out → \(zoom.magnification)")
+        try? await Task.sleep(for: .milliseconds(400))
+        render(window.window, to: out.appending(path: "zoomed.png"))
 
         // Drive the layer as a person would.
         func find(_ view: NSView?) -> AnnotationLayerView? {

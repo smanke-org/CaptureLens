@@ -169,7 +169,7 @@ enum Help {
                 ("Return", "Rename the selected capture"),
                 ("Delete", "Delete the selected captures (asks first)"),
                 ("Drag a capture", "Into another app, or a pictures file onto the library to import it"),
-                ("Pinch or ⌘-scroll", "Zoom the picture"),
+                ("Pinch or ⌘-scroll", "Zoom the picture; or use the zoom slider, − and + below it, or pick a level from the percentage"),
                 ("Slider below the captures, or ⌘+ / ⌘−", "Make the thumbnails bigger or smaller"),
             ]),
         ]),
