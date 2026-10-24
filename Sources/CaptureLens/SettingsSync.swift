@@ -329,6 +329,19 @@ final class SettingsSync {
         return sealed
     }
 
+    #if DEBUG
+    /// Seals this Mac's settings with `key`, then applies them again the way another Mac
+    /// would, for the self-test. Returns the settings that went into the record.
+    func debugRoundTrip(using key: SymmetricKey, change: () -> Void) -> [String: Any]? {
+        let saved = localModified
+        guard let sealed = sealedSettings(using: key), let document = Self.document(from: sealed, key: key) else { return nil }
+        change()
+        apply(document)
+        localModified = saved
+        return document.settings
+    }
+    #endif
+
     // MARK: - Applying
 
     private struct Document {

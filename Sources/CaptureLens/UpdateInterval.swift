@@ -55,7 +55,7 @@ struct UpdateInterval: Equatable {
         value == 1 ? "every \(unit.name(for: 1))" : "every \(value) \(unit.name(for: value))"
     }
 
-    private static var defaults: UserDefaults { .standard }
+    private static var defaults: UserDefaults { AppDefaults.store }
 
     static var current: UpdateInterval {
         get {

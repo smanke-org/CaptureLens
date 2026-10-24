@@ -32,10 +32,10 @@ final class MenuHub {
 
     /// The user's choice: put this app's menu in ToolHUD's while ToolHUD is running. On by
     /// default; synced with the app's other settings.
-    var foldIntoToolHUD: Bool = UserDefaults.standard.object(forKey: MenuHub.foldKey) as? Bool ?? true {
+    var foldIntoToolHUD: Bool = AppDefaults.store.object(forKey: MenuHub.foldKey) as? Bool ?? true {
         didSet {
             guard foldIntoToolHUD != oldValue else { return }
-            UserDefaults.standard.set(foldIntoToolHUD, forKey: Self.foldKey)
+            AppDefaults.store.set(foldIntoToolHUD, forKey: Self.foldKey)
             onChange?()
             refresh()
         }
@@ -74,7 +74,7 @@ final class MenuHub {
 
     /// Re-reads the setting after another Mac's settings were adopted.
     func reload() {
-        let stored = UserDefaults.standard.object(forKey: Self.foldKey) as? Bool ?? true
+        let stored = AppDefaults.store.object(forKey: Self.foldKey) as? Bool ?? true
         if stored != foldIntoToolHUD { foldIntoToolHUD = stored } else { refresh() }
     }
 

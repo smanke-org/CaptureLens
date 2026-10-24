@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import CaptureLensKit
+import CryptoKit
 import SwiftUI
 
 /// `CAPTURELENS_DEBUG_SNAPSHOT=<folder>` (with `CAPTURELENS_DEFAULTS_SUITE` and
@@ -63,6 +64,9 @@ enum DebugSelfTest {
                 note("plaintext in database files: \(leaks.isEmpty ? "none" : leaks.joined(separator: ", "))")
             }
 
+            settingsSyncRoundTrip(note)
+            await updateCheck(note)
+
             let window = LibraryWindow.shared
             window.show(select: store.items.last?.id)
             try? await Task.sleep(for: .seconds(2))
@@ -94,6 +98,88 @@ enum DebugSelfTest {
             note("menu: \(menu.items.map(\.title).filter { !$0.isEmpty })")
             note("done")
             NSApp.terminate(nil)
+        }
+    }
+
+    /// Settings that sync survive the trip through a sealed record; per-Mac ones stay out.
+    private static func settingsSyncRoundTrip(_ note: (String) -> Void) {
+        let prefs = Preferences.shared
+        prefs.copyToClipboard = false
+        prefs.afterCapture = .openLibrary
+        var first = prefs.presets[0]
+        first.name = "Synced Preset"
+        first.delay = 3
+        prefs.update(first)
+        prefs.libraryHotKey = nil
+        AppDefaults.store.set(AppAppearance.dark.rawValue, forKey: AppAppearance.key)
+        // Set straight in the store, and "off": turning checks on would ask GitHub.
+        AppDefaults.store.set(UpdatePolicy.off.rawValue, forKey: UpdatePolicy.key)
+        UpdateInterval.current = UpdateInterval(value: 3, unit: .days)
+        AppDefaults.store.set(true, forKey: "lock.enabled")
+        let key = SymmetricKey(size: .bits256)
+        let sent = SettingsSync.shared.debugRoundTrip(using: key) {
+            // What another Mac would have before adopting: everything back to the defaults.
+            prefs.resetToDefaults()
+            AppDefaults.store.set(AppAppearance.system.rawValue, forKey: AppAppearance.key)
+            AppDefaults.store.set(UpdatePolicy.ask.rawValue, forKey: UpdatePolicy.key)
+            UpdateInterval.current = UpdateInterval(value: 1, unit: .days)
+        }
+        let checks: [(String, Bool)] = [
+            ("clipboard", prefs.copyToClipboard == false), ("after", prefs.afterCapture == .openLibrary),
+            ("preset name", prefs.presets[0].name == "Synced Preset"), ("preset delay", prefs.presets[0].delay == 3),
+            ("library key", prefs.libraryHotKey == nil), ("appearance", AppAppearance.current == .dark),
+            ("policy", AutoUpdater.shared.policy == .off),
+            ("interval", AutoUpdater.shared.interval == UpdateInterval(value: 3, unit: .days)),
+        ]
+        let ok = checks.allSatisfy(\.1)
+        if !ok { note("settings that didn't come back: \(checks.filter { !$0.1 }.map(\.0))") }
+        let keys = Set(sent?.keys.map { $0 } ?? [])
+        note("settings sync round trip: \(ok ? "ok" : "FAILED") (\(keys.count) keys)")
+        note("synced keys missing: \(Set(SettingsSync.syncedKeys).subtracting(keys).sorted())")
+        note("per-Mac keys leaked: \(["lock.enabled", "library.encrypt", "lock.afterMinutes", "lastRegion", "welcomed"].filter(keys.contains))")
+    }
+
+    /// Asks GitHub for the latest release (of `CAPTURELENS_UPDATE_REPOSITORY`, if set) and,
+    /// if it's newer, downloads and verifies it without installing.
+    private static func updateCheck(_ note: (String) -> Void) async {
+        // `CAPTURELENS_DEBUG_UPDATE_DMG=<path> <version>`: verify a disk image already on disk
+        // instead of asking GitHub, so a network filter's prompt can't get in the way.
+        if let spec = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_UPDATE_DMG"] {
+            let parts = spec.split(separator: " ").map(String.init)
+            let copy = FileManager.default.temporaryDirectory.appending(path: "selftest-\(UUID().uuidString).dmg")
+            do {
+                try FileManager.default.copyItem(at: URL(fileURLWithPath: parts[0]), to: copy)
+                let app = try UpdateController.stage(copy)
+                note("update staged: \(app.lastPathComponent)")
+                try UpdateController.verifyCandidate(app, version: parts.count > 1 ? parts[1] : "9.9.9")
+                note("update verified")
+            } catch {
+                note("update refused: \(error.localizedDescription)")
+            }
+            return
+        }
+        guard ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_UPDATE_NETWORK"] != nil else {
+            note("update check: skipped (set CAPTURELENS_DEBUG_UPDATE_NETWORK to ask GitHub)")
+            return
+        }
+        do {
+            guard let release = try await UpdateController.fetchLatestRelease() else {
+                note("update check: no releases yet (up to date)")
+                return
+            }
+            let newer = UpdateController.isNewer(release.version, than: AppInfo.version)
+            note("update check: latest \(release.version), newer: \(newer)")
+            guard newer else { return }
+            let app = try await UpdateController.downloadAndStage(release)
+            note("update staged: \(app.lastPathComponent)")
+            do {
+                try UpdateController.verifyCandidate(app, version: release.version)
+                note("update verified")
+            } catch {
+                note("update refused: \(error.localizedDescription)")
+            }
+        } catch {
+            note("update check error: \(error.localizedDescription)")
         }
     }
 

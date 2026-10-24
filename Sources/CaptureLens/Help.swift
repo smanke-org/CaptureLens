@@ -59,6 +59,7 @@ enum Help {
         case "Presets": "presets"
         case "Library": "sync"
         case "Privacy": "privacy"
+        case "General": "settings-sync"
         default: "getting-started"
         }
     }
@@ -147,6 +148,25 @@ enum Help {
             .text("Turn on \"Sync settings with your other Macs\" in Settings › General and choose a sync passphrase. Your presets, settings and library then follow you to every Mac with CaptureLens and sync on, end-to-end encrypted: neither Apple nor the developer can see them."),
             .text("On each Mac, Settings › Library can encrypt the library file itself and require Touch ID or your password to open the library. The lock comes back after a while away, when the Mac sleeps, or when the screen locks. Capturing keeps working while it's locked."),
             .tip("The sync passphrase can't be recovered. If you forget it, choose \"Forgot It? Start Over…\"; your other Macs then ask for the new one."),
+        ]),
+
+        HelpTopic(id: "settings-sync", title: "Settings on Every Mac", symbol: "arrow.triangle.2.circlepath", blocks: [
+            .text("Turn on \"Sync settings with your other Macs\" in Settings › General, choose a sync passphrase there, and enter the same passphrase on each of your Macs. From then on a change on one Mac shows up on the others."),
+            .keys([
+                ("Follow you", "Presets and their shortcuts, the library shortcut, Capture options, naming and search options, appearance, Show in Dock and menu bar, ToolHUD's menu, and update choices"),
+                ("Stay on each Mac", "Open at login, encrypting the library, and the library lock"),
+            ]),
+            .text("Your library syncs too unless you turn off \"Sync the library with your other Macs\" in Settings › Library."),
+        ]),
+
+        HelpTopic(id: "updates", title: "Updates", symbol: "arrow.down.circle", blocks: [
+            .text("Settings › General › Updates chooses what happens when a new version is out:"),
+            .keys([
+                ("Install automatically", "Downloads and checks it, then installs when no capture is under way, CaptureLens hasn't been used for 30 minutes, nothing is presenting, and your Mac has been idle for 2 minutes"),
+                ("Ask me first", "Sends a notification; nothing installs until you choose to"),
+                ("Don't check", "Only Check Now looks for updates"),
+            ]),
+            .text("\"Check every\" sets how often it looks: a number of hours, days, weeks or months (once a day to start). The menu bar menu shows \"Update to…\" when a new version is waiting. Every update must be signed by the same developer and notarized by Apple, or it isn't installed."),
         ]),
 
         HelpTopic(id: "privacy", title: "Privacy", symbol: "hand.raised", blocks: [

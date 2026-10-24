@@ -13,7 +13,14 @@ import AppKit
 ///
 /// A failure at any step aborts the update and leaves the installed app untouched.
 enum UpdateController {
-    private static let repository = "smanke-org/CaptureLens"
+    private static let repository: String = {
+        #if DEBUG
+        // Debug builds only: `CAPTURELENS_UPDATE_REPOSITORY=owner/name` checks another
+        // repository's releases, to exercise the download and verification steps.
+        if let override = ProcessInfo.processInfo.environment["CAPTURELENS_UPDATE_REPOSITORY"] { return override }
+        #endif
+        return "smanke-org/CaptureLens"
+    }()
 
     enum UpdateOutcome {
         case upToDate(current: String)
@@ -145,6 +152,11 @@ enum UpdateController {
             throw fail("The download failed.")
         }
 
+        return try stage(downloadedURL)
+    }
+
+    /// Verifies a downloaded disk image, then copies the app out of it into a staging folder.
+    static func stage(_ downloadedURL: URL) throws -> URL {
         let staging = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("CaptureLensUpdate-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
