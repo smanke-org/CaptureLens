@@ -9,6 +9,8 @@ final class CaptureEngine {
 
     private(set) var isCounting = false
     private var busy = false
+    /// A capture is under way, from the countdown until it's saved.
+    var isBusy: Bool { busy }
     /// ⌥ was down when the area or window was picked (it may be up by the time it's saved).
     var optionHeld = false
 

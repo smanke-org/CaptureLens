@@ -552,6 +552,8 @@ enum DebugCommands {
                 prefs.update(first)
             case "appearance": AppAppearance.store.set(arg, forKey: AppAppearance.key); sync.localDidChange()
             case "sync-now": sync.syncNow()
+            case "settings": SettingsWindow.shared.show()
+            case "close-windows": for window in NSApp.windows where window.isVisible { window.close() }
             case "sync-off": sync.isEnabled = false
             case "delete-zone":
                 // Removes the test zone from iCloud once a test is over.
@@ -580,6 +582,8 @@ enum DebugCommands {
             },
             "copyToClipboard": prefs.copyToClipboard, "preset0": prefs.presets.first?.name ?? "",
             "appearance": AppAppearance.current.rawValue,
+            "windows": NSApp.windows.filter { $0.isVisible && !($0 is NSPanel) && $0.canBecomeMain }.map(\.title),
+            "active": NSApp.isActive,
         ]
         if let data = try? JSONSerialization.data(withJSONObject: status, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: URL(fileURLWithPath: path))

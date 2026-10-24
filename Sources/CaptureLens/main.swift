@@ -113,6 +113,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return false
     }
 
+    /// Chosen in the app switcher (⌘-Tab) with no window open: show the library, as a Dock
+    /// click does. Checked a moment later, so a window CaptureLens is opening itself
+    /// (Settings, an alert, an Open panel, the capture overlay) means it's not that.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            MainActor.assumeIsolated {
+                guard NSApp.isActive, AppPresence.showInDock, NSApp.modalWindow == nil,
+                      !CaptureOverlay.shared.isSelecting, !CaptureEngine.shared.isBusy,
+                      !NSApp.windows.contains(where: { $0.isVisible && !($0 is NSPanel) && $0.canBecomeMain })
+                else { return }
+                self?.showLibrary()
+            }
+        }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     /// Pictures dropped on the Dock icon or opened with CaptureLens go into the library, and
