@@ -84,6 +84,7 @@ enum DebugSelfTest {
 
             await annotationTest(note, out: out)
             await adjustTest(note, out: out)
+            await phase3Test(note, out: out)
 
             CapturePreview.shared.show(store.items[0], near: NSScreen.main?.frame ?? .zero, copied: true)
             try? await Task.sleep(for: .seconds(1))
@@ -311,6 +312,69 @@ enum DebugSelfTest {
                 try? NSBitmapImageRep(cgImage: flat).representation(using: .png, properties: [:])?.write(to: out.appending(path: "no-background.png"))
             }
         }
+    }
+
+    /// Scrolling capture's stitching and saving, step labels, guides and batch export.
+    private static func phase3Test(_ note: (String) -> Void, out: URL) async {
+        let store = LibraryStore.shared
+        // A tall page, as scrolling would see it through a 300-point-high window.
+        let lines = (1...60).map { "Line \($0): the quick brown fox jumps over the lazy dog \($0 * 7)" }.joined(separator: "\n")
+        if let page = DebugImage.make(text: lines, size: CGSize(width: 700, height: 2400)) {
+            let worker = StitchWorker()
+            let frameHeight = 600 // pixels: 300 points at 2×
+            var offset = 0
+            for step in [0, 180, 250, 120, 300, 260, 200, 330, 280, 310, 400, 400, 400, 400] {
+                offset = min(offset + step, page.height - frameHeight)
+                if let frame = page.cropping(to: CGRect(x: 0, y: offset, width: page.width, height: frameHeight)) { _ = await worker.add(frame) }
+            }
+            if let tall = await worker.image() {
+                note("scrolling stitch: \(tall.width)×\(tall.height) px from a \(page.width)×\(page.height) page")
+                try? NSBitmapImageRep(cgImage: tall).representation(using: .png, properties: [:])?.write(to: out.appending(path: "scrolled.png"))
+                if let item = store.add(image: tall, kind: .region, scale: 2, source: .init(appName: "DebugHook"), cursor: nil) {
+                    note("scrolling capture saved: \(Int(item.pointSize.width))×\(Int(item.pointSize.height)) pt")
+                }
+            }
+        }
+        // A click on "Save" in a strip of buttons.
+        if let buttons = DebugImage.make(text: "Cancel          Save          Help", size: CGSize(width: 700, height: 160)) {
+            // DebugImage draws the text 30 points in and 60 down; "Save" sits about 280 points in.
+            for x in [70.0, 300.0, 520.0] {
+                let label = await StepRecorder.label(near: CGPoint(x: x, y: 80), in: buttons, scale: Double(buttons.width) / 700)
+                note("step label at x=\(Int(x)): \(label ?? "none")")
+            }
+        }
+        // A guide from the three sample captures.
+        let samples = store.items.filter { ["Pancake Recipe", "Build Failed Error", "Sales Dashboard Performance"].contains($0.name) || $0.source.appName == "Safari" || $0.source.appName == "Xcode" || $0.source.appName == "Notes" }
+        let window = LibraryWindow.shared
+        window.state.makeGuide(from: samples)
+        try? await Task.sleep(for: .seconds(2))
+        if let sheet = window.window?.attachedSheet {
+            render(sheet, to: out.appending(path: "guide-sheet.png"))
+            note("guide sheet shown for \(window.state.guide?.items.count ?? 0) captures")
+        }
+        let entries = samples.sorted { $0.created < $1.created }.compactMap { item -> GuideEntry? in
+            Flattener.image(item).map { GuideEntry(image: $0, pointSize: item.edits.outputSize(for: item.pointSize), title: item.name, text: item.notes, date: item.created) }
+        }
+        for template in GuideTemplate.allCases {
+            let doc = GuideRenderer.Document(template: template, title: "Sample Guide", subtitle: "Made by the self-test", entries: entries)
+            if let png = GuideRenderer.image(doc).flatMap({ NSBitmapImageRep(cgImage: $0).representation(using: .png, properties: [:]) }) {
+                try? png.write(to: out.appending(path: "guide-\(template.rawValue).png"))
+            }
+            if let pdf = GuideRenderer.pdf(doc) {
+                try? pdf.write(to: out.appending(path: "guide-\(template.rawValue).pdf"))
+                note("guide \(template.rawValue): \(GuideRenderer.pageCount(pdf)) PDF page(s)")
+            }
+        }
+        window.state.guide = nil
+        try? await Task.sleep(for: .milliseconds(500))
+        // Batch export.
+        let folder = out.appending(path: "batch")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let count = BatchExportSheet.export(samples.map(\.id), format: .jpeg, size: 0.5, frame: .shadow, naming: .numbered, to: folder)
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: folder.path).sorted()) ?? []
+        note("batch export: \(count) written: \(files)")
+        let again = BatchExportSheet.export(samples.prefix(1).map(\.id), format: .jpeg, size: 0.5, frame: .shadow, naming: .numbered, to: folder)
+        note("exporting again doesn't overwrite: \(again == 1 && ((try? FileManager.default.contentsOfDirectory(atPath: folder.path).count) ?? 0) == files.count + 1)")
     }
 
     private static func alpha(_ image: CGImage, x: Int, y: Int) -> Int {

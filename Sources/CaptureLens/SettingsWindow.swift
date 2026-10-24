@@ -344,6 +344,7 @@ struct PresetEditor: View {
         case .window: "Click the window to capture. It's captured on its own, even where other windows cover it."
         case .screen: "Captures the whole screen the pointer is on, straight away."
         case .fixedSize: "A frame of this size follows the pointer; click to capture what's inside."
+        case .scrolling: "Click a window or drag over an area, then scroll it (or let CaptureLens scroll it). The frames are stitched into one tall picture."
         }
     }
 }

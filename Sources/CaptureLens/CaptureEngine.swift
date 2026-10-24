@@ -101,7 +101,10 @@ final class CaptureEngine {
             return fail(error)
         }
         let size = CGSize(width: preset.width, height: preset.height)
-        guard let pick = await CaptureOverlay.shared.pick(mode: preset.mode, fixedSize: size, images: frozen) else { return }
+        // Scrolling captures start like the all-in-one: click a window or drag an area.
+        let pickMode: CaptureMode = preset.mode == .scrolling ? .allInOne : preset.mode
+        guard let pick = await CaptureOverlay.shared.pick(mode: pickMode, fixedSize: size, images: frozen) else { return }
+        if preset.mode == .scrolling { return scroll(pick, windows: windows, preset: preset) }
         switch pick {
         case .region(let region, let image, let frame):
             lastRegion = region
@@ -119,6 +122,34 @@ final class CaptureEngine {
                            cursor: cursor, preset: preset)
             } catch {
                 fail(error)
+            }
+        }
+    }
+
+    /// Hands the picked area to the scrolling capture, then saves what it stitches.
+    private func scroll(_ pick: CaptureOverlay.Pick, windows: [ScreenWindow], preset: CapturePreset) {
+        let region: ScreenRegion, frame: CGRect, window: ScreenWindow?
+        switch pick {
+        case .region(let r, _, let f): (region, frame, window) = (r, f, nil)
+        case .screen(let display, _, let f): (region, frame, window) = (ScreenRegion(displayID: display, rect: CGRect(origin: .zero, size: f.size)), f, nil)
+        case .window(let w):
+            // The window's part of its screen.
+            guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(w.frame) }) else { return }
+            let visible = w.frame.intersection(screen.frame)
+            region = ScreenRegion(displayID: screen.displayID,
+                                  rect: CGRect(x: visible.minX - screen.frame.minX, y: screen.frame.maxY - visible.maxY,
+                                               width: visible.width, height: visible.height))
+            (frame, window) = (visible, w)
+        }
+        ScrollCapture.shared.start(region: region, frame: frame) { [weak self] image in
+            guard let self, let image else { return }
+            Task {
+                // Keep the frame's width; the stitched picture is as tall as it got.
+                let scale = frame.width > 0 ? Double(image.width) / frame.width : 2
+                let tall = CGRect(x: frame.minX, y: frame.maxY - Double(image.height) / scale, width: frame.width,
+                                  height: Double(image.height) / scale)
+                await self.save(image, kind: window == nil ? .region : .window, frame: tall, display: region.displayID,
+                                window: window, windows: windows, cursor: nil, preset: preset)
             }
         }
     }

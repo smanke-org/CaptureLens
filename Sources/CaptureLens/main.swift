@@ -158,6 +158,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case "screen": run(mode: .screen)
         case "window": run(mode: .window)
         case "area": run(mode: .region)
+        case "scrolling": run(mode: .scrolling)
+        case "steps": toggleSteps()
         case "recapture": engine.captureAgain()
         case "library": showLibrary()
         case "preset":
@@ -216,6 +218,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let again = item("Capture Same Area Again", #selector(captureAgain), hotKey: prefs.captureAgainHotKey)
         again.isEnabled = engine.lastRegion != nil
         menu.addItem(again)
+
+        let recorder = StepRecorder.shared
+        menu.addItem(item(recorder.isRecording ? "Stop Recording Steps" : "Record Steps…", #selector(toggleSteps),
+                          symbol: recorder.isRecording ? "stop.circle" : "record.circle"))
 
         menu.addItem(.separator())
         menu.addItem(item("Open Library…", #selector(showLibrary), hotKey: prefs.libraryHotKey, symbol: "photo.on.rectangle"))
@@ -315,6 +321,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.run(preset)
     }
     @objc func captureAgain() { engine.captureAgain() }
+    @objc func toggleSteps() {
+        if StepRecorder.shared.isRecording { StepRecorder.shared.stop(makeGuide: true) } else { StepRecorder.shared.start() }
+    }
     @objc func showLibrary() { LibraryWindow.shared.show() }
     @objc func copyRecent(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID, let entry = LibraryStore.shared.entry(id),

@@ -96,7 +96,7 @@ final class CaptureOverlay {
 
     fileprivate var prompt: String {
         switch mode {
-        case .allInOne: "Click a window or drag over an area  ·  Return for the whole screen  ·  Hold ⌥ to open it"
+        case .allInOne, .scrolling: "Click a window or drag over an area  ·  Return for the whole screen  ·  Hold ⌥ to open it"
         case .region: "Drag over the area to capture"
         case .window: "Click the window to capture"
         case .fixedSize: "Click to capture \(Int(fixedSize.width)) × \(Int(fixedSize.height))"
@@ -158,7 +158,7 @@ private final class OverlayView: NSView {
         switch owner.mode {
         case .fixedSize:
             return NSMouseInRect(owner.pointer, screen.frame, false) ? owner.fixedFrame(in: screen) : nil
-        case .allInOne, .window:
+        case .allInOne, .window, .scrolling:
             guard let window = owner.hovered else { return nil }
             let local = window.frame.offsetBy(dx: -screen.frame.minX, dy: -screen.frame.minY)
             let visible = local.intersection(bounds)
@@ -278,7 +278,7 @@ private final class OverlayView: NSView {
             return finishRegion(rect)
         }
         switch owner.mode {
-        case .allInOne, .window:
+        case .allInOne, .window, .scrolling:
             if let window = owner.hovered { owner.finish(.window(window)) }
             else if owner.mode == .allInOne { finishScreen() }
         case .fixedSize:
