@@ -14,7 +14,7 @@ CaptureLens also:
   one click.
 - **Remembers where a capture came from**: the app, the window, and in a browser, the web page.
 - **Keeps the library private**: encrypted on your Mac, optionally locked behind Touch ID, and synced between
-  your Macs end-to-end encrypted through iCloud.
+  your Macs end-to-end encrypted through iCloud, or through a Dropbox, OneDrive or Google Drive folder.
 
 ## Download
 
@@ -58,7 +58,9 @@ check for updates.
 The library is encrypted on your Mac with AES-256, using a key kept in your keychain, and can require Touch ID
 or your password to open. Sync is end-to-end encrypted: with "Sync settings with your other Macs" on, your
 settings and library are sealed on your Mac before they reach iCloud, using a key that only your sync
-passphrase unlocks. Neither Apple nor the developer can read what's synced.
+passphrase unlocks. Neither Apple nor the developer can read what's synced. The library can sync through a
+folder that Dropbox, OneDrive, Google Drive or another sync app keeps on your Macs instead (Settings › Library);
+every file there is encrypted the same way, and settings keep syncing through iCloud.
 
 ## Updates
 

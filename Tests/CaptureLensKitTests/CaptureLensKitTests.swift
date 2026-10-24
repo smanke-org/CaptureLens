@@ -274,3 +274,46 @@ private func item(_ name: String, daysAgo: Double = 0, now: Date, tags: [String]
         #expect(decoded.tags.isEmpty && decoded.kind == .region && decoded.nameIsAutomatic)
     }
 }
+
+@Suite struct FolderLayoutTests {
+    let id = UUID(uuidString: "6C1D0E2A-0001-4C6E-9C1A-CA9701E50001")!
+
+    @Test func namesRoundTrip() {
+        let name = FolderLayout.fileName(id, .item)
+        #expect(name == "6C1D0E2A-0001-4C6E-9C1A-CA9701E50001.clitem")
+        #expect(FolderLayout.parse(name) == .init(id: id, kind: .item, isConflict: false))
+        #expect(FolderLayout.parse(FolderLayout.fileName(id, .image))?.kind == .image)
+        #expect(FolderLayout.parse(FolderLayout.fileName(id, .deletion))?.kind == .deletion)
+    }
+
+    @Test func conflictedCopiesFromEachService() {
+        let base = id.uuidString
+        for name in ["\(base) (Steve's conflicted copy 2026-10-24).clitem", "\(base)-MacBook-Pro.clitem", "\(base) (1).clitem"] {
+            #expect(FolderLayout.parse(name) == .init(id: id, kind: .item, isConflict: true), "\(name)")
+        }
+    }
+
+    @Test func ignoresOtherFiles() {
+        for name in [".DS_Store", "Folder.json", "\(id.uuidString).clitem.tmp", "~$\(id.uuidString).clitem",
+                     "notes.clitem", "\(id.uuidString).png", ".dropbox"] {
+            #expect(FolderLayout.parse(name) == nil, "\(name)")
+        }
+    }
+
+    @Test func newestVersionWinsAndDeletionWinsTies() {
+        let t = Date()
+        #expect(FolderLayout.newest([]) == nil)
+        #expect(FolderLayout.newest([(t, false), (t.addingTimeInterval(5), false), (t.addingTimeInterval(1), false)]) == 1)
+        #expect(FolderLayout.newest([(t, false), (t, true)]) == 1)
+        #expect(FolderLayout.newest([(t, true), (t, false)]) == 0)
+        #expect(FolderLayout.newest([(t.addingTimeInterval(9), false), (t, true)]) == 0)
+    }
+
+    @Test func deletionAndInfoRoundTrip() throws {
+        let deletion = SyncedDeletion(id: id, at: Date(timeIntervalSince1970: 1_800_000_000))
+        #expect(try SyncedDeletion.decode(deletion.encoded()) == deletion)
+        let info = FolderLayout.Info(keyID: "abc", created: Date(timeIntervalSince1970: 1_800_000_000))
+        let data = try JSONEncoder().encode(info)
+        #expect(try JSONDecoder().decode(FolderLayout.Info.self, from: data) == info)
+    }
+}

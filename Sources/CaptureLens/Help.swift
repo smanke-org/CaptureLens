@@ -150,6 +150,10 @@ enum Help {
 
         HelpTopic(id: "sync", title: "Sync and Security", symbol: "lock.icloud", blocks: [
             .text("Turn on \"Sync settings with your other Macs\" in Settings › General and choose a sync passphrase. Your presets, settings and library then follow you to every Mac with CaptureLens and sync on, end-to-end encrypted: neither Apple nor the developer can see them."),
+            .heading("Syncing the library through Dropbox, OneDrive or Google Drive"),
+            .text("In Settings › Library, set \"Sync the library through\" to \"Dropbox, OneDrive or Google Drive\", then choose where the folder is on this Mac: Dropbox, OneDrive and Google Drive are offered when they're installed, or pick any folder that a sync app keeps on all your Macs. CaptureLens puts a \"CaptureLens Library\" folder inside it. Settings and the sync passphrase still go through iCloud."),
+            .text("The choice is shared, so every Mac uses the same one; each Mac picks its own folder location. On a Mac that hasn't yet, the menu bar menu shows \"Choose Sync Folder…\". Every file in the folder is encrypted with your sync passphrase, so the sync service can't see your captures."),
+            .tip("Changes arrive once the sync app has synced the folder, usually within seconds. If two Macs change the same capture at once, the newest change wins and the sync app's \"conflicted copy\" files are tidied away. After moving the library to a folder, \"Remove from iCloud…\" frees the iCloud space; update CaptureLens on every Mac first."),
             .text("On each Mac, Settings › Library can encrypt the library file itself and require Touch ID or your password to open the library. The lock comes back after a while away, when the Mac sleeps, or when the screen locks. Capturing keeps working while it's locked."),
             .tip("The sync passphrase can't be recovered. If you forget it, choose \"Forgot It? Start Over…\"; your other Macs then ask for the new one."),
         ]),

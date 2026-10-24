@@ -11,7 +11,8 @@ struct PrivacySettings: View {
     @State private var screenAccess = ScreenAccess.granted
 
     private var whatSyncs: String {
-        prefs.librarySync ? "your settings and your library (captures with their names, tags and notes)" : "your settings"
+        prefs.librarySync && prefs.libraryBackend == .iCloud
+            ? "your settings and your library (captures with their names, tags and notes)" : "your settings"
     }
 
     private var syncSummary: String {
@@ -32,6 +33,9 @@ struct PrivacySettings: View {
             }
             Section {
                 PrivacyPoint("icloud", syncSummary)
+                if prefs.librarySync && prefs.libraryBackend == .folder {
+                    PrivacyPoint("folder", "Your library syncs through a folder that another sync service, such as Dropbox, OneDrive or Google Drive, keeps on your Macs. Every file CaptureLens puts there is encrypted the same way, so that service can't see your captures either.")
+                }
                 PrivacyPoint("lock", "They're encrypted on this Mac with AES-256-GCM before they're uploaded, using a key only your sync passphrase unlocks. The passphrase never leaves your Macs, so neither Apple nor the developer can read them.")
             } header: {
                 Text("iCloud")

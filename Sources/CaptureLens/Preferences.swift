@@ -16,6 +16,19 @@ enum AfterCapture: String, Codable, CaseIterable {
     }
 }
 
+/// Where the library syncs through. The same on every Mac (a synced setting), so a capture
+/// removed from one service by one Mac can't take another Mac's copy with it.
+enum LibraryBackend: String, CaseIterable {
+    case iCloud, folder
+
+    var title: String {
+        switch self {
+        case .iCloud: "iCloud"
+        case .folder: "Dropbox, OneDrive or Google Drive"
+        }
+    }
+}
+
 /// How a capture is taken.
 enum CaptureMode: String, Codable, CaseIterable {
     /// Point at a window and click it, or drag out an area.
@@ -167,6 +180,8 @@ final class Preferences {
     // MARK: Library
     /// The library travels between Macs too, while sync is on.
     var librarySync = true { didSet { save(librarySync, "librarySync"); librarySyncChanged() } }
+    /// What the library syncs through when `librarySync` is on.
+    var libraryBackend = LibraryBackend.iCloud { didSet { save(libraryBackend.rawValue, "libraryBackend"); librarySyncChanged() } }
 
     // MARK: Presets and shortcuts
     var presets: [CapturePreset] = CapturePreset.defaults { didSet { saveCodable(presets, "presets") } }
@@ -182,7 +197,7 @@ final class Preferences {
     /// Every key this class writes, so a reset can clear them all. All of them sync.
     static let keys = [
         "copyToClipboard", "afterCapture", "captureCursor", "showCursorByDefault", "windowShadow", "playSound", "showNotice",
-        "autoName", "recognizeText", "recordWebAddress", "librarySync", "presets", "libraryHotKey", "captureAgainHotKey",
+        "autoName", "recognizeText", "recordWebAddress", "librarySync", "libraryBackend", "presets", "libraryHotKey", "captureAgainHotKey",
     ]
 
     @ObservationIgnored private var loading = false
@@ -204,7 +219,8 @@ final class Preferences {
             "copyToClipboard": copyToClipboard, "afterCapture": afterCapture.rawValue, "captureCursor": captureCursor,
             "showCursorByDefault": showCursorByDefault, "windowShadow": windowShadow, "playSound": playSound,
             "showNotice": showNotice, "autoName": autoName, "recognizeText": recognizeText,
-            "recordWebAddress": recordWebAddress, "librarySync": librarySync, "presets": data(presets),
+            "recordWebAddress": recordWebAddress, "librarySync": librarySync, "libraryBackend": libraryBackend.rawValue,
+            "presets": data(presets),
             "libraryHotKey": data(libraryHotKey), "captureAgainHotKey": data(captureAgainHotKey),
         ]
     }
@@ -215,10 +231,15 @@ final class Preferences {
         librarySyncChanged(force: true)
     }
 
-    /// Library sync follows its own switch. Deferred, since it reads Preferences.
+    /// Library sync follows its own switch and service. Deferred, since it reads Preferences.
     private func librarySyncChanged(force: Bool = false) {
         guard !loading || force else { return }
-        DispatchQueue.main.async { MainActor.assumeIsolated { LibrarySync.shared.start() } }
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                LibrarySync.shared.start()
+                FolderSync.shared.start()
+            }
+        }
     }
 
     private func load() {
@@ -243,6 +264,7 @@ final class Preferences {
         recognizeText = bool("recognizeText", true)
         recordWebAddress = bool("recordWebAddress", true)
         librarySync = bool("librarySync", true)
+        libraryBackend = LibraryBackend(rawValue: string("libraryBackend")) ?? .iCloud
         presets = codable("presets", CapturePreset.defaults)
         libraryHotKey = codable("libraryHotKey", Defaults.libraryHotKey)
         captureAgainHotKey = codable("captureAgainHotKey", nil as HotKey?)

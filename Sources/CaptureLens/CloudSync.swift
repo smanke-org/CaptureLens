@@ -122,6 +122,7 @@ final class CloudSync: CKSyncEngineDelegate {
             }
         }
         LibrarySync.shared.start()
+        FolderSync.shared.start()
     }
 
     func stopEngine() {

@@ -30,6 +30,7 @@ final class SettingsSync {
             } else {
                 stop()
                 LibrarySync.shared.start()
+                FolderSync.shared.start()
             }
         }
     }
@@ -48,7 +49,10 @@ final class SettingsSync {
         /// Still asking iCloud for the keyring (or it can't be reached).
         case waitingForKeyring
     }
-    private(set) var keyState: KeyState = .waitingForKeyring
+    private(set) var keyState: KeyState = .waitingForKeyring {
+        // Folder sync needs the key too; it follows along (a moment later, off this change).
+        didSet { if keyState != oldValue { DispatchQueue.main.async { MainActor.assumeIsolated { FolderSync.shared.start() } } } }
+    }
 
     /// The data key, once this Mac has it. Read by `LibrarySync` and `CloudSync`.
     @ObservationIgnored private(set) var key: SymmetricKey?
@@ -551,7 +555,14 @@ enum DebugCommands {
                 first.name = arg
                 prefs.update(first)
             case "appearance": AppAppearance.store.set(arg, forKey: AppAppearance.key); sync.localDidChange()
-            case "sync-now": sync.syncNow()
+            case "sync-now": sync.syncNow(); FolderSync.shared.syncNow()
+            case "backend":
+                if arg == "off" { prefs.librarySync = false } else {
+                    prefs.libraryBackend = arg == "folder" ? .folder : .iCloud
+                    prefs.librarySync = true
+                }
+            case "folder": FolderSync.shared.choose(URL(fileURLWithPath: arg, isDirectory: true))
+            case "remove-icloud": LibrarySync.shared.removeFromICloud()
             case "settings": SettingsWindow.shared.show()
             case "close-windows": for window in NSApp.windows where window.isVisible { window.close() }
             case "sync-off": sync.isEnabled = false
@@ -582,6 +593,9 @@ enum DebugCommands {
             },
             "copyToClipboard": prefs.copyToClipboard, "preset0": prefs.presets.first?.name ?? "",
             "appearance": AppAppearance.current.rawValue,
+            "backend": prefs.librarySync ? prefs.libraryBackend.rawValue : "off",
+            "folderActive": FolderSync.shared.isActive, "folderError": FolderSync.shared.lastError ?? "",
+            "folderNeeded": FolderSync.shared.needsFolder, "iCloudCaptures": LibrarySync.shared.iCloudCaptureCount,
             "windows": NSApp.windows.filter { $0.isVisible && !($0 is NSPanel) && $0.canBecomeMain }.map(\.title),
             "active": NSApp.isActive,
         ]

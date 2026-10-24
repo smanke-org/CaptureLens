@@ -357,6 +357,30 @@ struct LibrarySettings: View {
     @State private var settingsSync = SettingsSync.shared
     @State private var librarySync = LibrarySync.shared
     @State private var confirmDecrypt = false
+    @State private var confirmRemoveICloud = false
+
+    /// Off, iCloud or a folder, as one choice.
+    private var libraryService: Binding<LibraryBackend?> {
+        Binding(get: { prefs.librarySync ? prefs.libraryBackend : nil }, set: { choice in
+            if let choice {
+                prefs.libraryBackend = choice
+                prefs.librarySync = true
+            } else {
+                prefs.librarySync = false
+            }
+        })
+    }
+
+    private var syncFooter: String {
+        switch (prefs.librarySync, prefs.libraryBackend) {
+        case (false, _):
+            "Captures stay on this Mac. Settings still sync through iCloud when that's on in General."
+        case (true, .iCloud):
+            "Captures, with their names, tags, notes and pictures, go to every Mac where you use CaptureLens with sync on, end-to-end encrypted with your sync passphrase. Deleting a capture removes it everywhere. Captures count against your iCloud storage."
+        case (true, .folder):
+            "Captures go into a folder that Dropbox, OneDrive, Google Drive or any other sync app keeps on all your Macs, each file encrypted with your sync passphrase, so the service can't see them. Each Mac picks where that folder is; settings still sync through iCloud. All your Macs use the same choice."
+        }
+    }
 
     var body: some View {
         Form {
@@ -399,13 +423,19 @@ struct LibrarySettings: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
-                Toggle("Sync the library with your other Macs", isOn: $prefs.librarySync)
+                Picker("Sync the library through", selection: libraryService) {
+                    Text("Don't sync").tag(nil as LibraryBackend?)
+                    Divider()
+                    ForEach(LibraryBackend.allCases, id: \.self) { Text($0.title).tag($0 as LibraryBackend?) }
+                }
                 if prefs.librarySync {
                     if !settingsSync.isEnabled {
-                        Text("Turn on “Sync settings with your other Macs” in General to start.")
+                        Text("Turn on “Sync settings with your other Macs” in General to start. The sync passphrase you choose there also encrypts the library, wherever it syncs.")
                             .foregroundStyle(.secondary)
                     } else if !settingsSync.isReady {
                         Text("Waiting for your sync passphrase in General.").foregroundStyle(.secondary)
+                    } else if prefs.libraryBackend == .folder {
+                        FolderSyncRows()
                     } else if let error = librarySync.lastError {
                         Text(error).foregroundStyle(.red)
                     } else {
@@ -422,14 +452,29 @@ struct LibrarySettings: View {
                         }
                     }
                 }
+                if prefs.librarySync && prefs.libraryBackend == .folder && settingsSync.isReady && librarySync.iCloudCaptureCount > 0 {
+                    LabeledContent {
+                        Button("Remove from iCloud…") { confirmRemoveICloud = true }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(librarySync.iCloudCaptureCount) capture\(librarySync.iCloudCaptureCount == 1 ? "" : "s") still in iCloud")
+                            Text("From before the library moved to a folder. They take up iCloud storage.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
             } header: {
-                Text("iCloud")
+                Text("Sync")
             } footer: {
-                Text("Captures, with their names, tags, notes and pictures, go to every Mac where you use CaptureLens with sync on, end-to-end encrypted with your sync passphrase. Deleting a capture removes it everywhere. Captures count against your iCloud storage.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text(syncFooter).font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+        .confirmationDialog("Remove the library's copies from iCloud?", isPresented: $confirmRemoveICloud) {
+            Button("Remove from iCloud", role: .destructive) { librarySync.removeFromICloud() }
+        } message: {
+            Text("Your captures stay on your Macs and in the sync folder; only the copies in iCloud go. First update CaptureLens to this version on every Mac that syncs: an older version still syncing the library through iCloud would delete those captures too.")
+        }
         .confirmationDialog("Stop encrypting the library on this Mac?", isPresented: $confirmDecrypt) {
             Button("Stop Encrypting", role: .destructive) { store.setEncrypted(false) }
         } message: {
@@ -708,5 +753,92 @@ final class PresenceSettings {
         MenuHub.shared.reload()
         // The status item follows the notification, which the setter only posts on a change.
         NotificationCenter.default.post(name: AppPresence.menuBarDidChange, object: nil)
+    }
+}
+
+/// Where this Mac keeps the sync folder, and how syncing through it is going.
+struct FolderSyncRows: View {
+    @State private var folder = FolderSync.shared
+    @State private var confirmReplace = false
+
+    var body: some View {
+        LabeledContent {
+            Menu(folder.folderURL == nil ? "Choose…" : "Change…") {
+                let services = FolderSync.detectedServices()
+                ForEach(services, id: \.url) { service in
+                    Button(service.name) { folder.choose(service.url) }
+                }
+                if !services.isEmpty { Divider() }
+                Button("Other Folder…") { chooseOther() }
+            }
+            .fixedSize()
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Folder on this Mac")
+                if let url = folder.folderURL {
+                    Text(Self.display(url)).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                } else {
+                    Text("Choose the Dropbox, OneDrive or Google Drive folder to sync through.")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+            }
+        }
+        if folder.folderURL != nil {
+            if folder.keyMismatch {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(folder.lastError ?? "").foregroundStyle(.red)
+                    HStack {
+                        Button("Choose Another Folder…") { chooseOther() }
+                        Button("Replace Its Contents…") { confirmReplace = true }
+                    }
+                }
+            } else if let error = folder.lastError {
+                Text(error).foregroundStyle(.red)
+            } else {
+                LabeledContent {
+                    Button("Sync Now") { folder.syncNow() }
+                } label: {
+                    if folder.isWorking {
+                        Text("Syncing…")
+                    } else if let date = folder.lastSynced {
+                        Text("Synced \(date.formatted(date: .omitted, time: .shortened))")
+                    } else {
+                        Text("Starting…")
+                    }
+                }
+            }
+        }
+        EmptyView()
+            .confirmationDialog("Replace the library in this folder?", isPresented: $confirmReplace) {
+                Button("Replace", role: .destructive) { folder.replaceFolderContents() }
+            } message: {
+                Text("The captures in it were encrypted with another sync passphrase and can't be opened. They're deleted and replaced with this Mac's library.")
+            }
+    }
+
+    private func chooseOther() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Use This Folder"
+        panel.message = "Choose a folder that your sync app keeps on all your Macs. CaptureLens puts a “CaptureLens Library” folder inside it."
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        // Picking the library folder itself means its parent.
+        folder.choose(url.lastPathComponent == FolderLayout.rootName ? url.deletingLastPathComponent() : url)
+    }
+
+    /// "Dropbox › Work" rather than the long CloudStorage path.
+    static func display(_ url: URL) -> String {
+        let storage = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/CloudStorage").path + "/"
+        var path = url.path
+        if path.hasPrefix(storage) {
+            path = String(path.dropFirst(storage.count))
+            if path.hasPrefix("GoogleDrive-") { path = "Google Drive" + (path.firstIndex(of: "/").map { String(path[$0...]) } ?? "") }
+            else if path.hasPrefix("OneDrive-") { path = "OneDrive" + (path.firstIndex(of: "/").map { String(path[$0...]) } ?? "") }
+            return path.replacingOccurrences(of: "/", with: " › ")
+        }
+        return (path as NSString).abbreviatingWithTildeInPath
     }
 }

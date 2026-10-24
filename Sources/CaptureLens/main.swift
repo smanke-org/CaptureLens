@@ -204,6 +204,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(.separator())
         }
 
+        if FolderSync.shared.needsFolder && SettingsSync.shared.isReady {
+            let choose = item("Choose Sync Folder…", #selector(chooseSyncFolder))
+            choose.image = NSImage(systemSymbolName: "folder.badge.questionmark", accessibilityDescription: nil)
+            choose.toolTip = "Your library syncs through a folder. Choose where that folder is on this Mac."
+            menu.addItem(choose)
+            menu.addItem(.separator())
+        }
+
         for item in captureItems() { menu.addItem(item) }
         let again = item("Capture Same Area Again", #selector(captureAgain), hotKey: prefs.captureAgainHotKey)
         again.isEnabled = engine.lastRegion != nil
@@ -337,6 +345,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !ScreenAccess.request() { ScreenAccess.openSettings() }
     }
     @objc func showSettings() { SettingsWindow.shared.show() }
+    @objc func chooseSyncFolder() { SettingsWindow.shared.show(tab: "Library") }
     @objc func showHelp() { HelpWindow.shared.show() }
     @objc func checkForUpdates() { UpdateController.checkForUpdates() }
     @objc func installUpdateNow() { AutoUpdater.shared.installNow() }

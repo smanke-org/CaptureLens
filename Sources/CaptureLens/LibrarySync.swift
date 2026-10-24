@@ -36,7 +36,9 @@ final class LibrarySync {
         static let imageSentPrefix = "ck.img."
     }
 
-    var isActive: Bool { SettingsSync.shared.isReady && Preferences.shared.librarySync }
+    var isActive: Bool {
+        SettingsSync.shared.isReady && Preferences.shared.librarySync && Preferences.shared.libraryBackend == .iCloud
+    }
 
     private var db: LibraryDatabase? { LibraryStore.shared.db }
 
@@ -45,6 +47,10 @@ final class LibrarySync {
     /// When the sync engine starts, and whenever sync, the key or the library setting change.
     func start() {
         guard isActive, CloudSync.shared.isRunning, let key = SettingsSync.shared.key, let db else {
+            if started, Preferences.shared.libraryBackend != .iCloud {
+                // Moved to another service: if it comes back to iCloud, everything goes up again.
+                try? db?.set(nil as String?, forKey: Keys.uploadedFor)
+            }
             started = false
             return
         }
@@ -74,7 +80,7 @@ final class LibrarySync {
     func localDidChange(_ ids: Set<UUID>) {
         if started {
             send(ids)
-        } else if SettingsSync.shared.isEnabled && Preferences.shared.librarySync {
+        } else if SettingsSync.shared.isEnabled && Preferences.shared.librarySync && Preferences.shared.libraryBackend == .iCloud {
             var outbox = loadOutbox()
             outbox.formUnion(ids)
             saveOutbox(outbox)
@@ -112,6 +118,23 @@ final class LibrarySync {
 
     private func saveOutbox(_ ids: Set<UUID>) {
         try? db?.set(ids.isEmpty ? nil : try? JSONEncoder().encode(Array(ids)), forKey: Keys.outbox)
+    }
+
+    /// Captures this Mac has seen in iCloud, for removing them once the library has moved to
+    /// a folder.
+    var iCloudCaptureCount: Int { db?.keys(withPrefix: "ck.sys." + CloudSync.Name.capturePrefix).count ?? 0 }
+
+    /// Deletes the library's copies in iCloud (not the settings). Only once every Mac syncs
+    /// the library through the folder: a Mac still syncing it through iCloud would delete
+    /// those captures too.
+    func removeFromICloud() {
+        guard !started, Preferences.shared.libraryBackend == .folder, let db else { return }
+        let names = db.keys(withPrefix: "ck.sys." + CloudSync.Name.capturePrefix).map { String($0.dropFirst("ck.sys.".count)) }
+        CloudSync.shared.queueDelete(names)
+        try? db.removeValues(withPrefix: Keys.imageSentPrefix)
+        try? db.set(nil as String?, forKey: Keys.uploadedFor)
+        CloudSync.shared.sendNow()
+        NSLog("CaptureLens: removing \(names.count) captures from iCloud")
     }
 
     // MARK: - From CloudSync

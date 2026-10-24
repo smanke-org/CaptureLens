@@ -243,6 +243,10 @@ public final class LibraryDatabase: @unchecked Sendable {
         }
     }
 
+    public func keys(withPrefix prefix: String) -> [String] {
+        (try? rows("SELECT key FROM kv WHERE substr(key, 1, ?) = ?", [prefix.count, prefix]) { Self.text($0, 0) }) ?? []
+    }
+
     public func removeValues(withPrefix prefix: String) throws {
         try run("DELETE FROM kv WHERE substr(key, 1, ?) = ?", [prefix.count, prefix])
     }

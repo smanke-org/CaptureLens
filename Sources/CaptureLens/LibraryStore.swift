@@ -81,6 +81,7 @@ final class LibraryStore {
         }
         items.insert(item, at: 0)
         LibrarySync.shared.localDidChange([item.id])
+        FolderSync.shared.localDidChange([item.id])
         analyze(item.id, image: image, rename: true)
         return item
     }
@@ -194,6 +195,7 @@ final class LibraryStore {
         for id in ids { thumbnailCache[id] = nil }
         items.removeAll { ids.contains($0.id) }
         LibrarySync.shared.localDidChange(ids)
+        FolderSync.shared.localDidChange(ids)
     }
 
     private func save(_ item: CaptureItem, touch: Bool = true) {
@@ -206,6 +208,7 @@ final class LibraryStore {
         }
         items[index] = item
         LibrarySync.shared.localDidChange([item.id])
+        FolderSync.shared.localDidChange([item.id])
     }
 
     /// Whole milliseconds, so a date read back from iCloud compares equal to the one written.
