@@ -162,7 +162,7 @@ struct ActivitySettings: View {
         } footer: {
             Group {
                 if !settingsSync.isEnabled && remotes.isEmpty {
-                    Text("Turn on “Sync settings with your other Macs” in General to add up captures from every Mac that uses CaptureLens.")
+                    Text("Turn on “Sync with your other Macs” in General to add up captures from every Mac that uses CaptureLens.")
                 } else if !settingsSync.isReady && remotes.isEmpty {
                     Text("Waiting for your sync passphrase in General to add up captures from your other Macs.")
                 } else if remotes.isEmpty {

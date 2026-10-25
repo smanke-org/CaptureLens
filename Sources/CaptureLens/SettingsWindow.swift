@@ -408,11 +408,11 @@ struct LibrarySettings: View {
     private var syncFooter: String {
         switch (prefs.librarySync, prefs.libraryBackend) {
         case (false, _):
-            "Captures stay on this Mac. Settings still sync through iCloud when that's on in General."
+            "Captures stay on this Mac. Settings still sync when that's on in General. Each Mac makes this choice for itself."
         case (true, .iCloud):
             "Captures, with their names, tags, notes and pictures, go to every Mac where you use CaptureLens with sync on, end-to-end encrypted with your sync passphrase. Deleting a capture removes it everywhere. Captures count against your iCloud storage."
         case (true, .folder):
-            "Captures go into a folder that Dropbox, OneDrive, Google Drive or any other sync app keeps on all your Macs, each file encrypted with your sync passphrase, so the service can't see them. Each Mac picks where that folder is; settings still sync through iCloud. All your Macs use the same choice."
+            "Captures go into a folder that Dropbox, OneDrive, Google Drive or any other sync app keeps on all your Macs, each file encrypted with your sync passphrase, so the service can't see them. Each Mac picks where that folder is; settings still sync through iCloud. Each Mac makes this choice for itself, so choose the same on every Mac that shares the library."
         }
     }
 
@@ -444,6 +444,14 @@ struct LibrarySettings: View {
                     Label("\(store.unreadable) capture\(store.unreadable == 1 ? " is" : "s are") encrypted with a key this Mac no longer has.",
                           systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                 }
+                Picker("Double-click a capture to open it", selection: $prefs.doubleClickOpens) {
+                    ForEach(OpenPlace.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+            } footer: {
+                Text(prefs.doubleClickOpens == .sidePane
+                     ? "A capture double-clicked in the library opens in the pane beside the captures."
+                     : "A capture double-clicked in the library opens in a window of its own, as big as you like; so does double-clicking the picture beside the captures.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section {
                 Toggle("Encrypt the library on this Mac", isOn: Binding(get: { store.isEncrypted }, set: { on in
@@ -481,7 +489,7 @@ struct LibrarySettings: View {
                 }
                 if prefs.librarySync {
                     if !settingsSync.isEnabled {
-                        Text("Turn on “Sync settings with your other Macs” in General to start. The sync passphrase you choose there also encrypts the library, wherever it syncs.")
+                        Text("Turn on “Sync with your other Macs” in General to start. The sync passphrase you choose there also encrypts the library, wherever it syncs.")
                             .foregroundStyle(.secondary)
                     } else if !settingsSync.isReady {
                         Text("Waiting for your sync passphrase in General.").foregroundStyle(.secondary)
@@ -651,8 +659,23 @@ struct GeneralSettings: View {
                 }
             }
             Section {
-                Toggle("Sync settings with your other Macs", isOn: $sync.isEnabled)
+                Toggle("Sync with your other Macs", isOn: $sync.isEnabled)
                 if sync.isEnabled {
+                    // What goes: each Mac chooses for itself.
+                    Toggle(isOn: $sync.syncsSettings) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Settings")
+                            Text("Presets, shortcuts, markup styles, appearance and the library window's layout")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    Toggle(isOn: $prefs.librarySync) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Library")
+                            Text("Your captures, through \(prefs.libraryBackend.title); choose where in Settings › Library")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                     if sync.keyState == .ready {
                         LabeledContent {
                             Button("Sync Now") { sync.syncNow() }
@@ -678,7 +701,7 @@ struct GeneralSettings: View {
             } header: {
                 Text("iCloud")
             } footer: {
-                Text("Presets, shortcuts and other settings follow you to every Mac signed in to the same iCloud account with sync turned on. Your library comes along too unless you turn that off in Library. Everything is encrypted on this Mac with your sync passphrase before it reaches iCloud. Open at login, the library lock and encryption on this Mac stay on each Mac.")
+                Text("Your settings and your library each follow you to every Mac signed in to the same iCloud account with sync turned on; switch either off on this Mac to keep it here. Everything is encrypted on this Mac with your sync passphrase before it leaves. Open at login, the library lock and encryption on this Mac stay on each Mac.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             #if !APPSTORE

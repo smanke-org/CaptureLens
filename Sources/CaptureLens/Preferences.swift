@@ -55,6 +55,18 @@ enum DialTrigger: String, CaseIterable {
     var commandOption: Bool { self != .rightClick }
 }
 
+/// Where double-clicking a capture opens it.
+enum OpenPlace: String, CaseIterable {
+    case sidePane, ownWindow
+
+    var title: String {
+        switch self {
+        case .sidePane: "Beside the captures"
+        case .ownWindow: "In its own window"
+        }
+    }
+}
+
 enum LibraryBackend: String, CaseIterable {
     case iCloud, folder
 
@@ -264,6 +276,7 @@ final class Preferences {
     var toolStyle = ToolStyle.toolbar { didSet { save(toolStyle.rawValue, "toolStyle") } }
     /// What opens the dial, when the tools are a dial.
     var dialTrigger = DialTrigger.rightClick { didSet { save(dialTrigger.rawValue, "dialTrigger") } }
+    var doubleClickOpens = OpenPlace.sidePane { didSet { save(doubleClickOpens.rawValue, "doubleClickOpens") } }
 
     // MARK: Presets and shortcuts
     var presets: [CapturePreset] = CapturePreset.defaults { didSet { saveCodable(presets, "presets") } }
@@ -276,13 +289,15 @@ final class Preferences {
                                                    display: "⌥⇧⌘L")
     }
 
-    /// Every key this class writes, so a reset can clear them all. All of them sync.
+    /// Every key this class writes, so a reset can clear them all. All but `perMacKeys` sync.
     static let keys = [
         "copyToClipboard", "afterCapture", "captureCursor", "showCursorByDefault", "windowShadow", "playSound", "showNotice",
         "autoName", "recognizeText", "recordWebAddress", "librarySync", "libraryBackend", "annotationStyle", "quickStyles", "presets", "libraryHotKey", "captureAgainHotKey",
         "recordMicrophone", "recordSystemAudio", "recordCamera", "showClicks", "showKeys", "recordFrameRate", "syncVideos",
-        "toolStyle", "dialTrigger",
+        "toolStyle", "dialTrigger", "doubleClickOpens",
     ]
+    /// Of those, the ones each Mac chooses for itself: whether, and how, it syncs the library.
+    static let perMacKeys: Set<String> = ["librarySync", "libraryBackend"]
 
     @ObservationIgnored private var loading = false
 
@@ -331,7 +346,7 @@ final class Preferences {
             "libraryHotKey": data(libraryHotKey), "captureAgainHotKey": data(captureAgainHotKey),
             "recordMicrophone": recordMicrophone, "recordSystemAudio": recordSystemAudio, "recordCamera": recordCamera,
             "showClicks": showClicks, "showKeys": showKeys, "recordFrameRate": recordFrameRate, "syncVideos": syncVideos,
-            "toolStyle": toolStyle.rawValue, "dialTrigger": dialTrigger.rawValue,
+            "toolStyle": toolStyle.rawValue, "dialTrigger": dialTrigger.rawValue, "doubleClickOpens": doubleClickOpens.rawValue,
         ]
     }
 
@@ -400,6 +415,7 @@ final class Preferences {
         syncVideos = bool("syncVideos", false)
         toolStyle = ToolStyle(rawValue: string("toolStyle")) ?? .toolbar
         dialTrigger = DialTrigger(rawValue: string("dialTrigger")) ?? .rightClick
+        doubleClickOpens = OpenPlace(rawValue: string("doubleClickOpens")) ?? .sidePane
     }
 
     private func save(_ value: Any, _ key: String) {

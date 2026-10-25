@@ -102,6 +102,19 @@ final class LibraryState {
     func fold(_ side: Side?) {
         withAnimation(.easeInOut(duration: 0.2)) { foldedSide = side }
     }
+    /// A capture double-clicked: shown beside the captures, or in a window of its own, as
+    /// Settings › Library says.
+    func open(_ id: UUID) {
+        selection = [id]
+        anchor = id
+        if Preferences.shared.doubleClickOpens == .ownWindow {
+            EditorWindow.shared.open()
+        } else {
+            showInspector = true
+            if foldedSide == .editor { fold(nil) }
+        }
+    }
+
     /// Asks the grid to scroll to an item.
     var scrollTarget: UUID?
     var confirmDelete: Set<UUID> = []
@@ -1054,7 +1067,7 @@ struct CaptureGrid: View {
                                 CaptureCell(item: item, size: state.thumbnailSize, selected: state.selection.contains(item.id),
                                             analyzing: store.analyzing.contains(item.id))
                                     .id(item.id)
-                                    .onTapGesture(count: 2) { state.selection = [item.id]; state.showInspector = true }
+                                    .onTapGesture(count: 2) { state.open(item.id) }
                                     .simultaneousGesture(TapGesture().onEnded { state.click(item.id, in: list); focused = true })
                                     .onDrag { dragProvider(item) }
                                     .contextMenu { CaptureMenu(state: state, item: item) }

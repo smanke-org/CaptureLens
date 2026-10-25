@@ -436,6 +436,15 @@ final class CheckerImageView: NSImageView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    /// Double-clicking the finished picture in the library can open it in its own window.
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2, window === LibraryWindow.shared.window, Preferences.shared.doubleClickOpens == .ownWindow {
+            EditorWindow.shared.open()
+        } else {
+            super.mouseDown(with: event)
+        }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         let square: CGFloat = 8
         NSColor(white: 0.85, alpha: 1).setFill()
@@ -902,6 +911,13 @@ final class ZoomingScrollView: NSScrollView {
         case .keyUp where event.keyCode == 49:
             guard panning else { return event }
             if !grabbing { endPanning() } else { panning = false }
+            return nil
+        case .leftMouseDown where event.clickCount == 2 && window === LibraryWindow.shared.window
+                && Preferences.shared.doubleClickOpens == .ownWindow && isPointerOver(event)
+                && AnnotationEditor.shared.tool == .select && AnnotationEditor.shared.selection == nil && !isTyping(in: window):
+            // A double-click on the picture or around it, not on a mark (the first click selected
+            // none), opens it in its own window.
+            EditorWindow.shared.open()
             return nil
         case .leftMouseDown where panning && isPointerOver(event):
             grabbing = true

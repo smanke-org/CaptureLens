@@ -35,6 +35,15 @@ final class SettingsSync {
             }
         }
     }
+    /// Whether this Mac's settings (and the library window's layout) go to and come from the
+    /// other Macs. The library has its own switch; both share the passphrase. Each Mac decides.
+    var syncsSettings: Bool {
+        didSet {
+            guard syncsSettings != oldValue else { return }
+            defaults.set(syncsSettings, forKey: Keys.settings)
+            if syncsSettings { settingsBackOn() }
+        }
+    }
     private(set) var lastSynced: Date?
     private(set) var lastSource: String?
     private(set) var lastError: String?
@@ -78,11 +87,14 @@ final class SettingsSync {
     private enum Keys {
         static let enabled = "sync.enabled"
         static let localModified = "sync.localModified"
+        static let settings = "sync.settings"
+        /// The newest settings another Mac shared while this Mac's settings sync was off.
+        static let heldSettings = "sync.heldSettings"
     }
 
     /// Settings that follow the user between Macs.
     static var syncedKeys: [String] {
-        Preferences.keys + ["showInDock", "showInMenuBar", MenuHub.foldKey, AppAppearance.key, UpdatePolicy.key,
+        Preferences.keys.filter { !Preferences.perMacKeys.contains($0) } + ["showInDock", "showInMenuBar", MenuHub.foldKey, AppAppearance.key, UpdatePolicy.key,
          UpdateInterval.valueKey, UpdateInterval.unitKey, LibraryLayout.key]
     }
 
@@ -91,6 +103,7 @@ final class SettingsSync {
     /// Must not touch Preferences: its initializer can report changes here.
     private init() {
         isEnabled = defaults.bool(forKey: Keys.enabled)
+        syncsSettings = defaults.object(forKey: Keys.settings) as? Bool ?? true
         key = SyncKeychain.loadKey()
     }
 
@@ -148,7 +161,7 @@ final class SettingsSync {
 
     /// Called whenever a synced setting really changes on this Mac.
     func localDidChange() {
-        guard !applying else { return }
+        guard !applying, syncsSettings else { return }
         localModified = Self.now
         if CloudSync.shared.isRunning { CloudSync.shared.queueSave([CloudSync.Name.settings]) }
     }
@@ -157,7 +170,8 @@ final class SettingsSync {
         // If nothing came down from iCloud, this Mac's settings become the shared copy.
         settingsSeenThisRun = false
         CloudSync.shared.afterFirstFetch { [weak self] in
-            guard let self, !self.settingsSeenThisRun, !CloudSync.shared.knowsServerRecord(CloudSync.Name.settings) else { return }
+            guard let self, self.syncsSettings, !self.settingsSeenThisRun,
+                  !CloudSync.shared.knowsServerRecord(CloudSync.Name.settings) else { return }
             CloudSync.shared.queueSave([CloudSync.Name.settings])
         }
     }
@@ -305,6 +319,11 @@ final class SettingsSync {
             return
         }
         settingsSeenThisRun = true
+        guard syncsSettings else {
+            // Kept for if settings sync comes back on here.
+            defaults.set(sealed, forKey: Keys.heldSettings)
+            return
+        }
         if let local = localModified, local > remote.updatedAt {
             CloudSync.shared.queueSave([CloudSync.Name.settings])
         } else if localModified == nil || remote.updatedAt > localModified! {
@@ -312,6 +331,18 @@ final class SettingsSync {
         } else {
             // The same settings: nothing to do.
             noteSynced(remote)
+        }
+    }
+
+    /// Settings sync turned back on: settings another Mac shared meanwhile win; otherwise this
+    /// Mac's go up.
+    private func settingsBackOn() {
+        if let held = defaults.data(forKey: Keys.heldSettings) {
+            defaults.removeObject(forKey: Keys.heldSettings)
+            receivedSettings(held)
+        } else {
+            localModified = Self.now
+            if CloudSync.shared.isRunning { CloudSync.shared.queueSave([CloudSync.Name.settings]) }
         }
     }
 
@@ -336,6 +367,32 @@ final class SettingsSync {
     }
 
     #if DEBUG
+    /// Settings another Mac shares while this Mac's settings sync is off are held, then taken
+    /// up when it's switched back on. Plays that through with a made-up key and record.
+    func debugHeldTest() -> String {
+        let savedKey = key, savedOn = syncsSettings, savedModified = localModified
+        let prefs = Preferences.shared
+        let original = prefs.playSound
+        key = SymmetricKey(size: .bits256)
+        defer { key = savedKey }
+        syncsSettings = false
+        // The other Mac's settings: this Mac's with the sound flipped, made just now.
+        localModified = Self.now.addingTimeInterval(-60)
+        prefs.playSound = !original
+        localModified = Self.now.addingTimeInterval(1)
+        guard let key, let remote = sealedSettings(using: key) else { return "couldn't seal" }
+        localModified = Self.now.addingTimeInterval(-60)
+        prefs.playSound = original
+        receivedSettings(remote)
+        var steps = ["off: held \(defaults.data(forKey: Keys.heldSettings) != nil), sound unchanged \(prefs.playSound == original)"]
+        syncsSettings = true
+        steps.append("on: held cleared \(defaults.data(forKey: Keys.heldSettings) == nil), took the other Mac's sound \(prefs.playSound == !original)")
+        prefs.playSound = original
+        syncsSettings = savedOn
+        localModified = savedModified
+        return steps.joined(separator: "; ")
+    }
+
     /// Seals this Mac's settings with `key`, then applies them again the way another Mac
     /// would, for the self-test. Returns the settings that went into the record.
     func debugRoundTrip(using key: SymmetricKey, change: () -> Void) -> [String: Any]? {
@@ -617,6 +674,35 @@ enum DebugCommands {
                     walk(root, depth: 0)
                     result = hits.joined(separator: " | ")
                 }
+            case "double-click-opens": if let place = OpenPlace(rawValue: arg) { prefs.doubleClickOpens = place }
+            case "double-click-at":
+                // `double-click-at:<x>,<y>`: double-clicks the library window there (points from its
+                // top left); reports which windows are open after.
+                let p = arg.split(separator: ",").compactMap { Double($0) }
+                if p.count == 2, let window = LibraryWindow.shared.window {
+                    window.makeKeyAndOrderFront(nil)
+                    let at = CGPoint(x: p[0], y: window.frame.height - p[1])
+                    for clicks in [1, 2] {
+                        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                            if let event = NSEvent.mouseEvent(with: type, location: at, modifierFlags: [],
+                                                              timestamp: ProcessInfo.processInfo.systemUptime,
+                                                              windowNumber: window.windowNumber, context: nil,
+                                                              eventNumber: 0, clickCount: clicks, pressure: 1) {
+                                NSApp.postEvent(event, atStart: false)
+                            }
+                            try await Task.sleep(for: .milliseconds(40))
+                        }
+                    }
+                    try await Task.sleep(for: .seconds(1))
+                }
+                let state = LibraryWindow.shared.state
+                result = "editor window \(EditorWindow.shared.isOpen), inspector \(state.showInspector), selected \(state.selectedItems.map(\.name))"
+            case "sync-settings": SettingsSync.shared.syncsSettings = arg == "on"
+            case "sync-state":
+                let defaults = AppDefaults.store
+                result = "settings \(SettingsSync.shared.syncsSettings), localModified \((defaults.object(forKey: "sync.localModified") as? Date).map { "\($0.timeIntervalSince1970)" } ?? "nil"), synced keys include librarySync \(SettingsSync.syncedKeys.contains("librarySync")) libraryBackend \(SettingsSync.syncedKeys.contains("libraryBackend")) doubleClickOpens \(SettingsSync.syncedKeys.contains("doubleClickOpens"))"
+            case "held-test": result = SettingsSync.shared.debugHeldTest()
+            case "touch-setting": prefs.playSound.toggle(); SettingsSync.shared.localDidChange()
             case "layout":
                 // The synced layout record, whether it's been taken up, and the window as it is.
                 let stored = AppDefaults.store.dictionary(forKey: LibraryLayout.key) ?? [:]

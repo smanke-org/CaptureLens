@@ -222,6 +222,7 @@ enum Help {
                 ("Drag a capture", "Into another app, or a pictures file onto the library to import it"),
                 ("Open in Its Own Window", "The window button under the picture moves the picture and its tools into a window of their own, as big as you like; it follows the capture selected in the library. Bring Back, or closing it, returns it"),
                 ("Drag the line beside the picture", "Make the captures wider or narrower; double-click the line for the usual width"),
+                ("Double-click a capture", "Opens it beside the captures or in a window of its own, as chosen in Settings › Library; with its own window chosen, double-clicking the picture beside the captures opens it there too"),
                 ("Drag the line under the picture", "Make the picture taller or shorter beside its details; double-click it for the usual height"),
                 ("‹ and › above the picture", "Fold away the captures (the picture and details fill the window) or the picture and details (the captures fill it); the slim bar left at the side brings it back"),
                 ("⋯ under the picture", "In a narrow window, Copy, Save As, Share, zoom and the rest move into this menu"),
@@ -240,7 +241,7 @@ enum Help {
         ]),
 
         HelpTopic(id: "sync", title: "Sync and Security", symbol: "lock.icloud", blocks: [
-            .text("Turn on \"Sync settings with your other Macs\" in Settings › General and choose a sync passphrase. Your presets, settings and library then follow you to every Mac with CaptureLens and sync on, end-to-end encrypted: neither Apple nor the developer can see them."),
+            .text("Turn on \"Sync with your other Macs\" in Settings › General and choose a sync passphrase. Your settings and your library then follow you to every Mac with CaptureLens and sync on, end-to-end encrypted: neither Apple nor the developer can see them. Below it, Settings and Library switch each on or off for this Mac alone."),
             .text("The library window's layout comes along too: the sidebar's width and which of its sections are open, the line between the captures and the picture, the line between the picture and its details, which panes are folded or hidden, thumbnail size, sort order, and the Info or Markup tab. Sizes go as shares of the window, so a pane that's half the window on a big screen is half on a small one. The window's own size and place stay with each Mac, and another Mac's layout is taken up the next time you open the library, so nothing moves while you work."),
             .heading("Syncing the library through Dropbox, OneDrive or Google Drive"),
             .text("In Settings › Library, set \"Sync the library through\" to \"Dropbox, OneDrive or Google Drive\", then choose where the folder is on this Mac: Dropbox, OneDrive and Google Drive are offered when they're installed, or pick any folder that a sync app keeps on all your Macs. CaptureLens puts a \"CaptureLens Library\" folder inside it. Settings and the sync passphrase still go through iCloud."),
@@ -251,12 +252,12 @@ enum Help {
         ]),
 
         HelpTopic(id: "settings-sync", title: "Settings on Every Mac", symbol: "arrow.triangle.2.circlepath", blocks: [
-            .text("Turn on \"Sync settings with your other Macs\" in Settings › General, choose a sync passphrase there, and enter the same passphrase on each of your Macs. From then on a change on one Mac shows up on the others."),
+            .text("Turn on \"Sync with your other Macs\" in Settings › General, choose a sync passphrase there, and enter the same passphrase on each of your Macs. With Settings switched on below it, a change on one Mac shows up on the others."),
             .keys([
-                ("Follow you", "Presets and their shortcuts, the library shortcut, Capture options, naming and search options, appearance, Show in Dock and menu bar, ToolHUD's menu, and update choices"),
-                ("Stay on each Mac", "Open at login, encrypting the library, and the library lock"),
+                ("Follow you", "Presets and their shortcuts, the library shortcut, Capture options, naming and search options, markup styles, what double-clicking a capture does, appearance, Show in Dock and menu bar, ToolHUD's menu, update choices, and the library window's layout"),
+                ("Stay on each Mac", "Open at login, encrypting the library, the library lock, and whether (and how) this Mac syncs its settings and library"),
             ]),
-            .text("Your library syncs too unless you turn off \"Sync the library with your other Macs\" in Settings › Library."),
+            .text("Settings and Library are separate switches: a Mac can share its settings but keep its captures, or the other way round. Settings another Mac shares while Settings is off here are taken up when you switch it back on; otherwise this Mac's settings go to the others. The library syncs through iCloud or a sync folder, chosen in Settings › Library on each Mac."),
         ]),
 
         HelpTopic(id: "updates", title: "Updates", symbol: "arrow.down.circle", blocks: [
