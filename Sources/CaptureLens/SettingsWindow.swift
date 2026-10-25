@@ -407,6 +407,23 @@ struct LibrarySettings: View {
     var body: some View {
         Form {
             Section {
+                Picker("Markup tools", selection: $prefs.toolStyle) {
+                    ForEach(ToolStyle.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                if prefs.toolStyle == .dial {
+                    Picker("Open the dial", selection: $prefs.dialTrigger) {
+                        ForEach(DialTrigger.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                }
+            } header: {
+                Text("Markup")
+            } footer: {
+                Text(prefs.toolStyle == .toolbar
+                     ? "The tools float over the picture. Drag the toolbar's grip to put it on the left, right or bottom."
+                     : "The tools open in a dial around the pointer, the ones you use most closest to the middle, with colors and line widths. Click a tool, or with ⌘⌥ held, let go over it. Esc closes the dial.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
                 LabeledContent("\(store.items.count) capture\(store.items.count == 1 ? "" : "s")") {
                     Button("Show Library") { LibraryWindow.shared.show() }
                 }

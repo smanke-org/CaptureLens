@@ -99,6 +99,7 @@ final class AnnotationEditor {
     func pick(_ newTool: Tool) {
         heldTool = nil
         tool = newTool
+        ToolUse.note(newTool)
         if newTool != .select { selection = nil; selectedCut = nil }
         if newTool != .select { showResult = false }
         if case .draw(let kind) = newTool, kind.patches { analyze() }
@@ -979,6 +980,72 @@ final class AnnotationLayerView: NSView, NSTextViewDelegate, NSMenuItemValidatio
     }
 }
 
+extension AnnotationEditor.Tool {
+    /// A stable name, for counting how often each tool is used.
+    var id: String {
+        switch self {
+        case .select: "select"
+        case .draw(let kind): kind.rawValue
+        case .crop: "crop"
+        case .cut(let axis): axis == .horizontal ? "cutAcross" : "cutDown"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .select: "Select"
+        case .draw(let kind): kind.title
+        case .crop: "Crop"
+        case .cut(let axis): axis == .horizontal ? "Cut Across" : "Cut Down"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .select: "cursorarrow"
+        case .draw(let kind): kind.symbol
+        case .crop: "crop"
+        case .cut(let axis): axis == .horizontal ? "rectangle.split.1x2" : "rectangle.split.2x1"
+        }
+    }
+
+    /// The letter that picks it, if any (shown on the palette and the dial).
+    var shortcut: String? {
+        AnnotationLayerView.toolKeys.first { $0.value == self }?.key.uppercased()
+    }
+
+    /// Every tool, select first, in the palette's order.
+    static var all: [AnnotationEditor.Tool] {
+        [.select] + ToolPalette.groups.flatMap(\.items).compactMap { item in
+            if case .tool(let tool, _, _) = item { tool } else { nil }
+        }
+    }
+}
+
+/// How often each tool is picked on this Mac, so the dial puts the favorites closest.
+@MainActor
+enum ToolUse {
+    private static let key = "editor.toolUse"
+
+    static func note(_ tool: AnnotationEditor.Tool) {
+        var counts = AppDefaults.store.dictionary(forKey: key) as? [String: Int] ?? [:]
+        counts[tool.id, default: 0] += 1
+        AppDefaults.store.set(counts, forKey: key)
+    }
+
+    /// The tools, most used first; ties (and tools never used) keep the palette's order,
+    /// led by a few everyday ones so a new dial is useful straight away.
+    static func ranked() -> [AnnotationEditor.Tool] {
+        let counts = AppDefaults.store.dictionary(forKey: key) as? [String: Int] ?? [:]
+        let everyday: [AnnotationEditor.Tool] = [.select, .draw(.arrow), .draw(.rectangle), .draw(.text), .draw(.step), .draw(.highlighter), .draw(.blur), .crop]
+        let order = everyday + AnnotationEditor.Tool.all.filter { !everyday.contains($0) }
+        return order.enumerated().sorted { a, b in
+            let ca = counts[a.element.id] ?? 0, cb = counts[b.element.id] ?? 0
+            return ca != cb ? ca > cb : a.offset < b.offset
+        }.map(\.element)
+    }
+}
+
 extension AnnotationRenderer {
     static func isEmojiStamp(_ text: String) -> Bool {
         text.count == 1 && text.unicodeScalars.contains { $0.properties.isEmoji && $0.value > 0x238C }
@@ -1027,6 +1094,16 @@ struct AnnotationToolbar: View {
 
     @ViewBuilder private var trailing: some View {
             let _ = editor.revision
+            // Toolbar or dial, also in Settings › Library.
+            Picker("Tools", selection: $prefs.toolStyle) {
+                Image(systemName: "sidebar.left").help("Tools in a toolbar over the picture").tag(ToolStyle.toolbar)
+                Image(systemName: "circle.circle").help("Tools in a dial: \(prefs.dialTrigger.hint.lowercased())").tag(ToolStyle.dial)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .help("Show the tools as a toolbar or a dial")
+            Divider().frame(height: 16)
             Button { editor.undo() } label: { Image(systemName: "arrow.uturn.backward") }
                 .disabled(!editor.undoManager.canUndo)
                 .help(editor.undoManager.canUndo ? editor.undoManager.undoMenuItemTitle : "Undo")
@@ -1198,36 +1275,77 @@ struct ToolPalette: View {
         return .tool(.draw(kind), symbol: kind.symbol, help: kind.title + (key.map { " (\($0))" } ?? ""))
     }
 
+    /// A row along the bottom of the picture rather than a column at its side.
+    var horizontal = false
+
     private let columns = [GridItem(.fixed(36), spacing: 4), GridItem(.fixed(36), spacing: 4)]
+    private let rows = [GridItem(.fixed(34), spacing: 4), GridItem(.fixed(34), spacing: 4)]
+    static let selectItem = Item.tool(.select, symbol: "cursorarrow", help: "Select, move and resize (V)")
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 10) {
-                button(.tool(.select, symbol: "cursorarrow", help: "Select, move and resize (V)"))
-                ForEach(Self.groups, id: \.title) { group in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(group.title.uppercased())
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.leading, 2)
-                        LazyVGrid(columns: columns, alignment: .leading, spacing: 4) {
-                            ForEach(group.items, id: \.self) { item in button(item) }
-                        }
+        Group {
+            if horizontal {
+                // All of it when it fits, else it scrolls sideways.
+                ViewThatFits(in: .horizontal) {
+                    row
+                    ScrollView(.horizontal, showsIndicators: false) { row }
+                }
+            } else {
+                ViewThatFits(in: .vertical) {
+                    column
+                    ScrollView(.vertical, showsIndicators: false) { column }
+                }
+                .frame(width: 92)
+            }
+        }
+        .buttonStyle(.borderless)
+    }
+
+    private var column: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            button(Self.selectItem)
+            ForEach(Self.groups, id: \.title) { group in
+                VStack(alignment: .leading, spacing: 4) {
+                    heading(group.title)
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: 4) {
+                        ForEach(group.items, id: \.self) { item in button(item) }
                     }
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 10)
         }
-        .frame(width: 92)
-        .buttonStyle(.borderless)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 10)
+    }
+
+    private var row: some View {
+        HStack(alignment: .bottom, spacing: 12) {
+            button(Self.selectItem)
+            ForEach(Self.groups, id: \.title) { group in
+                VStack(alignment: .leading, spacing: 4) {
+                    heading(group.title)
+                    LazyHGrid(rows: rows, alignment: .top, spacing: 4) {
+                        ForEach(group.items, id: \.self) { item in button(item) }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .fixedSize()
+    }
+
+    private func heading(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.leading, 2)
     }
 
     @ViewBuilder private func button(_ item: Item) -> some View {
         switch item {
         case .tool(let tool, let symbol, let help):
             let on = editor.tool == tool
-            Button { editor.pick(tool) } label: { icon(symbol, on: on) }
+            Button { editor.pick(tool) } label: { icon(symbol, on: on, key: tool.shortcut) }
                 .help(help)
         case .rotate(let clockwise):
             Button {
@@ -1266,12 +1384,18 @@ struct ToolPalette: View {
         }
     }
 
-    private func icon(_ symbol: String, on: Bool) -> some View {
+    /// A tool's button face: its symbol, and its key letter small in the corner.
+    private func icon(_ symbol: String, on: Bool, key: String? = nil) -> some View {
         Image(systemName: symbol)
             .font(.system(size: 18))
             .frame(width: 36, height: 34)
             .background(on ? Color.accentColor.opacity(0.22) : Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
             .foregroundStyle(on ? Color.accentColor : .primary)
+            .overlay(alignment: .bottomTrailing) {
+                if let key {
+                    Text(key).font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary).padding(.trailing, 3).padding(.bottom, 1)
+                }
+            }
             .contentShape(Rectangle())
     }
 }

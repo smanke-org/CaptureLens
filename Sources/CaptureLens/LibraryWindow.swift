@@ -185,6 +185,7 @@ struct LibraryView: View {
             } detail: {
                 HStack(spacing: 0) {
                     VStack(spacing: 0) {
+                        LibraryHeader(state: state)
                         FilterBar(state: state)
                         Divider()
                         CaptureGrid(state: state)
@@ -198,6 +199,8 @@ struct LibraryView: View {
                             .frame(minWidth: 360, idealWidth: 520)
                     }
                 }
+                // The tool dial floats over the grid and the picture.
+                .overlay { DialOverlay() }
             }
             .background(SidebarStaysOpen())
             .onChange(of: columns) { _, shown in
@@ -398,16 +401,40 @@ struct LibrarySidebar: View {
             let tags = LibraryQuery.tagCounts(items)
             if !tags.isEmpty {
                 Section {
-                    if tagsOpen { ForEach(tags, id: \.tag) { entry in
-                        row(entry.tag, "tag", entry.count)
-                            .tag(LibraryState.Section.tag(entry.tag))
-                            .contextMenu {
-                                Button("Rename Tag…") { renamingTag = entry.tag; newTagName = entry.tag }
-                                Button("Remove Tag from All Captures") {
-                                    store.setTags(Set(items.map(\.id)), remove: [entry.tag])
+                    // Tags as chips: many fit in little room. Click one to show its captures,
+                    // again to go back; right-click to rename or remove it.
+                    if tagsOpen {
+                        FlowLayout(spacing: 6) {
+                            ForEach(tags, id: \.tag) { entry in
+                                let on = state.section == .tag(entry.tag)
+                                Button {
+                                    state.section = on ? .all : .tag(entry.tag)
+                                    state.selection = []
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Text(entry.tag).lineLimit(1)
+                                        Text("\(entry.count)").foregroundStyle(on ? Color.white.opacity(0.75) : Color.secondary).monospacedDigit()
+                                    }
+                                    .font(.callout)
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 3)
+                                    .background(Capsule().fill(on ? Color.accentColor : Color.primary.opacity(0.08)))
+                                    .foregroundStyle(on ? Color.white : Color.primary)
+                                    .contentShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                                .help("Show captures tagged “\(entry.tag)”")
+                                .contextMenu {
+                                    Button("Rename Tag…") { renamingTag = entry.tag; newTagName = entry.tag }
+                                    Button("Remove Tag from All Captures") {
+                                        store.setTags(Set(items.map(\.id)), remove: [entry.tag])
+                                    }
                                 }
                             }
-                    } }
+                        }
+                        .padding(.vertical, 2)
+                        .selectionDisabled()
+                    }
                 } header: {
                     FoldingHeader(title: "Tags", count: tags.count, open: $tagsOpen)
                 }
@@ -439,6 +466,7 @@ struct LibrarySidebar: View {
             }
         }
         .listStyle(.sidebar)
+        .safeAreaInset(edge: .bottom) { WeekCard().padding(.horizontal, 10).padding(.bottom, 10) }
         .alert("Rename Tag", isPresented: Binding(get: { renamingTag != nil }, set: { if !$0 { renamingTag = nil } })) {
             TextField("Tag", text: $newTagName)
             Button("Rename") {
@@ -553,6 +581,33 @@ struct LibrarySidebar: View {
     }
 }
 
+/// At the foot of the sidebar: how much was captured and recorded this week, from Activity.
+private struct WeekCard: View {
+    @State private var activity = ActivityStore.shared
+
+    var body: some View {
+        let start = Calendar.current.date(byAdding: .day, value: -6, to: Calendar.current.startOfDay(for: Date())) ?? Date()
+        let totals = activity.log.totals(since: start)
+        let captures = ActivityKey.captureKinds.reduce(0) { $0 + (totals[$1] ?? 0) } + (totals[ActivityKey.imported] ?? 0)
+        let minutes = (totals[ActivityKey.recordingSeconds] ?? 0) / 60
+        Button { SettingsWindow.shared.show(tab: "Activity") } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("This week").font(.callout.weight(.semibold))
+                Text("\(captures) capture\(captures == 1 ? "" : "s")\(minutes > 0 ? " · \(minutes) min recorded" : "")")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.08)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("See more in Settings › Activity")
+    }
+}
+
 /// An app's icon, from its bundle ID.
 struct AppIcon: View {
     let bundleID: String
@@ -563,6 +618,38 @@ struct AppIcon: View {
         } else {
             Image(systemName: "app.dashed")
         }
+    }
+}
+
+// MARK: - Header
+
+/// Above the filters: what's showing, in big type, and how many captures that is.
+struct LibraryHeader: View {
+    @Bindable var state: LibraryState
+    @State private var store = LibraryStore.shared
+
+    private var title: String {
+        switch state.section {
+        case .all: "All Captures"
+        case .favorites: "Favorites"
+        case .recent: "Last 7 Days"
+        case .notes: "With Notes"
+        case .tag(let tag): "#\(tag)"
+        case .app(let key): LibraryQuery.appCounts(store.items).first { $0.key == key }?.name ?? "App"
+        case .site(let site): site
+        }
+    }
+
+    var body: some View {
+        let shown = state.results.count
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(title).font(.title2.weight(.bold)).lineLimit(1)
+            Text("\(shown) capture\(shown == 1 ? "" : "s")").font(.callout).foregroundStyle(.secondary).monospacedDigit()
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
     }
 }
 

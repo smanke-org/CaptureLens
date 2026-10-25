@@ -583,6 +583,44 @@ enum DebugCommands {
                 // `drag-sidebar:<x>`: drags the sidebar's edge to x points from the window's left;
                 // reports the sidebar's width after.
                 result = await PanTest.dragSidebar(to: Double(arg) ?? 200)
+            case "select":
+                // `select:<part of a name>`: shows that capture in the library.
+                if let item = store.items.first(where: { $0.name.localizedCaseInsensitiveContains(arg) }) {
+                    LibraryWindow.shared.show(select: item.id)
+                } else { result = "no capture named \(arg)" }
+            case "pop-out": EditorWindow.shared.open()
+            case "bring-back": EditorWindow.shared.close()
+            case "popped-dial":
+                // Opens the dial in the pop-out window's picture.
+                if let window = EditorWindow.shared.debugWindow, let scroll = PanTest.find(window.contentView) {
+                    window.makeKeyAndOrderFront(nil)
+                    scroll.openDial(at: CGPoint(x: scroll.bounds.midX, y: scroll.bounds.midY), held: false)
+                    result = scroll.debugDialInfo
+                } else { result = "no pop-out canvas" }
+            case "popped-close-dial":
+                if let window = EditorWindow.shared.debugWindow, let scroll = PanTest.find(window.contentView) { scroll.closeDial() }
+            case "set-default":
+                // `set-default:<key>=<text>`: a plain setting, as the app stores it.
+                let parts = arg.split(separator: "=", maxSplits: 1).map(String.init)
+                if parts.count == 2 { AppDefaults.store.set(parts[1], forKey: parts[0]) }
+            case "tool-style": prefs.toolStyle = ToolStyle(rawValue: arg) ?? .toolbar
+            case "dial-trigger": prefs.dialTrigger = DialTrigger(rawValue: arg) ?? .rightClick
+            case "palette": AppDefaults.store.set(arg, forKey: "editor.palettePlacement")
+            case "open-dial":
+                if let window = LibraryWindow.shared.window, let scroll = PanTest.find(window.contentView) {
+                    scroll.openDial(at: CGPoint(x: scroll.bounds.midX, y: scroll.bounds.midY), held: false)
+                    result = scroll.debugDialInfo
+                }
+            case "close-dial":
+                if let window = LibraryWindow.shared.window, let scroll = PanTest.find(window.contentView) { scroll.closeDial() }
+            case "dial-test":
+                // Right-click, Esc, then ⌘⌥ held over the picture with a tool under the pointer.
+                result = await PanTest.dial()
+            case "scroll-zoom-test":
+                // Scrolls over the library's picture with and without ⌃; reports the zoom each time.
+                if let window = LibraryWindow.shared.window, let scroll = PanTest.find(window.contentView) {
+                    result = PanTest.scrollZoom(scroll)
+                } else { result = "no canvas" }
             case "pan-test":
                 // `pan-test:<zoom>[:typing]`: zooms in, then holds Space and drags 120 pt right and
                 // 60 pt down over the picture with made-up events; reports how far it moved.
@@ -805,7 +843,61 @@ enum PanTest {
         return nil
     }
 
-    private static func find(_ view: NSView?) -> ZoomingScrollView? {
+    static func dial() async -> String {
+        guard let window = LibraryWindow.shared.window, let scroll = find(window.contentView) else { return "no canvas" }
+        let editor = AnnotationEditor.shared
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        editor.showResult = false
+        editor.pick(.draw(.rectangle))
+        try? await Task.sleep(for: .seconds(0.4))
+        let c = scroll.convert(CGPoint(x: scroll.bounds.midX, y: scroll.bounds.midY), to: nil)
+        func post(_ event: NSEvent?) async {
+            if let event { NSApp.postEvent(event, atStart: false) }
+            try? await Task.sleep(for: .milliseconds(150))
+        }
+        func flags(_ f: NSEvent.ModifierFlags, _ code: UInt16) -> NSEvent? {
+            NSEvent.keyEvent(with: .flagsChanged, location: c, modifierFlags: f, timestamp: ProcessInfo.processInfo.systemUptime,
+                             windowNumber: window.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "",
+                             isARepeat: false, keyCode: code)
+        }
+        var steps: [String] = ["style \(Preferences.shared.toolStyle.rawValue), trigger \(Preferences.shared.dialTrigger.rawValue)"]
+        await post(NSEvent.mouseEvent(with: .rightMouseDown, location: c, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                      windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        steps.append("right-click: open \(scroll.isDialOpen)")
+        await post(NSEvent.keyEvent(with: .keyDown, location: c, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                    windowNumber: window.windowNumber, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}",
+                                    isARepeat: false, keyCode: 53))
+        steps.append("Esc: open \(scroll.isDialOpen)")
+        await post(flags([.command], 55))
+        steps.append("⌘: tool \(editor.tool.id), dial \(scroll.isDialOpen)")
+        await post(flags([.command, .option], 58))
+        steps.append("⌘⌥: dial \(scroll.isDialOpen), held \(scroll.debugDialState.held), tool back to \(editor.tool.id)")
+        scroll.debugDialState.hovered = .draw(.ellipse)
+        await post(flags([.command], 58))
+        steps.append("let go of ⌥ over Ellipse: tool \(editor.tool.id), dial \(scroll.isDialOpen)")
+        await post(flags([], 55))
+        steps.append("⌘ up: tool \(editor.tool.id)")
+        return steps.joined(separator: "; ")
+    }
+
+    /// Plain scrolling must leave the zoom alone; ⌃-scrolling zooms, up in and down out.
+    static func scrollZoom(_ zoomer: ZoomingScrollView) -> String {
+        func wheel(_ lines: Int32, precise: Bool = false, control: Bool = false) {
+            guard let cg = CGEvent(scrollWheelEvent2Source: nil, units: precise ? .pixel : .line, wheelCount: 1, wheel1: lines, wheel2: 0, wheel3: 0) else { return }
+            if control { cg.flags = .maskControl }
+            if let event = NSEvent(cgEvent: cg) { zoomer.scrollWheel(with: event) }
+        }
+        let start = zoomer.magnification
+        wheel(3); wheel(-3); let plain = zoomer.magnification
+        wheel(3, control: true); let up = zoomer.magnification
+        wheel(-3, control: true); wheel(-3, control: true); let down = zoomer.magnification
+        wheel(40, precise: true, control: true); let pad = zoomer.magnification
+        return String(format: "scroll zoom: start %.2f, plain scroll %.2f (unchanged), ⌃ wheel up %.2f, ⌃ wheel down twice %.2f, ⌃ trackpad %.2f, slider follows %.2f",
+                      start, plain, up, down, pad, CanvasZoom.shared.magnification)
+    }
+
+    static func find(_ view: NSView?) -> ZoomingScrollView? {
         guard let view else { return nil }
         if let scroll = view as? ZoomingScrollView { return scroll }
         for sub in view.subviews { if let hit = find(sub) { return hit } }

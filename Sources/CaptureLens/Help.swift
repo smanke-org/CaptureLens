@@ -119,7 +119,7 @@ enum Help {
         ]),
 
         HelpTopic(id: "annotate", title: "Annotating", symbol: "pencil.and.outline", blocks: [
-            .text("Select a capture in the library and mark it up right on the picture. The tools are in the column beside it, grouped as Shapes, Text, Draw, Focus, Hide, Smart and Adjust; color, size, quick styles and undo are in the row above: boxes, ellipses, arrows, lines, text, callouts, numbered steps, a pen, a highlighter, a spotlight, a magnifier and stamps. Marks stay separate from the picture, so you can move, resize, restyle or delete them any time, and the original is never changed."),
+            .text("Select a capture in the library and mark it up right on the picture. The tools float over it in a toolbar, grouped as Shapes, Text, Draw, Focus, Hide, Smart and Adjust, each with its key letter in the corner; drag the toolbar's grip to put it on the left, right or bottom. Color, size, quick styles and undo are in the row above, and in full in the Markup tab under the picture: boxes, ellipses, arrows, lines, text, callouts, numbered steps, a pen, a highlighter, a spotlight, a magnifier and stamps. Marks stay separate from the picture, so you can move, resize, restyle or delete them any time, and the original is never changed."),
             .keys([
                 ("V", "Select: click a mark to select it, drag to move it, drag its handles to resize it"),
                 ("R  O  A  L", "Box, ellipse, arrow, line: drag to draw (hold ⇧ for squares, circles and 45° lines)"),
@@ -140,7 +140,9 @@ enum Help {
                 ("Esc", "Deselect, then go back to the select tool"),
             ]),
             .heading("Color, size and style"),
-            .text("The color button and the size menu set how new marks look, and change the selected mark. The size menu also has bold text, filled shapes and text, shadows, and Bring to Front / Send to Back. Quick styles (the palette button) keep favorite combinations one click away; Save Current Style adds yours."),
+            .text("The color button and the size menu set how new marks look, and change the selected mark. The size menu also has bold text, filled shapes and text, shadows, and Bring to Front / Send to Back. Quick styles (the palette button) keep favorite combinations one click away; Save Current Style adds yours. The Markup tab under the picture has all of these laid out, with sliders for line and text size."),
+            .heading("Toolbar or dial"),
+            .text("The two buttons at the right of the row above the picture (or Settings › Library, or the Markup tab) switch the tools between the floating toolbar and a radial dial. The dial opens around the pointer when you right-click the picture or hold ⌘⌥ over it, as you choose: the tools you use most are closest to the middle, the rest around them, with colors inside and line widths underneath. Click a tool, or with ⌘⌥ held, let go over it. Esc or a click outside closes it."),
             .heading("Smart tools"),
             .text("Edit Text changes words in the picture itself. Pick the tool and the lines of text CaptureLens found are outlined; click one and type. The old words are painted out with the background around them, and the new ones are set in a matching size, weight and color. Leave the line empty to just paint it out, or drag over any area to paint it out and type something new there."),
             .text("Smart Move picks up parts of the picture (buttons, icons, lines of text, fields) and puts them down elsewhere. Pick the tool, click a part and drag it; the spot it leaves is filled in with the background. Drag its handles to make it bigger or smaller, or drag over an area by hand to move something CaptureLens didn't outline."),
@@ -210,7 +212,7 @@ enum Help {
             .heading("Filters"),
             .text("The buttons above the captures narrow the list by date, type, tags, app and website; click × on one to clear it. The sidebar has quick lists for favorites, the last 7 days, captures with notes, and each tag, app and website. Drag its edge all the way in for just icons (tags, apps and websites become menus); drag it out again for the lists."),
             .heading("Tags and notes"),
-            .text("Type a tag and press Return to add it, or click one of your existing tags listed below the field; typing narrows the list (commas add several at once). Right-click a tag in the sidebar to rename it everywhere. More Info holds notes of any length; they're searchable too."),
+            .text("Type a tag and press Return to add it, or click one of your existing tags listed below the field; typing narrows the list (commas add several at once). Tags show as chips in the sidebar: click one to see its captures; right-click it to rename it everywhere. \"This week\" at the foot of the sidebar counts this week's captures (more in Settings › Activity). More Info holds notes of any length; they're searchable too."),
             .heading("Text in a capture"),
             .text("Select text right in the picture and copy it, as in Preview. \"Text in the capture\" in the details lists all of it."),
             .keys([
@@ -221,8 +223,9 @@ enum Help {
                 ("Open in Its Own Window", "The window button under the picture moves the picture and its tools into a window of their own, as big as you like; it follows the capture selected in the library. Bring Back, or closing it, returns it"),
                 ("⋯ under the picture", "In a narrow window, Copy, Save As, Share, zoom and the rest move into this menu"),
                 ("⌄ and ⌃ under the picture", "Fold away the details (more room to annotate) or the picture (more room for the details); the slim bar left behind brings it back"),
-                ("Scroll over the picture", "Zoom in and out around the pointer while editing; hold ⇧ to move around instead, or hold Space and drag"),
-                ("Pinch or ⌘-scroll", "Zoom the picture; or use the zoom slider, − and + below it, or pick a level from the percentage"),
+                ("Scroll over the picture", "Move around a zoomed-in picture; or hold Space and drag"),
+                ("Pinch or ⌃-scroll", "Zoom in and out around the pointer; or use the zoom slider, − and + below it, or pick a level from the percentage"),
+                ("Info and Markup", "Under the picture: Info has the name, tags, notes and where it came from; Markup has colors, sizes, styles and how the tools are shown"),
                 ("Slider below the captures, or ⌘+ / ⌘−", "Make the thumbnails bigger or smaller"),
             ]),
             .heading("Moving from Snagit"),

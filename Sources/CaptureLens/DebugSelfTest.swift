@@ -171,18 +171,7 @@ enum DebugSelfTest {
             return nil
         }
         if let zoomer = findZoomer(window.window?.contentView) {
-            func wheel(_ lines: Int32, precise: Bool = false, shift: Bool = false) {
-                guard let cg = CGEvent(scrollWheelEvent2Source: nil, units: precise ? .pixel : .line, wheelCount: 1, wheel1: lines, wheel2: 0, wheel3: 0) else { return }
-                if shift { cg.flags = .maskShift }
-                if let event = NSEvent(cgEvent: cg) { zoomer.scrollWheel(with: event) }
-            }
-            let start = zoomer.magnification
-            wheel(3); let up = zoomer.magnification
-            wheel(-3); wheel(-3); let down = zoomer.magnification
-            wheel(5, shift: true); let shifted = zoomer.magnification
-            wheel(40, precise: true); let pad = zoomer.magnification
-            note(String(format: "scroll zoom: start %.2f, wheel up %.2f, wheel down twice %.2f, shift-scroll %.2f (unchanged), trackpad %.2f, slider follows %.2f",
-                        start, up, down, shifted, pad, CanvasZoom.shared.magnification))
+            note(PanTest.scrollZoom(zoomer))
         } else {
             note("scroll zoom: no zooming scroll view found")
         }

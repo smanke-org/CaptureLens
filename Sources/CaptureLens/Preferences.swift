@@ -26,6 +26,35 @@ enum AfterCapture: String, Codable, CaseIterable {
 
 /// Where the library syncs through. The same on every Mac (a synced setting), so a capture
 /// removed from one service by one Mac can't take another Mac's copy with it.
+/// How the markup tools are offered: a floating toolbar over the picture, or a dial that
+/// opens around the pointer.
+enum ToolStyle: String, CaseIterable {
+    case toolbar, dial
+
+    var title: String {
+        switch self {
+        case .toolbar: "Toolbar"
+        case .dial: "Radial dial"
+        }
+    }
+}
+
+/// What opens the radial dial over the picture.
+enum DialTrigger: String, CaseIterable {
+    case rightClick, commandOption, either
+
+    var title: String {
+        switch self {
+        case .rightClick: "Right-click the picture"
+        case .commandOption: "Hold ⌘⌥ over the picture"
+        case .either: "Either"
+        }
+    }
+
+    var rightClick: Bool { self != .commandOption }
+    var commandOption: Bool { self != .rightClick }
+}
+
 enum LibraryBackend: String, CaseIterable {
     case iCloud, folder
 
@@ -231,6 +260,10 @@ final class Preferences {
     var annotationStyle = AnnotationStyle.standard { didSet { saveCodable(annotationStyle, "annotationStyle") } }
     /// Saved styles, one click away in the annotation toolbar.
     var quickStyles = AnnotationStyle.quickDefaults { didSet { saveCodable(quickStyles, "quickStyles") } }
+    /// The markup tools as a floating toolbar or a radial dial.
+    var toolStyle = ToolStyle.toolbar { didSet { save(toolStyle.rawValue, "toolStyle") } }
+    /// What opens the dial, when the tools are a dial.
+    var dialTrigger = DialTrigger.rightClick { didSet { save(dialTrigger.rawValue, "dialTrigger") } }
 
     // MARK: Presets and shortcuts
     var presets: [CapturePreset] = CapturePreset.defaults { didSet { saveCodable(presets, "presets") } }
@@ -248,6 +281,7 @@ final class Preferences {
         "copyToClipboard", "afterCapture", "captureCursor", "showCursorByDefault", "windowShadow", "playSound", "showNotice",
         "autoName", "recognizeText", "recordWebAddress", "librarySync", "libraryBackend", "annotationStyle", "quickStyles", "presets", "libraryHotKey", "captureAgainHotKey",
         "recordMicrophone", "recordSystemAudio", "recordCamera", "showClicks", "showKeys", "recordFrameRate", "syncVideos",
+        "toolStyle", "dialTrigger",
     ]
 
     @ObservationIgnored private var loading = false
@@ -297,6 +331,7 @@ final class Preferences {
             "libraryHotKey": data(libraryHotKey), "captureAgainHotKey": data(captureAgainHotKey),
             "recordMicrophone": recordMicrophone, "recordSystemAudio": recordSystemAudio, "recordCamera": recordCamera,
             "showClicks": showClicks, "showKeys": showKeys, "recordFrameRate": recordFrameRate, "syncVideos": syncVideos,
+            "toolStyle": toolStyle.rawValue, "dialTrigger": dialTrigger.rawValue,
         ]
     }
 
@@ -363,6 +398,8 @@ final class Preferences {
         showKeys = bool("showKeys", false)
         recordFrameRate = d.object(forKey: "recordFrameRate") as? Int ?? 30
         syncVideos = bool("syncVideos", false)
+        toolStyle = ToolStyle(rawValue: string("toolStyle")) ?? .toolbar
+        dialTrigger = DialTrigger(rawValue: string("dialTrigger")) ?? .rightClick
     }
 
     private func save(_ value: Any, _ key: String) {

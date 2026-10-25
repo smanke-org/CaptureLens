@@ -35,6 +35,7 @@ struct SingleCaptureView: View {
     @State private var store = LibraryStore.shared
     @State private var zoomToFit = 0
     @State private var editor = AnnotationEditor.shared
+    @State private var prefs = Preferences.shared
     /// A pane folded away to give the other all the room; remembered between captures.
     @AppStorage("library.collapsedPane", store: AppDefaults.store) private var collapsedRaw = ""
     private var collapsed: Pane? {
@@ -44,9 +45,29 @@ struct SingleCaptureView: View {
 
     enum Pane: String { case picture, details }
 
+    /// Info (name, tags, notes, where it came from) or Markup (how marks look), in tabs.
+    @AppStorage("library.detailsTab", store: AppDefaults.store) private var detailsTab = "info"
+
     private var details: some View {
-        CaptureInspector(state: state, item: item)
-            .frame(minHeight: 180, idealHeight: 300)
+        VStack(spacing: 0) {
+            if item.kind != .video {
+                Picker("Details", selection: $detailsTab) {
+                    Text("Info").tag("info")
+                    Text("Markup").tag("markup")
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 260)
+                .padding(.top, 8)
+                .padding(.bottom, 2)
+            }
+            if detailsTab == "markup" && item.kind != .video {
+                MarkupPanel()
+            } else {
+                CaptureInspector(state: state, item: item)
+            }
+        }
+        .frame(minHeight: 180, idealHeight: 300)
     }
 
     private func fit() { zoomToFit += 1 }
@@ -149,12 +170,12 @@ struct SingleCaptureView: View {
             } else {
                 AnnotationToolbar()
                 Divider()
-                HStack(spacing: 0) {
-                    ToolPalette()
-                    Divider()
-                    CaptureCanvas(item: item, fitRequest: zoomToFit + CanvasZoom.shared.fitRequested, editor: editorState)
-                }
-                .frame(minHeight: 200)
+                // The tools float over the picture as a toolbar, or wait in a dial.
+                CaptureCanvas(item: item, fitRequest: zoomToFit + CanvasZoom.shared.fitRequested, editor: editorState)
+                    .overlay {
+                        if prefs.toolStyle == .toolbar { FloatingToolPalette() } else { DialHint() }
+                    }
+                    .frame(minHeight: 200)
             }
             // The whole bar when there's room; in a narrow window the less used buttons move into
             // a ⋯ menu, then zooming too, so the bar never pushes the column past the window.
@@ -571,7 +592,7 @@ struct CaptureCanvas: NSViewRepresentable {
 }
 
 /// How far the picture is zoomed, shared by whichever canvas is showing (Edit or Result),
-/// so the zoom slider and buttons work on it and follow pinches and ⌘-scrolls.
+/// so the zoom slider and buttons work on it and follow pinches and ⌃-scrolls.
 @Observable
 @MainActor
 final class CanvasZoom {
@@ -636,7 +657,7 @@ struct ZoomControls: View {
             Slider(value: Binding(get: { log2(zoom.magnification) }, set: { zoom.set(pow(2, $0)) }),
                    in: log2(CanvasZoom.range.lowerBound)...log2(CanvasZoom.range.upperBound))
                 .frame(width: 100)
-                .help("Zoom. Pinch or ⌘-scroll also zoom.")
+                .help("Zoom. Pinch or ⌃-scroll also zoom.")
             }
             Button { zoom.step(in: true) } label: { Label("Zoom In", systemImage: "plus.magnifyingglass") }
                 .disabled(zoom.magnification >= CanvasZoom.range.upperBound - 0.001)
@@ -662,8 +683,8 @@ struct ZoomControls: View {
     }
 }
 
-/// The Edit view's scroll view: scrolling (mouse wheel or trackpad) zooms around the pointer
-/// instead of moving the picture. Holding ⇧ scrolls as usual, to move around a zoomed picture.
+/// The Edit view's scroll view: scrolling moves around the picture as usual, and with ⌃ held
+/// (mouse wheel or trackpad) it zooms around the pointer instead. Pinching zooms too.
 ///
 /// Holding Space with the pointer over the picture turns the pointer into a hand, whatever
 /// the tool: drag to move around the picture, let go of Space to carry on. Space still types
@@ -671,9 +692,15 @@ struct ZoomControls: View {
 ///
 /// Holding ⌘ with the pointer over the picture gives the select tool until it's let go, as
 /// in most drawing apps.
+///
+/// With the tools set to a dial (Settings › Library), right-clicking the picture or holding
+/// ⌘⌥ over it opens the dial around the pointer (see `ToolDialView`); Esc or a click
+/// outside closes it, and letting go of ⌘⌥ picks the tool under the pointer.
 final class ZoomingScrollView: NSScrollView {
     private var monitor: Any?
     private var resignObserver: Any?
+    private var dialObserver: Any?
+    private let dialState = ToolDialState()
     /// Space is held, so a drag moves the picture.
     private var panning = false
     /// Mid-drag, and where the pointer was last, in the window; the drag carries on if Space
@@ -685,18 +712,80 @@ final class ZoomingScrollView: NSScrollView {
         super.viewDidMoveToWindow()
         if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
         if let resignObserver { NotificationCenter.default.removeObserver(resignObserver); self.resignObserver = nil }
-        guard window != nil else { AnnotationEditor.shared.holdSelect(false); return endPanning() }
+        if let dialObserver { NotificationCenter.default.removeObserver(dialObserver); self.dialObserver = nil }
+        guard window != nil else { AnnotationEditor.shared.holdSelect(false); closeDial(); return endPanning() }
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged, .leftMouseDown, .leftMouseDragged,
-                                                              .leftMouseUp, .mouseMoved, .cursorUpdate]) { [weak self] event in
+                                                              .leftMouseUp, .rightMouseDown, .mouseMoved, .cursorUpdate]) { [weak self] event in
             guard let self else { return event }
             return MainActor.assumeIsolated { self.handle(event) }
         }
         // ⌘-Tab away: the ⌘ key comes up in another app.
         resignObserver = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil,
-                                                                queue: .main) { _ in
-            MainActor.assumeIsolated { AnnotationEditor.shared.holdSelect(false) }
+                                                                queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                AnnotationEditor.shared.holdSelect(false)
+                self?.closeDial()
+            }
+        }
+        dialState.close = { [weak self] in self?.closeDial() }
+        // The hint under the picture asks for the dial: open it in the middle.
+        dialObserver = NotificationCenter.default.addObserver(forName: Self.openDialNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.window?.isKeyWindow == true else { return }
+                self.openDial(at: CGPoint(x: self.bounds.midX, y: self.bounds.midY), held: false)
+            }
         }
     }
+
+    // MARK: The dial
+
+    private var usesDial: Bool { Preferences.shared.toolStyle == .dial }
+    /// The dial's place in the window (window coordinates) while it's open from here.
+    private var dialFrame: CGRect?
+    var isDialOpen: Bool { dialFrame != nil }
+
+    /// Opens the dial centered on `point` (in this view). The window's own content draws it
+    /// (`DialOverlay`), over everything, so a small picture area doesn't cut it off; it's
+    /// kept inside the window.
+    func openDial(at point: CGPoint, held: Bool) {
+        closeDial()
+        guard let window, let content = window.contentView else { return }
+        AnnotationEditor.shared.holdSelect(false)
+        dialState.hovered = nil
+        dialState.held = held
+        let size = ToolDialView.size
+        func clamp(_ value: CGFloat, _ length: CGFloat, _ low: CGFloat, _ room: CGFloat) -> CGFloat {
+            room <= length ? low + (room - length) / 2 : min(max(value, low), low + room - length)
+        }
+        // ToolDialView puts its middle 202 points from its top; window coordinates run up.
+        let p = convert(point, to: nil)
+        let area = DialPresenter.shared.overlayAreas[window.windowNumber] ?? content.convert(content.bounds, to: nil)
+        let frame = CGRect(x: clamp(p.x - size.width / 2, size.width, area.minX, area.width),
+                           y: clamp(p.y - (size.height - 202), size.height, area.minY, area.height),
+                           width: size.width, height: size.height)
+        dialFrame = frame
+        DialPresenter.shared.request = .init(windowNumber: window.windowNumber, frame: frame, state: dialState)
+    }
+
+    /// Whether a click or right-click landed on the open dial.
+    private func isOnDial(_ event: NSEvent) -> Bool {
+        dialFrame?.contains(event.locationInWindow) == true
+    }
+
+    func closeDial() {
+        if DialPresenter.shared.request?.state === dialState { DialPresenter.shared.request = nil }
+        dialFrame = nil
+        dialState.hovered = nil
+        dialState.held = false
+    }
+
+    #if DEBUG
+    var debugDialState: ToolDialState { dialState }
+    var debugDialInfo: String {
+        guard let dialFrame else { return "closed" }
+        return "frame \(dialFrame) in window \(window?.windowNumber ?? 0), content \(window?.contentView?.frame ?? .zero), overlay area \(window.map { DialPresenter.shared.overlayAreas[$0.windowNumber] ?? .zero } ?? .zero)"
+    }
+    #endif
 
     private func handle(_ event: NSEvent) -> NSEvent? {
         let editor = AnnotationEditor.shared
@@ -704,18 +793,48 @@ final class ZoomingScrollView: NSScrollView {
         if editor.heldTool != nil, !event.modifierFlags.contains(.command) { editor.holdSelect(false) }
         guard let window, event.window === window else {
             if panning, !grabbing { endPanning() }
+            if isDialOpen, event.type == .leftMouseDown || event.type == .rightMouseDown { closeDial() }
             return event
         }
+        let trigger = Preferences.shared.dialTrigger
         switch event.type {
         case .flagsChanged:
-            if event.modifierFlags.contains(.command) {
+            let flags = event.modifierFlags
+            if isDialOpen, dialState.held {
+                // Letting go of ⌘ or ⌥ picks the tool under the pointer.
+                if !flags.contains(.command) || !flags.contains(.option) {
+                    if let tool = dialState.hovered { editor.pick(tool) }
+                    closeDial()
+                }
+                return event
+            }
+            if usesDial, trigger.commandOption, flags.contains(.command), flags.contains(.option) {
                 if window.isKeyWindow, isPointerOver(event), !isTyping(in: window), NSEvent.pressedMouseButtons == 0 {
+                    openDial(at: convert(event.locationInWindow, from: nil), held: true)
+                }
+                return event
+            }
+            if flags.contains(.command) {
+                if !isDialOpen, window.isKeyWindow, isPointerOver(event), !isTyping(in: window), NSEvent.pressedMouseButtons == 0 {
                     editor.holdSelect(true)
                 }
             } else {
                 editor.holdSelect(false)
             }
             return event
+        case .rightMouseDown:
+            guard usesDial, trigger.rightClick, isPointerOver(event), !isTyping(in: window) else { return event }
+            if isOnDial(event) { return event }
+            openDial(at: convert(event.locationInWindow, from: nil), held: false)
+            return nil
+        case .leftMouseDown where isDialOpen:
+            // A click outside the dial closes it, and does nothing else.
+            if isOnDial(event) { return event }
+            closeDial()
+            return nil
+        case .keyDown where isDialOpen && event.keyCode == 53: // Esc
+            closeDial()
+            return nil
         case .keyDown where event.keyCode == 49: // Space
             if panning { return nil } // the key repeating
             guard window.isKeyWindow, isPointerOver(event), !isTyping(in: window),
@@ -787,7 +906,7 @@ final class ZoomingScrollView: NSScrollView {
     }
 
     override func scrollWheel(with event: NSEvent) {
-        guard allowsMagnification, !event.modifierFlags.contains(.shift) else { return super.scrollWheel(with: event) }
+        guard allowsMagnification, event.modifierFlags.contains(.control) else { return super.scrollWheel(with: event) }
         // A trackpad's coasting after the fingers lift would keep zooming; ignore it.
         guard event.momentumPhase.isEmpty else { return }
         let delta = event.scrollingDeltaY != 0 ? event.scrollingDeltaY : event.scrollingDeltaX
@@ -1278,5 +1397,6 @@ private struct PoppedEditor: View {
             }
         }
         .frame(minWidth: 520, minHeight: 420)
+        .overlay { DialOverlay() }
     }
 }
