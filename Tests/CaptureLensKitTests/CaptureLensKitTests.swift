@@ -666,6 +666,47 @@ private func item(_ name: String, daysAgo: Double = 0, now: Date, tags: [String]
         #expect(stitcher.add(frame(of: full, offset: 180, viewport: 400)) == .moved(80))
         #expect(stitcher.image()?.height == 400 + 180)
     }
+
+    /// A window with a still sidebar beside the scrolling page, as a whole window or screen
+    /// capture sees it: the sidebar never lines up with the page, so it's left out of
+    /// matching and trimmed from the finished picture.
+    @Test func aStillSidebarBesideThePageDoesNotStopStitching() throws {
+        let full = page()
+        let sidebarWidth = 96
+        // The sidebar: a column of distinct entries that stay put.
+        let side: CGImage = {
+            let ctx = CGContext(data: nil, width: sidebarWidth, height: 400, bitsPerComponent: 8, bytesPerRow: 0,
+                                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            ctx.setFillColor(CGColor(gray: 0.93, alpha: 1))
+            ctx.fill(CGRect(x: 0, y: 0, width: sidebarWidth, height: 400))
+            for entry in 0..<20 {
+                ctx.setFillColor(CGColor(gray: CGFloat(entry * 23 % 180) / 255, alpha: 1))
+                ctx.fill(CGRect(x: 8, y: entry * 20 + 4, width: 20 + entry * 7 % 60, height: 10))
+            }
+            return ctx.makeImage()!
+        }()
+        func window(_ offset: Int) -> CGImage {
+            let content = frame(of: full, offset: offset, viewport: 400)
+            let ctx = CGContext(data: nil, width: sidebarWidth + content.width, height: 400, bitsPerComponent: 8, bytesPerRow: 0,
+                                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            ctx.draw(side, in: CGRect(x: 0, y: 0, width: sidebarWidth, height: 400))
+            ctx.draw(content, in: CGRect(x: sidebarWidth, y: 0, width: content.width, height: 400))
+            return ctx.makeImage()!
+        }
+        let stitcher = ScrollStitcher()
+        var offset = 0
+        var results: [ScrollStitcher.Result] = []
+        for step in [0, 90, 133, 61, 200, 150, 77, 240, 199, 300, 500] {
+            offset = min(offset + step, 1600 - 330)
+            results.append(stitcher.add(window(offset)))
+        }
+        #expect(!results.contains(.lost), "\(results)")
+        let stitched = try #require(stitcher.image())
+        #expect(stitched.height == full.height, "\(stitched.height) vs \(full.height)")
+        // The sidebar is trimmed, leaving the page (a plain edge of it may stay: it looks like margin).
+        #expect(abs(stitched.width - full.width) <= 3 * (sidebarWidth + full.width) / ScrollStitcher.signatureWidth + 1,
+                "width \(stitched.width) vs page \(full.width)")
+    }
 }
 
 @Suite struct GuideTests {

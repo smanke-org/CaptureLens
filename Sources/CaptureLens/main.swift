@@ -58,6 +58,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DebugShots.run(out: URL(fileURLWithPath: out))
             return
         }
+        if let spec = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SCROLL"] {
+            DebugScrollTest.run(spec: spec)
+            return
+        }
         if let out = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SNAGIT_EVAL"] {
             DebugSelfTest.snagitEval(out: URL(fileURLWithPath: out))
             return

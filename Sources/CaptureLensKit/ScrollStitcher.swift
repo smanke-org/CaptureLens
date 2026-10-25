@@ -8,6 +8,11 @@ import Foundation
 /// matched to find how far the content moved, so only what's new is added. Frames that
 /// didn't move add nothing; a frame that can't be matched (the page jumped) is skipped, and
 /// matching carries on from the last frame that fit, so scrolling back a little recovers.
+///
+/// Columns that stay put while the rest moves (a sidebar, another window beside the page)
+/// are left out of matching, since they never line up with the content. Columns at either
+/// side that keep failing to line up (those, and a scroll bar sliding as it scrolls) are
+/// trimmed from the finished picture.
 public final class ScrollStitcher {
     /// Width of the signature each row is reduced to for matching.
     static let signatureWidth = 96
@@ -27,6 +32,13 @@ public final class ScrollStitcher {
     /// The picture so far: the first frame's header, then each frame's new content.
     private var pieces: [(image: CGImage, rows: Range<Int>)] = []
     private var lastFrame: CGImage?
+    /// Signature columns that stayed put but didn't line up with the last move (nil until
+    /// one), and the columns that were all one color in the last frame that moved.
+    private var fixedColumns: [Bool]?
+    private var plainColumns: [Bool] = []
+    /// For each signature column, how many moves it didn't line up with.
+    private var misfits: [Int] = []
+    private var moves = 0
 
     public init(maxHeight: Int = 40_000) {
         self.maxHeight = maxHeight
@@ -77,7 +89,17 @@ public final class ScrollStitcher {
         // A header can only shrink as more is seen (a row that once moved isn't fixed).
         let fixedTop = min(header, top), fixedBottom = min(footer, bottom)
 
-        guard let shift = Self.shift(from: previous.rows, to: frame.rows, top: fixedTop, bottom: fixedBottom) else {
+        // Match with the columns not known to be still; if that fails, also leave out the
+        // columns that look the same as last time (something beside the page).
+        let (still, plain) = Self.stillColumns(previous.rows, frame.rows, top: fixedTop, bottom: height - fixedBottom)
+        let known = fixedColumns ?? Array(repeating: false, count: still.count)
+        var shift = Self.shift(from: previous.rows, to: frame.rows, top: fixedTop, bottom: fixedBottom,
+                               columns: known.indices.filter { !known[$0] })
+        if shift == nil {
+            shift = Self.shift(from: previous.rows, to: frame.rows, top: fixedTop, bottom: fixedBottom,
+                               columns: still.indices.filter { !still[$0] && !known[$0] })
+        }
+        guard let shift else {
             // Keep comparing with the last frame that fit, so scrolling back to it recovers.
             return .lost
         }
@@ -88,6 +110,14 @@ public final class ScrollStitcher {
         }
         header = fixedTop
         footer = fixedBottom
+        let misfit = Self.misfitColumns(previous.rows, frame.rows, shift: shift, top: fixedTop, bottom: height - fixedBottom, plain: plain)
+        // Still columns are those that stayed put and don't line up with the move; repeating
+        // content (lines that look alike) lines up either way, so it isn't one.
+        fixedColumns = zip(still, misfit).map { $0 && $1 }
+        plainColumns = plain
+        if misfits.isEmpty { misfits = Array(repeating: 0, count: misfit.count) }
+        for j in misfit.indices where misfit[j] { misfits[j] += 1 }
+        moves += 1
         // The new rows: the last `shift` rows above the footer.
         let start = height - fixedBottom - shift, end = height - fixedBottom
         pieces.append((image, start..<end))
@@ -117,7 +147,31 @@ public final class ScrollStitcher {
         if footer > 0, let slice = lastFrame.cropping(to: CGRect(x: 0, y: height - footer, width: width, height: footer)) {
             ctx.draw(slice, in: CGRect(x: 0, y: 0, width: width, height: footer))
         }
-        return ctx.makeImage()
+        guard let tall = ctx.makeImage() else { return nil }
+        let keep = keptColumns()
+        guard keep.lowerBound > 0 || keep.upperBound < width else { return tall }
+        return tall.cropping(to: CGRect(x: keep.lowerBound, y: 0, width: keep.count, height: total)) ?? tall
+    }
+
+    /// The pixel columns to keep: columns at either side that failed to line up with a
+    /// good share of the moves (with any plain ones between them and the edge) are trimmed,
+    /// as long as most of the picture stays.
+    func keptColumns() -> Range<Int> {
+        guard moves > 0, !misfits.isEmpty else { return 0..<width }
+        let n = misfits.count
+        let bad = misfits.map { $0 * 4 >= moves }
+        // A column or two of the sidebar may line up by chance, so short gaps are stepped over.
+        func edge(_ order: [Int]) -> Int {
+            var cut = 0, gap = 0
+            for (k, j) in order.enumerated() {
+                if bad[j] { cut = k + 1; gap = 0 } else if !plainColumns[j] { gap += 1; if gap > 2 { break } }
+            }
+            return cut
+        }
+        let left = edge(Array(0..<n)), right = edge(Array((0..<n).reversed()))
+        guard left + right < n * 3 / 4 else { return 0..<width }
+        // Signature column j covers pixels j*width/n up to (j+1)*width/n.
+        return (left * width / n)..<((n - right) * width / n)
     }
 
     // MARK: Matching
@@ -147,10 +201,14 @@ public final class ScrollStitcher {
 
     /// How many rows the content between the fixed header and footer moved up, or nil if
     /// no shift matches well. Plain rows (all one color) don't count: they match anything.
-    static func shift(from old: [[UInt8]], to new: [[UInt8]], top: Int, bottom: Int) -> Int? {
+    /// Only `columns` of each signature are compared (all of them when nil).
+    static func shift(from old: [[UInt8]], to new: [[UInt8]], top: Int, bottom: Int, columns: [Int]? = nil) -> Int? {
         let height = old.count
         let span = height - top - bottom
         guard span > 8 else { return nil }
+        let picked = columns ?? Array(old.first?.indices ?? 0..<0)
+        guard picked.count >= 4 else { return nil }
+        let old = old.map { row in picked.map { row[$0] } }, new = new.map { row in picked.map { row[$0] } }
         func plain(_ row: [UInt8]) -> Bool { (row.max() ?? 0) - (row.min() ?? 0) < 6 }
         var best: (shift: Int, score: Double)?
         // At least a fifth of the area must still overlap to trust a match.
@@ -173,6 +231,47 @@ public final class ScrollStitcher {
         }
         guard let best, best.score <= 3 else { return nil }
         return best.shift
+    }
+}
+
+extension ScrollStitcher {
+    /// For each signature column, between rows `top` and `bottom`: whether it has detail and
+    /// stayed the same from `old` to `new` (it didn't scroll), and whether it's all one color.
+    static func stillColumns(_ old: [[UInt8]], _ new: [[UInt8]], top: Int, bottom: Int) -> (still: [Bool], plain: [Bool]) {
+        let n = new.first?.count ?? 0
+        guard bottom - top > 8 else { return (Array(repeating: false, count: n), Array(repeating: true, count: n)) }
+        var still = Array(repeating: false, count: n), plain = Array(repeating: true, count: n)
+        for j in 0..<n {
+            var low = UInt8.max, high = UInt8.min, changed = 0
+            for r in top..<bottom {
+                let value = new[r][j]
+                low = min(low, value); high = max(high, value)
+                if abs(Int(value) - Int(old[r][j])) > 6 { changed += 1 }
+            }
+            plain[j] = high - low < 12
+            // Allow a few changed rows (a blinking caret, a spinner) in an otherwise still column.
+            still[j] = !plain[j] && changed * 50 <= bottom - top
+        }
+        return (still, plain)
+    }
+}
+
+extension ScrollStitcher {
+    /// For each signature column with detail: whether it fails to line up when the content
+    /// moved by `shift` rows (a still sidebar, a sliding scroll bar).
+    static func misfitColumns(_ old: [[UInt8]], _ new: [[UInt8]], shift: Int, top: Int, bottom: Int, plain: [Bool]) -> [Bool] {
+        let n = new.first?.count ?? 0
+        return (0..<n).map { j in
+            guard !plain[j] else { return false }
+            var total = 0, count = 0
+            var r = top
+            while r + shift < bottom {
+                total += abs(Int(old[r + shift][j]) - Int(new[r][j]))
+                count += 1
+                r += 2
+            }
+            return count > 0 && total > 8 * count
+        }
     }
 }
 
