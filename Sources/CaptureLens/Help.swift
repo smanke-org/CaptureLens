@@ -136,6 +136,7 @@ enum Help {
                 ("Arrow keys", "Nudge the selected mark (with ⇧, 10 points at a time)"),
                 ("⌘Z  ⇧⌘Z", "Undo and redo (also the arrows in the toolbar)"),
                 ("Space-drag", "Hold Space and drag to move around a zoomed-in picture, with any tool"),
+                ("⌘ (hold)", "The select tool while ⌘ is down, to pick or move a mark, then back to the tool you had"),
                 ("Esc", "Deselect, then go back to the select tool"),
             ]),
             .heading("Color, size and style"),

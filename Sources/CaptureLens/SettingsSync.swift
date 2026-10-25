@@ -574,6 +574,10 @@ enum DebugCommands {
                     window.setFrame(CGRect(origin: window.frame.origin, size: CGSize(width: size[0], height: size[1])), display: true)
                 }
             case "inspector": LibraryWindow.shared.state.showInspector = arg == "on"
+            case "select-test":
+                // `select-test[:typing]`: draws a box with the box tool, holds ⌘, drags the box
+                // 40 pt right, lets go of ⌘; reports the tool and the box at each step.
+                result = await PanTest.holdCommand(typing: arg == "typing")
             case "pan-test":
                 // `pan-test:<zoom>[:typing]`: zooms in, then holds Space and drags 120 pt right and
                 // 60 pt down over the picture with made-up events; reports how far it moved.
@@ -707,6 +711,60 @@ enum PanTest {
         return String(format: "zoom %.2f held %@ moved x %.1f y %.1f (expect %.1f, %.1f) after: panning %@ grabbing %@ cursorRects %@ marks %d",
                       scroll.magnification, "\(held)", after.x - before.x, after.y - before.y, -120 / scroll.magnification, -60 / scroll.magnification,
                       "\(state.panning)", "\(state.grabbing)", "\(window.areCursorRectsEnabled)", marks)
+    }
+
+    static func holdCommand(typing: Bool) async -> String {
+        guard let window = LibraryWindow.shared.window, let scroll = find(window.contentView) else { return "no canvas" }
+        let editor = AnnotationEditor.shared
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        editor.showResult = false
+        CanvasZoom.shared.set(1)
+        editor.pick(.draw(.rectangle))
+        try? await Task.sleep(for: .seconds(0.5))
+        let c = scroll.convert(CGPoint(x: scroll.bounds.midX, y: scroll.bounds.midY), to: nil)
+        func post(_ event: NSEvent?) async {
+            if let event { NSApp.postEvent(event, atStart: false) }
+            try? await Task.sleep(for: .milliseconds(60))
+        }
+        func mouse(_ type: NSEvent.EventType, _ dx: Double, _ dy: Double, flags: NSEvent.ModifierFlags = []) -> NSEvent? {
+            NSEvent.mouseEvent(with: type, location: CGPoint(x: c.x + dx, y: c.y + dy), modifierFlags: flags,
+                               timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                               context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+        }
+        func command(_ down: Bool) -> NSEvent? {
+            NSEvent.keyEvent(with: .flagsChanged, location: c, modifierFlags: down ? [.command] : [],
+                             timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
+                             characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 55)
+        }
+        let before = editor.annotations.count
+        await post(mouse(.leftMouseDown, -60, 40))
+        await post(mouse(.leftMouseDragged, 0, 0))
+        await post(mouse(.leftMouseDragged, 60, -40))
+        await post(mouse(.leftMouseUp, 60, -40))
+        guard let box = editor.annotations.last, editor.annotations.count == before + 1 else { return "no box drawn" }
+        var steps = ["drew box x \(Int(box.rect.minX))"]
+        var field: NSTextField?
+        if typing {
+            field = NSTextField(frame: CGRect(x: 0, y: 0, width: 10, height: 10))
+            window.contentView?.addSubview(field!)
+            window.makeFirstResponder(field)
+        }
+        await post(command(true))
+        steps.append("⌘ down: tool \(editor.tool)")
+        let edge = (box.rect.minX - box.rect.midX) * scroll.magnification
+        let flags: NSEvent.ModifierFlags = [.command]
+        await post(mouse(.leftMouseDown, edge, 0, flags: flags))
+        await post(mouse(.leftMouseDragged, edge + 20, 0, flags: flags))
+        await post(mouse(.leftMouseDragged, edge + 40, 0, flags: flags))
+        await post(mouse(.leftMouseUp, edge + 40, 0, flags: flags))
+        let moved = editor.annotations.first { $0.id == box.id }
+        steps.append("after drag: marks +\(editor.annotations.count - before), box x \(Int(moved?.rect.minX ?? -1)), selected \(editor.selection == box.id)")
+        await post(command(false))
+        steps.append("⌘ up: tool \(editor.tool), selected \(editor.selection == box.id)")
+        field?.removeFromSuperview()
+        editor.pick(.select)
+        return steps.joined(separator: "; ")
     }
 
     private static func find(_ view: NSView?) -> ZoomingScrollView? {

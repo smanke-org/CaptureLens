@@ -80,7 +80,24 @@ final class AnnotationEditor {
         revision += 1
     }
 
+    /// The tool to go back to while ⌘ is held for the select tool; nil otherwise.
+    private(set) var heldTool: Tool?
+
+    /// ⌘ held over the picture: the select tool for as long as it's down, then back to the
+    /// tool in use. What was selected meanwhile stays selected.
+    func holdSelect(_ held: Bool) {
+        if held {
+            guard heldTool == nil, tool != .select else { return }
+            heldTool = tool
+            tool = .select
+        } else if let heldTool {
+            self.heldTool = nil
+            if tool == .select { tool = heldTool }
+        }
+    }
+
     func pick(_ newTool: Tool) {
+        heldTool = nil
         tool = newTool
         if newTool != .select { selection = nil; selectedCut = nil }
         if newTool != .select { showResult = false }

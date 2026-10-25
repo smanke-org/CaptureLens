@@ -668,8 +668,12 @@ struct ZoomControls: View {
 /// Holding Space with the pointer over the picture turns the pointer into a hand, whatever
 /// the tool: drag to move around the picture, let go of Space to carry on. Space still types
 /// a space while a text box, the notes or any other text field is being typed in.
+///
+/// Holding ⌘ with the pointer over the picture gives the select tool until it's let go, as
+/// in most drawing apps.
 final class ZoomingScrollView: NSScrollView {
     private var monitor: Any?
+    private var resignObserver: Any?
     /// Space is held, so a drag moves the picture.
     private var panning = false
     /// Mid-drag, and where the pointer was last, in the window; the drag carries on if Space
@@ -680,20 +684,38 @@ final class ZoomingScrollView: NSScrollView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
-        guard window != nil else { return endPanning() }
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .leftMouseDown, .leftMouseDragged, .leftMouseUp,
-                                                              .mouseMoved, .cursorUpdate]) { [weak self] event in
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver); self.resignObserver = nil }
+        guard window != nil else { AnnotationEditor.shared.holdSelect(false); return endPanning() }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged, .leftMouseDown, .leftMouseDragged,
+                                                              .leftMouseUp, .mouseMoved, .cursorUpdate]) { [weak self] event in
             guard let self else { return event }
             return MainActor.assumeIsolated { self.handle(event) }
+        }
+        // ⌘-Tab away: the ⌘ key comes up in another app.
+        resignObserver = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil,
+                                                                queue: .main) { _ in
+            MainActor.assumeIsolated { AnnotationEditor.shared.holdSelect(false) }
         }
     }
 
     private func handle(_ event: NSEvent) -> NSEvent? {
+        let editor = AnnotationEditor.shared
+        // A ⌘ let go where it wasn't seen (another window, a menu) still ends the select tool.
+        if editor.heldTool != nil, !event.modifierFlags.contains(.command) { editor.holdSelect(false) }
         guard let window, event.window === window else {
             if panning, !grabbing { endPanning() }
             return event
         }
         switch event.type {
+        case .flagsChanged:
+            if event.modifierFlags.contains(.command) {
+                if window.isKeyWindow, isPointerOver(event), !isTyping(in: window), NSEvent.pressedMouseButtons == 0 {
+                    editor.holdSelect(true)
+                }
+            } else {
+                editor.holdSelect(false)
+            }
+            return event
         case .keyDown where event.keyCode == 49: // Space
             if panning { return nil } // the key repeating
             guard window.isKeyWindow, isPointerOver(event), !isTyping(in: window),
