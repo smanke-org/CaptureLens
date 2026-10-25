@@ -114,7 +114,12 @@ final class SettingsTabs: NSTabViewController {
         // `CAPTURELENS_DEBUG_SCREEN_HEIGHT=<points>` sizes panes as if for a smaller screen.
         if let height = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SCREEN_HEIGHT"].flatMap(Double.init) { available = height - 120 }
         #endif
-        let fitted = min(height, available, Self.tallest)
+        var tallest = Self.tallest
+        #if DEBUG
+        // The website's pictures show each pane whole.
+        if ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SHOTS"] != nil { tallest = .greatestFiniteMagnitude }
+        #endif
+        let fitted = min(height, available, tallest)
         item.viewController?.preferredContentSize = NSSize(width: 520, height: fitted)
         return fitted
     }

@@ -9,7 +9,8 @@ CaptureLens also:
 - **Captures** the whole screen, one window (even where others cover it), an area you drag out, or a frame of an
   exact size, now or after a countdown, each from its own preset and shortcut.
 - **Records video** of the screen, a window or an area, with the Mac's sound, your microphone, your camera in a
-  round bubble, rings where you click and the shortcuts you press, at 10 to 60 frames a second. Pause and resume, trim the ends, cut sections
+  round bubble, rings where you click and the shortcuts you press, at 10 to 60 frames a second, all switched on or
+  off in a panel before you record (with a choice of microphone, camera and countdown). Pause and resume, trim the ends, cut sections
   out of the middle, save a frame as a picture, and save as MP4 or an animated GIF.
 - **Captures long pages** by stitching a scrolling area into one tall picture, and **records how-tos**: a
   capture at every click, each step numbered and named from what you clicked, ready to become a guide.
@@ -29,6 +30,9 @@ CaptureLens also:
 - **Lets you select and copy text** right in the picture, with macOS's own Live Text.
 - **Organizes** with tags, favorites and notes ("More Info"), and filters by date, type, tag, app or website in
   one click.
+- **Lays out the library your way**: drag the lines between the captures, the picture and its details, fold
+  either side away, and open a capture beside the captures or in a window of its own. The layout follows you to
+  your other Macs as proportions, so it fits each screen.
 - **Remembers where a capture came from**: the app, the window, and in a browser, the web page.
 - **Brings your old library along**: Import from Snagit moves Snagit captures in with their dates, apps, web
   addresses and tags, and their markup editable where CaptureLens has the same tool. Videos can come too.
@@ -37,7 +41,8 @@ CaptureLens also:
 - **Shows your activity**: Settings › Activity graphs your captures by kind, with recording time, the apps and
   websites you capture most, and how often you mark up and share, on this Mac or added up across all your Macs.
 - **Keeps the library private**: encrypted on your Mac, optionally locked behind Touch ID, and synced between
-  your Macs end-to-end encrypted through iCloud, or through a Dropbox, OneDrive or Google Drive folder.
+  your Macs end-to-end encrypted through iCloud, or through a Dropbox, OneDrive or Google Drive folder. Settings
+  and the library sync separately, each switched on or off on each Mac.
 
 ## Download
 

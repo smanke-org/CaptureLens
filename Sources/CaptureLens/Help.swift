@@ -179,7 +179,7 @@ enum Help {
                 ("Frame rate", "Frames a second, from 10 to 60. Fewer make a smaller video: 10 or 15 suits apps, documents and web pages; 30 or 60 suits video and animation"),
                 ("Countdown", "None, 3 or 5 seconds to get ready before recording starts (a preset with its own delay waits that instead)"),
             ]),
-            .text("Pause and Resume leave out the time in between. The bar, the red outline and CaptureLens's other windows are never in the video."),
+            .text("Pause and Resume leave out the time in between. The panel, the red outline and CaptureLens's other windows are never in the video."),
             .heading("In the library"),
             .text("Recordings are named from what's in them and their text is searchable, like pictures; Type › Video in the filters shows just them. With Edit on, the timeline below the player trims and cuts: drag the yellow handles to trim the start and end (or use Start Here and End Here at the playhead), turn on Cut Out and drag across a section to take it out, click a cut and press Delete to put it back. Turn Edit off to watch the finished video. Nothing is cut from the recording itself."),
             .text("Save Frame adds the frame at the playhead to the library as a picture, to mark up like any capture. Copy, Save As (MP4 or an animated GIF), dragging out, sharing and Export all use the finished video."),
@@ -190,8 +190,8 @@ enum Help {
 
         HelpTopic(id: "activity", title: "Activity", symbol: "chart.bar.xaxis", blocks: [
             .text("Settings › Activity shows how many captures you've made, by kind (area, window, full screen, scrolling, steps and video), in a graph that starts at a week and widens to 30, 90 and 180 days, then a year, as you use CaptureLens. Hover over a bar to see its count."),
-            .text("Below the graph: how many videos you recorded and for how long, the apps and websites you captured most, and how many marks you added and how often you copied, saved, exported, dragged out and shared captures. Imported pictures, such as those brought over from Snagit, are counted apart, so an import doesn't swamp the graph."),
-            .text("With settings sync on, This Mac and All Macs switch between this Mac's numbers and every Mac's added together, and All Macs lists each Mac's captures. Only the numbers are kept and shared, encrypted like your settings, never what you captured. The first time, Activity starts from the captures this Mac already took."),
+            .text("Below the graph: how many videos you recorded and for how long, the apps and websites you captured most, and how many marks you added and how often you copied, saved, exported, dragged out and shared captures. Imported pictures, such as those brought over from Snagit or collected from macOS screenshots, are counted apart, so an import doesn't swamp the graph."),
+            .text("With sync on, This Mac and All Macs switch between this Mac's numbers and every Mac's added together, and All Macs lists each Mac's captures. Only the numbers are kept and shared, encrypted like your settings, never what you captured. The first time, Activity starts from the captures this Mac already took."),
         ]),
 
         HelpTopic(id: "naming", title: "Automatic Names", symbol: "apple.intelligence", blocks: [
@@ -211,7 +211,7 @@ enum Help {
                 ("yesterday, March 3, 2026-10-01", "Captures from that day"),
             ]),
             .heading("Filters"),
-            .text("The buttons above the captures narrow the list by date, type, tags, app and website; click × on one to clear it. The sidebar has quick lists for favorites, the last 7 days, captures with notes, and each tag, app and website. Drag its edge all the way in for just icons (tags, apps and websites become menus); drag it out again for the lists."),
+            .text("The buttons above the captures narrow the list by date, type, tags, app and website, and to favorites or captures with notes; click × on one to clear it, or Clear All. The sidebar has quick lists for favorites, the last 7 days, captures with notes, and each tag, app and website. Drag its edge all the way in for just icons (tags, apps and websites become menus); drag it out again for the lists."),
             .heading("Tags and notes"),
             .text("Type a tag and press Return to add it, or click one of your existing tags listed below the field; typing narrows the list (commas add several at once). Tags show as chips in the sidebar: click one to see its captures; right-click it to rename it everywhere. \"This week\" at the foot of the sidebar counts this week's captures (more in Settings › Activity). More Info holds notes of any length; they're searchable too."),
             .heading("Text in a capture"),
@@ -221,14 +221,14 @@ enum Help {
                 ("Return", "Rename the selected capture"),
                 ("Delete", "Delete the selected captures (asks first)"),
                 ("Drag a capture", "Into another app, or a pictures file onto the library to import it"),
-                ("Open in Its Own Window", "The window button under the picture moves the picture and its tools into a window of their own, as big as you like; it follows the capture selected in the library. Bring Back, or closing it, returns it"),
-                ("Drag the line beside the picture", "Make the captures wider or narrower; double-click the line for the usual width"),
-                ("Right-click a capture", "Open it beside the captures or in its own window; the tick shows where double-clicking opens captures. With Remember for Double-Click ticked, opening it either way also makes that the double-click choice"),
                 ("Double-click a capture", "Opens it beside the captures or in a window of its own, as chosen in Settings › Library; with its own window chosen, double-clicking the picture beside the captures opens it there too"),
-                ("Drag the line under the picture", "Make the picture taller or shorter beside its details; double-click it for the usual height"),
+                ("Right-click a capture", "Open it beside the captures or in its own window; the tick shows where double-clicking opens captures. With Remember for Double-Click ticked, opening it either way also makes that the double-click choice"),
+                ("Open in Its Own Window", "The window button under the picture moves the picture and its tools into a window of their own, as big as you like; it follows the capture selected in the library. Bring Back, or closing it, returns it"),
                 ("‹ and › above the picture", "Fold away the captures (the picture and details fill the window) or the picture and details (the captures fill it); the slim bar left at the side brings it back"),
-                ("⋯ under the picture", "In a narrow window, Copy, Save As, Share, zoom and the rest move into this menu"),
                 ("⌄ and ⌃ under the picture", "Fold away the details (more room to annotate) or the picture (more room for the details); the slim bar left behind brings it back"),
+                ("Drag the line beside the picture", "Make the captures wider or narrower; double-click the line for the usual width"),
+                ("Drag the line under the picture", "Make the picture taller or shorter beside its details; double-click it for the usual height"),
+                ("⋯ under the picture", "In a narrow window, Copy, Save As, Share, zoom and the rest move into this menu"),
                 ("Scroll over the picture", "Move around a zoomed-in picture; or hold Space and drag"),
                 ("Pinch or ⌃-scroll", "Zoom in and out around the pointer; or use the zoom slider, − and + below it, or pick a level from the percentage"),
                 ("Info and Markup", "Under the picture: Info has the name, tags, notes and where it came from; Markup has colors, sizes, styles and how the tools are shown"),
@@ -247,7 +247,7 @@ enum Help {
             .text("The library window's layout comes along too: the sidebar's width and which of its sections are open, the line between the captures and the picture, the line between the picture and its details, which panes are folded or hidden, thumbnail size, sort order, and the Info or Markup tab. Sizes go as shares of the window, so a pane that's half the window on a big screen is half on a small one. The window's own size and place stay with each Mac, and another Mac's layout is taken up the next time you open the library, so nothing moves while you work."),
             .heading("Syncing the library through Dropbox, OneDrive or Google Drive"),
             .text("In Settings › Library, set \"Sync the library through\" to \"Dropbox, OneDrive or Google Drive\", then choose where the folder is on this Mac: Dropbox, OneDrive and Google Drive are offered when they're installed, or pick any folder that a sync app keeps on all your Macs. CaptureLens puts a \"CaptureLens Library\" folder inside it. Settings and the sync passphrase still go through iCloud."),
-            .text("The choice is shared, so every Mac uses the same one; each Mac picks its own folder location. On a Mac that hasn't yet, the menu bar menu shows \"Choose Sync Folder…\". Every file in the folder is encrypted with your sync passphrase, so the sync service can't see your captures."),
+            .text("Each Mac makes this choice for itself, so choose the same on every Mac that shares the library; each picks its own folder location. On a Mac that hasn't yet, the menu bar menu shows \"Choose Sync Folder…\". Every file in the folder is encrypted with your sync passphrase, so the sync service can't see your captures."),
             .tip("Changes arrive once the sync app has synced the folder, usually within seconds. If two Macs change the same capture at once, the newest change wins and the sync app's \"conflicted copy\" files are tidied away. After moving the library to a folder, \"Remove from iCloud…\" frees the iCloud space; update CaptureLens on every Mac first."),
             .text("On each Mac, Settings › Library can encrypt the library file itself and require Touch ID or your password to open the library. The lock comes back after a while away, when the Mac sleeps, or when the screen locks. Capturing keeps working while it's locked."),
             .tip("The sync passphrase can't be recovered. If you forget it, choose \"Forgot It? Start Over…\"; your other Macs then ask for the new one."),
@@ -256,8 +256,8 @@ enum Help {
         HelpTopic(id: "settings-sync", title: "Settings on Every Mac", symbol: "arrow.triangle.2.circlepath", blocks: [
             .text("Turn on \"Sync with your other Macs\" in Settings › General, choose a sync passphrase there, and enter the same passphrase on each of your Macs. With Settings switched on below it, a change on one Mac shows up on the others."),
             .keys([
-                ("Follow you", "Presets and their shortcuts, the library shortcut, Capture options, naming and search options, markup styles, what double-clicking a capture does, appearance, Show in Dock and menu bar, ToolHUD's menu, update choices, and the library window's layout"),
-                ("Stay on each Mac", "Open at login, encrypting the library, the library lock, and whether (and how) this Mac syncs its settings and library"),
+                ("Follow you", "Presets and their shortcuts, the library shortcut, Capture options, video recording choices and countdown, naming and search options, markup styles, what double-clicking a capture does, appearance, Show in Dock and menu bar, ToolHUD's menu, update choices, and the library window's layout"),
+                ("Stay on each Mac", "Open at login, encrypting the library, the library lock, the microphone and camera chosen for recording, captures from other tools, the window's own size, and whether (and how) this Mac syncs its settings and library"),
             ]),
             .text("Settings and Library are separate switches: a Mac can share its settings but keep its captures, or the other way round. Settings another Mac shares while Settings is off here are taken up when you switch it back on; otherwise this Mac's settings go to the others. The library syncs through iCloud or a sync folder, chosen in Settings › Library on each Mac."),
         ]),
@@ -273,7 +273,7 @@ enum Help {
         ]),
 
         HelpTopic(id: "privacy", title: "Privacy", symbol: "hand.raised", blocks: [
-            .text("Naming and text reading run entirely on this Mac. CaptureLens only looks at the screen when you take a capture. With sync on, your settings and library travel through your iCloud account, encrypted with a passphrase only you know."),
+            .text("Naming and text reading run entirely on this Mac. CaptureLens only looks at the screen when you take a capture. With Captures from other tools on, it also reads new macOS screenshots and Snagit files (never the Photos library) to copy them into the library; the files themselves aren't changed. With sync on, your settings and library travel through your iCloud account, encrypted with a passphrase only you know."),
             .text("You can remove CaptureLens's Screen Recording access at any time in System Settings › Privacy & Security; capturing then stops until you allow it again."),
         ]),
 
@@ -300,6 +300,8 @@ enum Help {
             .text("Turn on Apple Intelligence in System Settings, and check that \"Name captures from what's in them\" is on in Settings › Capture."),
             .heading("No web page address"),
             .text("macOS asks once per browser whether CaptureLens may control it. If you said no, allow it in System Settings › Privacy & Security › Automation."),
+            .heading("macOS screenshots don't come into the library"),
+            .text("Check that macOS screenshots is on in Settings › Library › Captures from other tools, and allow CaptureLens to read the folder where screenshots are saved when macOS asks (or in System Settings › Privacy & Security › Files and Folders). Screenshots come in a few seconds after the floating thumbnail goes away. Spotlight finds them, so a folder Spotlight doesn't index is left out."),
             .heading("A shortcut does nothing"),
             .text("Another app may use the same keys. Pick a different one in Settings › Presets."),
         ]),
