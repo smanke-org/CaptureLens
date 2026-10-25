@@ -1040,6 +1040,9 @@ struct CaptureInspector: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("More Info").font(.caption).foregroundStyle(.secondary)
                     TextEditor(text: $notes)
+                        // macOS hangs a Writing Tools button beside an empty box even when it isn't
+                        // being typed in, and here it lands loose over the box's edge.
+                        .writingToolsBehavior(.disabled)
                         .font(.body)
                         .frame(minHeight: 60)
                         .scrollContentBackground(.hidden)

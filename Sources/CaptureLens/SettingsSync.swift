@@ -591,6 +591,31 @@ enum DebugCommands {
             case "fold":
                 // `fold:<captures|editor|none>`: folds that side of the library to a slim bar.
                 LibraryWindow.shared.state.fold(LibraryState.Side(rawValue: arg))
+            case "windows":
+                // Every window the app has: class, number, frame, title, what it shows.
+                result = NSApp.windows.map { w in
+                    "\(type(of: w))#\(w.windowNumber) \(NSStringFromRect(w.frame)) visible \(w.isVisible) level \(w.level.rawValue) '\(w.title)' content \(w.contentView.map { String(describing: type(of: $0)) } ?? "-") sub \(w.contentView?.subviews.map { String(describing: type(of: $0)) } ?? []) parent \(w.parent?.windowNumber ?? 0)"
+                }.joined(separator: " || ")
+                    + " || first responder: \(LibraryWindow.shared.window?.firstResponder.map { String(describing: $0) } ?? "-")"
+                    + " || input client: \((NSTextInputContext.current?.client as? NSView).map { v in "\(type(of: v)) \(NSStringFromRect(v.convert(v.bounds, to: nil)))" } ?? "-")"
+            case "views-at":
+                // `views-at:<x>,<y>`: the AppKit views covering that point of the library window
+                // (points from its top left), innermost last, with their frames in the window.
+                let p = arg.split(separator: ",").compactMap { Double($0) }
+                if p.count == 2, let window = LibraryWindow.shared.window, let root = window.contentView?.superview {
+                    let at = CGPoint(x: p[0], y: window.frame.height - p[1])
+                    var hits: [String] = []
+                    func walk(_ view: NSView, depth: Int) {
+                        let frame = view.convert(view.bounds, to: nil)
+                        guard !view.isHidden, frame.contains(at) else { return }
+                        if frame.width < 200 || frame.height < 200 {
+                            hits.append("\(depth):\(type(of: view)) \(Int(frame.minX)),\(Int(window.frame.height - frame.maxY)) \(Int(frame.width))x\(Int(frame.height))")
+                        }
+                        for sub in view.subviews { walk(sub, depth: depth + 1) }
+                    }
+                    walk(root, depth: 0)
+                    result = hits.joined(separator: " | ")
+                }
             case "click-at":
                 // `click-at:<x>,<y>`: clicks the library window there (points from its top left);
                 // reports which side is folded after.
@@ -769,6 +794,7 @@ enum DebugImage {
 /// `pan-test` debug command.
 @MainActor
 enum MenuTest {
+
     /// `bulk-unique:<n>`: n captures, each with a website and tag of its own.
     static func addUnique(_ count: Int) -> String {
         let store = LibraryStore.shared
