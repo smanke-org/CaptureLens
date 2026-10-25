@@ -208,7 +208,7 @@ enum Help {
                 ("yesterday, March 3, 2026-10-01", "Captures from that day"),
             ]),
             .heading("Filters"),
-            .text("The buttons above the captures narrow the list by date, type, tags, app and website; click × on one to clear it. The sidebar has quick lists for favorites, the last 7 days, captures with notes, and each tag, app and website."),
+            .text("The buttons above the captures narrow the list by date, type, tags, app and website; click × on one to clear it. The sidebar has quick lists for favorites, the last 7 days, captures with notes, and each tag, app and website. Drag its edge all the way in for just icons (tags, apps and websites become menus); drag it out again for the lists."),
             .heading("Tags and notes"),
             .text("Type a tag and press Return to add it, or click one of your existing tags listed below the field; typing narrows the list (commas add several at once). Right-click a tag in the sidebar to rename it everywhere. More Info holds notes of any length; they're searchable too."),
             .heading("Text in a capture"),

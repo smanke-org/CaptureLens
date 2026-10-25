@@ -578,6 +578,11 @@ enum DebugCommands {
                 // `select-test[:typing]`: draws a box with the box tool, holds ⌘, drags the box
                 // 40 pt right, lets go of ⌘; reports the tool and the box at each step.
                 result = await PanTest.holdCommand(typing: arg == "typing")
+            case "samples": _ = await DebugShots.addSamples() // the made-up library from the screenshots
+            case "drag-sidebar":
+                // `drag-sidebar:<x>`: drags the sidebar's edge to x points from the window's left;
+                // reports the sidebar's width after.
+                result = await PanTest.dragSidebar(to: Double(arg) ?? 200)
             case "pan-test":
                 // `pan-test:<zoom>[:typing]`: zooms in, then holds Space and drags 120 pt right and
                 // 60 pt down over the picture with made-up events; reports how far it moved.
@@ -765,6 +770,39 @@ enum PanTest {
         field?.removeFromSuperview()
         editor.pick(.select)
         return steps.joined(separator: "; ")
+    }
+
+    static func dragSidebar(to x: Double) async -> String {
+        guard let window = LibraryWindow.shared.window, let split = splitView(window.contentView),
+              let sidebar = split.arrangedSubviews.first else { return "no split view" }
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        let before = sidebar.frame.width
+        let edge = split.convert(CGPoint(x: sidebar.frame.maxX + split.dividerThickness / 2, y: split.bounds.midY), to: nil)
+        func mouse(_ type: NSEvent.EventType, _ px: Double) -> NSEvent? {
+            NSEvent.mouseEvent(with: type, location: CGPoint(x: px, y: edge.y), modifierFlags: [],
+                               timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                               context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+        }
+        // All at once: the split view follows the drag in a loop of its own.
+        var events = [mouse(.leftMouseDown, edge.x)]
+        for step in 1...10 { events.append(mouse(.leftMouseDragged, edge.x + (x - edge.x) * Double(step) / 10)) }
+        events.append(mouse(.leftMouseUp, x))
+        for event in events.compactMap({ $0 }) { NSApp.postEvent(event, atStart: false) }
+        try? await Task.sleep(for: .seconds(1.5))
+        let shown = split.arrangedSubviews.first.map { split.isSubviewCollapsed($0) ? "collapsed" : "shown" } ?? "-"
+        var info = "delegate \(split.delegate.map { String(describing: type(of: $0)) } ?? "none")"
+        if let controller = split.delegate as? NSSplitViewController, let item = controller.splitViewItems.first {
+            info += ", canCollapse \(item.canCollapse), behavior \(item.behavior.rawValue), minThickness \(item.minimumThickness)"
+        }
+        return "sidebar \(Int(before)) -> \(Int(split.arrangedSubviews.first?.frame.width ?? -1)) pt, \(shown); \(info)"
+    }
+
+    private static func splitView(_ view: NSView?) -> NSSplitView? {
+        guard let view else { return nil }
+        if let split = view as? NSSplitView, split.isVertical { return split }
+        for sub in view.subviews { if let hit = splitView(sub) { return hit } }
+        return nil
     }
 
     private static func find(_ view: NSView?) -> ZoomingScrollView? {

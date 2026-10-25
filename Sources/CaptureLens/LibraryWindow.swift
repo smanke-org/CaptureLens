@@ -171,14 +171,17 @@ struct LibraryView: View {
     @Bindable var state: LibraryState
     @State private var store = LibraryStore.shared
     @State private var lock = LibraryLock.shared
+    /// Always .all: dragging the sidebar narrower than its icons would hide it, with nothing
+    /// left to bring it back, so it springs back to the icons instead.
+    @State private var columns = NavigationSplitViewVisibility.all
 
     var body: some View {
         if lock.isLocked {
             LockedView()
         } else {
-            NavigationSplitView {
+            NavigationSplitView(columnVisibility: $columns) {
                 LibrarySidebar(state: state)
-                    .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 300)
+                    .navigationSplitViewColumnWidth(min: LibrarySidebar.railWidth, ideal: 210, max: 300)
             } detail: {
                 HStack(spacing: 0) {
                     VStack(spacing: 0) {
@@ -193,6 +196,16 @@ struct LibraryView: View {
                         Divider()
                         CaptureDetail(state: state)
                             .frame(minWidth: 360, idealWidth: 520)
+                    }
+                }
+            }
+            .background(SidebarStaysOpen())
+            .onChange(of: columns) { _, shown in
+                guard shown != .all else { return }
+                DispatchQueue.main.async {
+                    columns = .all
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        SidebarStaysOpen.Finder.showIcons(in: LibraryWindow.shared.window)
                     }
                 }
             }
@@ -279,6 +292,48 @@ struct LibraryToolbar: ToolbarContent {
 
 // MARK: - Sidebar
 
+/// Stops the sidebar from being dragged out of sight: past its narrowest it stays as icons.
+/// SwiftUI's split view lets a column collapse (and turns that back on as it updates), so
+/// this turns it off on the AppKit split view underneath whenever a resize starts.
+private struct SidebarStaysOpen: NSViewRepresentable {
+    final class Finder: NSView {
+        private var observer: Any?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let observer { NotificationCenter.default.removeObserver(observer); self.observer = nil }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let split = Self.splitView(in: self.window?.contentView) else { return }
+                Self.pin(split)
+                self.observer = NotificationCenter.default.addObserver(forName: NSSplitView.willResizeSubviewsNotification,
+                                                                       object: split, queue: nil) { _ in
+                    MainActor.assumeIsolated { Self.pin(split) }
+                }
+            }
+        }
+
+        private static func pin(_ split: NSSplitView) {
+            (split.delegate as? NSSplitViewController)?.splitViewItems.first?.canCollapse = false
+        }
+
+        /// If the sidebar hid anyway, it comes back as icons rather than at its old width.
+        static func showIcons(in window: NSWindow?) {
+            guard let split = splitView(in: window?.contentView) else { return }
+            split.setPosition(LibrarySidebar.railWidth, ofDividerAt: 0)
+        }
+
+        static func splitView(in view: NSView?) -> NSSplitView? {
+            guard let view else { return nil }
+            if let split = view as? NSSplitView, split.isVertical { return split }
+            for sub in view.subviews { if let hit = splitView(in: sub) { return hit } }
+            return nil
+        }
+    }
+
+    func makeNSView(context: Context) -> Finder { Finder() }
+    func updateNSView(_ view: Finder, context: Context) {}
+}
+
 /// A sidebar heading that folds its list away or opens it again: click anywhere on it.
 /// Folded, it says how many entries are hidden.
 private struct FoldingHeader: View {
@@ -316,10 +371,24 @@ struct LibrarySidebar: View {
     @AppStorage("library.sidebar.tagsOpen", store: AppDefaults.store) private var tagsOpen = true
     @AppStorage("library.sidebar.appsOpen", store: AppDefaults.store) private var appsOpen = true
     @AppStorage("library.sidebar.sitesOpen", store: AppDefaults.store) private var sitesOpen = true
+    /// Narrower than this, the sidebar is a column of icons.
+    @State private var compact = false
+
+    /// The narrowest the sidebar goes: room for its icons and the window's buttons above them.
+    static let railWidth: CGFloat = 72
+    private static let compactBelow: CGFloat = 130
 
     var body: some View {
+        Group {
+            if compact { rail } else { list }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onGeometryChange(for: Bool.self) { $0.size.width < Self.compactBelow } action: { compact = $0 }
+    }
+
+    private var list: some View {
         let items = store.items
-        List(selection: Binding(get: { state.section }, set: { state.section = $0 ?? .all; state.selection = [] })) {
+        return List(selection: Binding(get: { state.section }, set: { state.section = $0 ?? .all; state.selection = [] })) {
             Section("Library") {
                 row("All Captures", "photo.on.rectangle", items.count).tag(LibraryState.Section.all)
                 row("Favorites", "star", items.filter(\.favorite).count).tag(LibraryState.Section.favorites)
@@ -383,6 +452,92 @@ struct LibrarySidebar: View {
         } message: {
             Text("Every capture tagged “\(renamingTag ?? "")” gets the new name. A name that's already a tag merges the two.")
         }
+    }
+
+    // MARK: Icons only
+
+    /// The sidebar dragged narrow: one icon per place, with the name and count in its
+    /// tooltip. Tags, apps and websites are each one icon with a menu of their entries.
+    /// Drag the edge out again for the full list.
+    private var rail: some View {
+        let items = store.items
+        let tags = LibraryQuery.tagCounts(items)
+        let apps = LibraryQuery.appCounts(items)
+        let sites = LibraryQuery.websiteCounts(items)
+        return ScrollView(.vertical) {
+            VStack(spacing: 6) {
+                railButton("All Captures", "photo.on.rectangle", items.count, .all)
+                railButton("Favorites", "star", items.filter(\.favorite).count, .favorites)
+                railButton("Last 7 Days", "calendar", nil, .recent)
+                railButton("With Notes", "note.text", items.filter { !$0.notes.isEmpty }.count, .notes)
+                if !tags.isEmpty || !apps.isEmpty || !sites.isEmpty { Divider().frame(width: 32).padding(.vertical, 4) }
+                if !tags.isEmpty {
+                    railMenu("Tags", "tag", picked: { if case .tag = $0 { true } else { false } }) {
+                        ForEach(tags, id: \.tag) { entry in
+                            Button("\(entry.tag) (\(entry.count))") { pick(.tag(entry.tag)) }
+                        }
+                    }
+                }
+                if !apps.isEmpty {
+                    railMenu("Apps", "app", picked: { if case .app = $0 { true } else { false } }) {
+                        ForEach(apps.prefix(30), id: \.key) { app in
+                            Button { pick(.app(app.key)) } label: {
+                                Label { Text("\(app.name) (\(app.count))") } icon: { AppIcon(bundleID: app.key) }
+                            }
+                        }
+                    }
+                }
+                if !sites.isEmpty {
+                    railMenu("Websites", "globe", picked: { if case .site = $0 { true } else { false } }) {
+                        ForEach(sites.prefix(30), id: \.site) { site in
+                            Button("\(site.site) (\(site.count))") { pick(.site(site.site)) }
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+        }
+        .scrollIndicators(.never)
+    }
+
+    private func pick(_ section: LibraryState.Section) {
+        state.section = section
+        state.selection = []
+    }
+
+    private func railButton(_ title: String, _ symbol: String, _ count: Int?, _ section: LibraryState.Section) -> some View {
+        let picked = state.section == section
+        return Button { pick(section) } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 16))
+                .frame(width: 40, height: 32)
+                .foregroundStyle(picked ? Color.white : Color.accentColor)
+                .background(picked ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(count.map { "\(title) (\($0))" } ?? title)
+        .accessibilityLabel(title)
+    }
+
+    private func railMenu<Content: View>(_ title: String, _ symbol: String, picked isPicked: (LibraryState.Section) -> Bool,
+                                         @ViewBuilder _ content: () -> Content) -> some View {
+        let picked = isPicked(state.section)
+        return Menu { content() } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 16))
+                .frame(width: 40, height: 32)
+                .foregroundStyle(picked ? Color.white : Color.accentColor)
+                .background(picked ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("\(title): pick one to show its captures")
+        .accessibilityLabel(title)
     }
 
     private func row(_ title: String, _ symbol: String, _ count: Int?) -> some View {
