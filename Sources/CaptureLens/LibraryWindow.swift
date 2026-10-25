@@ -35,8 +35,15 @@ final class LibraryWindow: NSObject, NSWindowDelegate {
             state.reveal(id)
         }
         LibrarySync.shared.scan()
+        // Another Mac's layout is taken up as the window opens, never while it's in use.
+        let opening = window?.isVisible != true
+        if opening {
+            LibraryLayout.prepareSidebar()
+            LibraryLayout.applyIfNew(to: state, window: window)
+        }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+        if opening { LibraryLayout.placeSidebar(in: window) }
     }
 
     func windowDidBecomeKey(_ notification: Notification) { LibraryLock.shared.touch() }
@@ -206,6 +213,21 @@ struct LibraryView: View {
     /// Always .all: dragging the sidebar narrower than its icons would hide it, with nothing
     /// left to bring it back, so it springs back to the icons instead.
     @State private var columns = NavigationSplitViewVisibility.all
+    /// The selected capture's share of the room beside the sidebar, set by dragging the line
+    /// beside it. A share rather than points, so it carries to a Mac with another screen.
+    @AppStorage(LibraryLayout.detailKey, store: AppDefaults.store) private var detailShare = LibraryLayout.defaultDetail
+
+    /// Room for the selected capture, leaving the captures at least as much as it needs.
+    static func detailRange(_ room: CGFloat) -> ClosedRange<Double> {
+        let minimum = 360.0
+        return minimum...max(minimum, Double(room) - minimum - 1)
+    }
+
+    /// The selected capture's width in points, from its share.
+    private func detailWidth(_ room: CGFloat) -> Binding<Double> {
+        Binding(get: { Self.detailRange(room).clamp(detailShare * Double(room)) },
+                set: { detailShare = room > 0 ? $0 / Double(room) : LibraryLayout.defaultDetail })
+    }
 
     var body: some View {
         if lock.isLocked {
@@ -215,6 +237,8 @@ struct LibraryView: View {
                 LibrarySidebar(state: state)
                     .navigationSplitViewColumnWidth(min: LibrarySidebar.railWidth, ideal: 210, max: 300)
             } detail: {
+                // The room the window gives, not what the columns ask for, sets how wide the line can go.
+                GeometryReader { room in
                 HStack(spacing: 0) {
                     // Either side can fold to a slim bar, so the other fills the window.
                     if state.showInspector && state.foldedSide == .captures {
@@ -231,14 +255,24 @@ struct LibraryView: View {
                         .frame(minWidth: 360)
                     }
                     if state.showInspector {
-                        Divider()
                         if state.foldedSide == .editor {
+                            Divider()
                             CollapsedSideBar(title: "Picture", symbol: "photo", edge: .trailing) { state.fold(nil) }
-                        } else {
+                        } else if state.foldedSide == .captures {
+                            Divider()
                             CaptureDetail(state: state)
-                                .frame(minWidth: 360, idealWidth: 520)
+                                .frame(minWidth: 360)
+                        } else {
+                            // Drag the line between them to share the room differently.
+                            let width = detailWidth(room.size.width)
+                            PaneDivider(axis: .columns, length: width, range: Self.detailRange(room.size.width),
+                                        reset: { detailShare = LibraryLayout.defaultDetail })
+                            CaptureDetail(state: state)
+                                .frame(width: width.wrappedValue)
                         }
                     }
+                }
+                .frame(width: room.size.width, height: room.size.height)
                 }
                 // The tool dial floats over the grid and the picture.
                 .overlay { DialOverlay() }
@@ -276,6 +310,50 @@ struct LibraryView: View {
     private var deleteTitle: String {
         state.confirmDelete.count == 1 ? "Delete this capture?" : "Delete \(state.confirmDelete.count) captures?"
     }
+}
+
+/// A line between two panes that can be dragged to share the room differently: between the
+/// captures and the selected capture (columns), or the picture and its details (rows).
+/// Double-click it to go back to the usual share.
+struct PaneDivider: View {
+    enum Axis { case columns, rows }
+    let axis: Axis
+    /// The size of the pane it resizes: the one on the right of columns, above rows.
+    @Binding var length: Double
+    let range: ClosedRange<Double>
+    let reset: () -> Void
+    @State private var start: Double?
+
+    var body: some View {
+        Divider()
+            .overlay {
+                // A wider grip than the line itself.
+                Color.clear
+                    .frame(width: axis == .columns ? 9 : nil, height: axis == .rows ? 9 : nil)
+                    .contentShape(Rectangle())
+                    .pointerStyle(axis == .columns ? .columnResize : .rowResize)
+                    .gesture(
+                        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                            .onChanged { drag in
+                                let from = start ?? range.clamp(length)
+                                start = from
+                                // Columns: the pane is on the right, so dragging left widens it.
+                                // Rows: the pane is above, so dragging down makes it taller.
+                                length = range.clamp(axis == .columns ? from - drag.translation.width : from + drag.translation.height)
+                            }
+                            .onEnded { _ in start = nil }
+                    )
+                    .onTapGesture(count: 2, perform: reset)
+                    .help(axis == .columns ? "Drag to make the captures wider or narrower"
+                                           : "Drag to make the picture taller or shorter")
+            }
+            // Above the panes on both sides, so all of the grip takes the drag.
+            .zIndex(1)
+    }
+}
+
+extension ClosedRange where Bound == Double {
+    func clamp(_ value: Double) -> Double { Swift.min(Swift.max(value, lowerBound), upperBound) }
 }
 
 /// A folded-away side of the library: a slim column with its name; a click anywhere on it
@@ -374,7 +452,7 @@ struct LibraryToolbar: ToolbarContent {
 /// Stops the sidebar from being dragged out of sight: past its narrowest it stays as icons.
 /// SwiftUI's split view lets a column collapse (and turns that back on as it updates), so
 /// this turns it off on the AppKit split view underneath whenever a resize starts.
-private struct SidebarStaysOpen: NSViewRepresentable {
+struct SidebarStaysOpen: NSViewRepresentable {
     final class Finder: NSView {
         private var observer: Any?
 
@@ -463,6 +541,8 @@ struct LibrarySidebar: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onGeometryChange(for: Bool.self) { $0.size.width < Self.compactBelow } action: { compact = $0 }
+        // Noted for the layout other Macs follow.
+        .onGeometryChange(for: Double.self) { Double($0.size.width.rounded()) } action: { LibraryLayout.sidebarWidth = $0 }
     }
 
     private var list: some View {

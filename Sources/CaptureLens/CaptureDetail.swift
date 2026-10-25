@@ -45,6 +45,18 @@ struct SingleCaptureView: View {
 
     enum Pane: String { case picture, details }
 
+    /// The picture's share of the column's height, above its details.
+    @AppStorage(LibraryLayout.pictureKey, store: AppDefaults.store) private var pictureShare = LibraryLayout.defaultPicture
+
+    static func pictureRange(_ room: CGFloat) -> ClosedRange<Double> {
+        200...max(200, Double(room) - 180 - 1)
+    }
+
+    private func pictureHeight(_ room: CGFloat) -> Binding<Double> {
+        Binding(get: { Self.pictureRange(room).clamp(pictureShare * Double(room)) },
+                set: { pictureShare = room > 0 ? $0 / Double(room) : LibraryLayout.defaultPicture })
+    }
+
     /// Info (name, tags, notes, where it came from) or Markup (how marks look), in tabs.
     @AppStorage("library.detailsTab", store: AppDefaults.store) private var detailsTab = "info"
 
@@ -256,9 +268,15 @@ struct SingleCaptureView: View {
                     CollapsedPaneBar(title: "Details", symbol: "info.circle", edge: .bottom) { collapsed = nil }
                 }
             case nil:
-                VSplitView {
-                    pictureArea
-                    details
+                // The line between them drags; where it sits is kept as a share of the height.
+                GeometryReader { room in
+                    let height = pictureHeight(room.size.height)
+                    VStack(spacing: 0) {
+                        pictureArea.frame(height: height.wrappedValue)
+                        PaneDivider(axis: .rows, length: height, range: Self.pictureRange(room.size.height),
+                                    reset: { pictureShare = LibraryLayout.defaultPicture })
+                        details
+                    }
                 }
             }
             }

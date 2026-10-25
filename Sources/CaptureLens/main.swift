@@ -79,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if newInstall { SettingsSync.shared.adoptOnNewInstall() }
         SettingsSync.shared.start()
         CaptureCollector.shared.start()
+        LibraryLayout.start()
         // CloudKit tells the sync engine about other Macs' changes by push.
         NSApp.registerForRemoteNotifications()
         #if DEBUG

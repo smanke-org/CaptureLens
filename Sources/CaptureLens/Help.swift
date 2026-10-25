@@ -221,6 +221,8 @@ enum Help {
                 ("Delete", "Delete the selected captures (asks first)"),
                 ("Drag a capture", "Into another app, or a pictures file onto the library to import it"),
                 ("Open in Its Own Window", "The window button under the picture moves the picture and its tools into a window of their own, as big as you like; it follows the capture selected in the library. Bring Back, or closing it, returns it"),
+                ("Drag the line beside the picture", "Make the captures wider or narrower; double-click the line for the usual width"),
+                ("Drag the line under the picture", "Make the picture taller or shorter beside its details; double-click it for the usual height"),
                 ("‹ and › above the picture", "Fold away the captures (the picture and details fill the window) or the picture and details (the captures fill it); the slim bar left at the side brings it back"),
                 ("⋯ under the picture", "In a narrow window, Copy, Save As, Share, zoom and the rest move into this menu"),
                 ("⌄ and ⌃ under the picture", "Fold away the details (more room to annotate) or the picture (more room for the details); the slim bar left behind brings it back"),
@@ -239,6 +241,7 @@ enum Help {
 
         HelpTopic(id: "sync", title: "Sync and Security", symbol: "lock.icloud", blocks: [
             .text("Turn on \"Sync settings with your other Macs\" in Settings › General and choose a sync passphrase. Your presets, settings and library then follow you to every Mac with CaptureLens and sync on, end-to-end encrypted: neither Apple nor the developer can see them."),
+            .text("The library window's layout comes along too: the sidebar's width and which of its sections are open, the line between the captures and the picture, the line between the picture and its details, which panes are folded or hidden, thumbnail size, sort order, and the Info or Markup tab. Sizes go as shares of the window, so a pane that's half the window on a big screen is half on a small one. The window's own size and place stay with each Mac, and another Mac's layout is taken up the next time you open the library, so nothing moves while you work."),
             .heading("Syncing the library through Dropbox, OneDrive or Google Drive"),
             .text("In Settings › Library, set \"Sync the library through\" to \"Dropbox, OneDrive or Google Drive\", then choose where the folder is on this Mac: Dropbox, OneDrive and Google Drive are offered when they're installed, or pick any folder that a sync app keeps on all your Macs. CaptureLens puts a \"CaptureLens Library\" folder inside it. Settings and the sync passphrase still go through iCloud."),
             .text("The choice is shared, so every Mac uses the same one; each Mac picks its own folder location. On a Mac that hasn't yet, the menu bar menu shows \"Choose Sync Folder…\". Every file in the folder is encrypted with your sync passphrase, so the sync service can't see your captures."),

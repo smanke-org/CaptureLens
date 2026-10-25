@@ -83,7 +83,7 @@ final class SettingsSync {
     /// Settings that follow the user between Macs.
     static var syncedKeys: [String] {
         Preferences.keys + ["showInDock", "showInMenuBar", MenuHub.foldKey, AppAppearance.key, UpdatePolicy.key,
-         UpdateInterval.valueKey, UpdateInterval.unitKey]
+         UpdateInterval.valueKey, UpdateInterval.unitKey, LibraryLayout.key]
     }
 
     var isReady: Bool { isEnabled && keyState == .ready && key != nil }
@@ -326,6 +326,7 @@ final class SettingsSync {
         settings[UpdatePolicy.key] = UpdatePolicy.current.rawValue
         settings[UpdateInterval.valueKey] = UpdateInterval.current.value
         settings[UpdateInterval.unitKey] = UpdateInterval.current.unit.rawValue
+        if let layout = AppDefaults.store.dictionary(forKey: LibraryLayout.key) { settings[LibraryLayout.key] = layout }
         let plist: [String: Any] = ["version": 3, "updatedAt": updatedAt, "updatedBy": Self.deviceName, "settings": settings]
         guard let data = try? PropertyListSerialization.data(fromPropertyList: plist, format: .binary, options: 0),
               let sealed = try? SyncCrypto.seal(data, using: key) else { return nil }
@@ -616,6 +617,76 @@ enum DebugCommands {
                     walk(root, depth: 0)
                     result = hits.joined(separator: " | ")
                 }
+            case "layout":
+                // The synced layout record, whether it's been taken up, and the window as it is.
+                let stored = AppDefaults.store.dictionary(forKey: LibraryLayout.key) ?? [:]
+                let state = LibraryWindow.shared.state
+                let record = stored.keys.sorted().map { key in
+                    let value = stored[key]
+                    if let d = value as? Double, !(value is Bool) { return "\(key)=\(String(format: "%.3f", d))" }
+                    return "\(key)=\(value ?? "-")"
+                }.joined(separator: " ")
+                result = "record: \(record) | applied \(AppDefaults.store.string(forKey: "libraryLayout.applied") == stored["stamp"] as? String) | now: sidebar \(LibraryLayout.sidebarWidth) thumbs \(Int(state.thumbnailSize)) folded \(state.foldedSide?.rawValue ?? "none") inspector \(state.showInspector) sort \(state.sort.rawValue) window \(Int(LibraryWindow.shared.window?.frame.width ?? 0)) | notes \(LibraryLayout.debugNotes)"
+            case "layout-remote":
+                // `layout-remote:<key>=<value>;…`: as if another Mac's layout arrived (the current record
+                // with those changes and a new stamp). Numbers become shares, true/false flags.
+                var layout = AppDefaults.store.dictionary(forKey: LibraryLayout.key) ?? [:]
+                for pair in arg.split(separator: ";") {
+                    let kv = pair.split(separator: "=", maxSplits: 1).map(String.init)
+                    guard kv.count == 2 else { continue }
+                    if let number = Double(kv[1]) { layout[kv[0]] = number }
+                    else if kv[1] == "true" || kv[1] == "false" { layout[kv[0]] = kv[1] == "true" }
+                    else { layout[kv[0]] = kv[1] }
+                }
+                layout["stamp"] = UUID().uuidString
+                AppDefaults.store.set(layout, forKey: LibraryLayout.key)
+            case "layout-roundtrip":
+                // Seals the settings, loses the layout here, and takes it back from the sealed copy.
+                let before = AppDefaults.store.dictionary(forKey: LibraryLayout.key) ?? [:]
+                _ = SettingsSync.shared.debugRoundTrip(using: SymmetricKey(size: .bits256)) {
+                    AppDefaults.store.removeObject(forKey: LibraryLayout.key)
+                }
+                let after = AppDefaults.store.dictionary(forKey: LibraryLayout.key) ?? [:]
+                result = "keys before \(before.count), after \(after.count), same stamp \((before["stamp"] as? String) == (after["stamp"] as? String))"
+            case "close-library": LibraryWindow.shared.window?.close()
+            case "drag-at":
+                // `drag-at:<x>,<y>,<toX>`: drags across the library window (points from its top
+                // left) in steps; reports the selected capture's column width after.
+                let p = arg.split(separator: ",").compactMap { Double($0) }
+                if p.count >= 3, let window = LibraryWindow.shared.window {
+                    window.makeKeyAndOrderFront(nil)
+                    // A fourth number drags down or up to that y as well.
+                    let toY = p.count > 3 ? p[3] : p[1]
+                    func mouse(_ type: NSEvent.EventType, _ x: Double) -> NSEvent? {
+                        let along = p[2] == p[0] ? 1 : (x - p[0]) / (p[2] - p[0])
+                        let y = type == .leftMouseDown ? p[1] : p[1] + (toY - p[1]) * along
+                        return NSEvent.mouseEvent(with: type, location: CGPoint(x: x, y: window.frame.height - y), modifierFlags: [],
+                                           timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                           context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+                    }
+                    var events: [NSEvent?] = []
+                    if p[2] == p[0] {
+                        // Straight up or down: step the y instead.
+                        func vertical(_ type: NSEvent.EventType, _ y: Double) -> NSEvent? {
+                            NSEvent.mouseEvent(with: type, location: CGPoint(x: p[0], y: window.frame.height - y), modifierFlags: [],
+                                               timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                               context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+                        }
+                        events.append(vertical(.leftMouseDown, p[1]))
+                        for step in 1...12 { events.append(vertical(.leftMouseDragged, p[1] + (toY - p[1]) * Double(step) / 12)) }
+                        events.append(vertical(.leftMouseUp, toY))
+                    } else {
+                        events.append(mouse(.leftMouseDown, p[0]))
+                        for step in 1...12 { events.append(mouse(.leftMouseDragged, p[0] + (p[2] - p[0]) * Double(step) / 12)) }
+                        events.append(mouse(.leftMouseUp, p[2]))
+                    }
+                    for event in events.compactMap({ $0 }) {
+                        NSApp.postEvent(event, atStart: false)
+                        try await Task.sleep(for: .milliseconds(30))
+                    }
+                    try await Task.sleep(for: .milliseconds(500))
+                }
+                result = "detail share \(AppDefaults.store.double(forKey: LibraryLayout.detailKey)), picture share \(AppDefaults.store.double(forKey: LibraryLayout.pictureKey))"
             case "click-at":
                 // `click-at:<x>,<y>`: clicks the library window there (points from its top left);
                 // reports which side is folded after.
