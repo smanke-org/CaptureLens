@@ -4,6 +4,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 MainActor.assumeIsolated {
+    // Tooltips after 0.375 s instead of the system's 1.5 s. AppKit reads this once, as it
+    // starts, so it's registered first; a value set with `defaults write` still wins.
+    UserDefaults.standard.register(defaults: ["NSInitialToolTipDelay": 375])
     let app = NSApplication.shared
     let delegate = AppDelegate()
     app.delegate = delegate

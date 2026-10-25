@@ -574,6 +574,17 @@ enum DebugCommands {
                     window.setFrame(CGRect(origin: window.frame.origin, size: CGSize(width: size[0], height: size[1])), display: true)
                 }
             case "inspector": LibraryWindow.shared.state.showInspector = arg == "on"
+            case "tooltip-delay":
+                // How long AppKit waits before showing a tooltip, from its tooltip manager.
+                let sel = NSSelectorFromString("_getDisplayDelay:inQuickMode:forView:")
+                if let cls = NSClassFromString("NSToolTipManager"),
+                   let manager = (cls as AnyObject).perform(NSSelectorFromString("sharedToolTipManager"))?.takeUnretainedValue(),
+                   let imp = class_getMethodImplementation(cls, sel) {
+                    typealias Get = @convention(c) (AnyObject, Selector, UnsafeMutablePointer<Double>, UnsafeMutablePointer<ObjCBool>, NSView?) -> Void
+                    var delay = 0.0, quick = ObjCBool(false)
+                    unsafeBitCast(imp, to: Get.self)(manager, sel, &delay, &quick, NSView())
+                    result = "\(delay)"
+                }
             case "shoot-library":
                 if let window = LibraryWindow.shared.window {
                     let out = URL(fileURLWithPath: arg)
