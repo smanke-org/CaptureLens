@@ -36,6 +36,7 @@ struct SingleCaptureView: View {
     @State private var zoomToFit = 0
     @State private var editor = AnnotationEditor.shared
     @State private var prefs = Preferences.shared
+    @State private var screenFill = ScreenFill.shared
     /// A pane folded away to give the other all the room; remembered between captures.
     @AppStorage("library.collapsedPane", store: AppDefaults.store) private var collapsedRaw = ""
     private var collapsed: Pane? {
@@ -109,6 +110,7 @@ struct SingleCaptureView: View {
             .help("Delete…")
         Divider().frame(height: 16)
         if pictureOnly {
+            fillScreenButton
             Button { editorWindow.close() } label: { Label("Bring Back", systemImage: "arrow.down.right.and.arrow.up.left") }
                 .help("Put the picture back in the library window")
         } else {
@@ -118,7 +120,22 @@ struct SingleCaptureView: View {
                 .help("Hide the picture, for more room for the details")
             Button { editorWindow.open() } label: { Label("Open in Its Own Window", systemImage: "macwindow.badge.plus") }
                 .help("Open the picture and its tools in a window of their own, as big as you like")
+            fillScreenButton
         }
+    }
+
+    /// The window this view is in: the editor's own, or the library's.
+    private var hostWindow: NSWindow? { pictureOnly ? editorWindow.window : LibraryWindow.shared.window }
+
+    /// Grows the window to fill the screen, and back.
+    private var fillScreenButton: some View {
+        let filled = screenFill.isFilled(hostWindow)
+        return Button { screenFill.toggle(hostWindow) } label: {
+            Label(filled ? "Restore Size" : "Fill Screen",
+                  systemImage: filled ? "arrow.down.forward.and.arrow.up.backward.rectangle"
+                                      : "arrow.up.backward.and.arrow.down.forward.rectangle")
+        }
+        .help(filled ? "Put the window back to the size it was" : "Make this window fill the screen")
     }
 
     /// Everything the narrow bar has no room for.
@@ -142,6 +159,7 @@ struct SingleCaptureView: View {
                 Button("Hide Picture") { collapsed = .picture }
                 Button("Open in Its Own Window") { editorWindow.open() }
             }
+            Button(screenFill.isFilled(hostWindow) ? "Restore Size" : "Fill Screen") { screenFill.toggle(hostWindow) }
             Divider()
             Button("Delete…", role: .destructive) { state.confirmDelete = [item.id] }
         } label: {
@@ -1343,7 +1361,7 @@ final class EditorWindow: NSObject, NSWindowDelegate {
     static let shared = EditorWindow()
 
     private(set) var isOpen = false
-    @ObservationIgnored private var window: NSWindow?
+    @ObservationIgnored private(set) var window: NSWindow?
 
     func open() {
         if window == nil {
@@ -1384,6 +1402,49 @@ final class EditorWindow: NSObject, NSWindowDelegate {
         window?.contentViewController = nil
         window = nil
         LibraryWindow.shared.window?.makeKeyAndOrderFront(nil)
+    }
+}
+
+/// Makes a window fill the screen it's on (all but the menu bar and Dock), and puts it back.
+@Observable
+@MainActor
+final class ScreenFill {
+    static let shared = ScreenFill()
+
+    /// Where each filled window was before, by window number.
+    private var before: [Int: NSRect] = [:]
+    @ObservationIgnored private var watchers: [Int: [NSObjectProtocol]] = [:]
+
+    func isFilled(_ window: NSWindow?) -> Bool {
+        guard let window else { return false }
+        return before[window.windowNumber] != nil
+    }
+
+    func toggle(_ window: NSWindow?) {
+        guard let window, !window.styleMask.contains(.fullScreen),
+              let screen = window.screen ?? NSScreen.main else { return }
+        let number = window.windowNumber
+        if let frame = before[number] {
+            forget(number)
+            window.setFrame(frame, display: true, animate: true)
+        } else {
+            let frame = window.frame
+            window.setFrame(screen.visibleFrame, display: true, animate: true)
+            before[number] = frame
+            // Moved, resized or closed, it no longer fills the screen.
+            let center = NotificationCenter.default
+            watchers[number] = [NSWindow.didMoveNotification, NSWindow.didEndLiveResizeNotification,
+                                NSWindow.willCloseNotification].map { name in
+                center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.forget(number) }
+                }
+            }
+        }
+    }
+
+    private func forget(_ number: Int) {
+        before[number] = nil
+        watchers.removeValue(forKey: number)?.forEach { NotificationCenter.default.removeObserver($0) }
     }
 }
 

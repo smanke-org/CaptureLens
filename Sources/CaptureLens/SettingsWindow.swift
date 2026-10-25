@@ -299,6 +299,18 @@ struct PresetSettings: View {
     }
 }
 
+#if DEBUG
+extension PresetEditor {
+    /// The sheet's natural height for each preset, for checking it fits small screens.
+    @MainActor static func debugHeights() -> String {
+        Preferences.shared.presets.map { preset in
+            let host = NSHostingController(rootView: PresetEditor(preset: preset, save: { _ in }, cancel: {}))
+            return "\(preset.name) \(Int(host.view.fittingSize.height))"
+        }.joined(separator: ", ")
+    }
+}
+#endif
+
 struct PresetEditor: View {
     @State var preset: CapturePreset
     let save: (CapturePreset) -> Void

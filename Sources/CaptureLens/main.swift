@@ -37,6 +37,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         mainMenu.items.first?.submenu?.insertItem(item("Our other apps…", #selector(showOtherApps)), at: 2)
         #endif
         mainMenu.addItem(editMenu())
+        // The library or editor filling the screen, and back, like the button on the picture bar.
+        let fill = item("Fill Screen", #selector(fillScreen), key: "f")
+        fill.keyEquivalentModifierMask = [.command, .option]
+        NSApp.windowsMenu?.insertItem(fill, at: 2)
         // Help menu, with the standard ⌘? (macOS adds its search field).
         let helpItem = NSMenuItem()
         let help = NSMenu(title: "Help")
@@ -363,6 +367,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if StepRecorder.shared.isRecording { StepRecorder.shared.stop(makeGuide: true) } else { StepRecorder.shared.start() }
     }
     @objc func showLibrary() { LibraryWindow.shared.show() }
+    @objc func fillScreen() { ScreenFill.shared.toggle(fillableWindow) }
+
+    /// The library or editor window in front, the two that can fill the screen.
+    private var fillableWindow: NSWindow? {
+        guard let key = NSApp.keyWindow,
+              key === LibraryWindow.shared.window || key === EditorWindow.shared.window else { return nil }
+        return key
+    }
     @objc func copyRecent(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID, let entry = LibraryStore.shared.entry(id),
               let png = Flattener.png(entry) else { return }
@@ -414,5 +426,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     @objc func showAbout() {
         AppInfo.showAbout()
+    }
+}
+
+extension AppDelegate: NSMenuItemValidation {
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard menuItem.action == #selector(fillScreen) else { return true }
+        menuItem.title = ScreenFill.shared.isFilled(fillableWindow) ? "Restore Size" : "Fill Screen"
+        return fillableWindow != nil
     }
 }

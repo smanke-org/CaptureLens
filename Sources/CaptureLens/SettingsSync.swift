@@ -588,6 +588,27 @@ enum DebugCommands {
                 if let item = store.items.first(where: { $0.name.localizedCaseInsensitiveContains(arg) }) {
                     LibraryWindow.shared.show(select: item.id)
                 } else { result = "no capture named \(arg)" }
+            case "fill", "fill-key", "fill-move", "frame":
+                // `fill:<library|editor>` presses Fill Screen, `fill-key:` types ⌥⌘F in that window,
+                // `fill-move:` nudges it 30 pt; each reports its frame, the screen's and whether it fills.
+                let window = arg == "editor" ? EditorWindow.shared.window : LibraryWindow.shared.window
+                if let window {
+                    switch verb {
+                    case "fill": ScreenFill.shared.toggle(window)
+                    case "fill-key":
+                        window.makeKeyAndOrderFront(nil)
+                        try await Task.sleep(for: .seconds(0.3))
+                        if let key = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command, .option],
+                                                      timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                                                      characters: "f", charactersIgnoringModifiers: "f", isARepeat: false, keyCode: 3) {
+                            NSApp.postEvent(key, atStart: false)
+                        }
+                        try await Task.sleep(for: .seconds(1))
+                    case "fill-move": window.setFrameOrigin(NSPoint(x: window.frame.minX + 30, y: window.frame.minY))
+                    default: break
+                    }
+                    result = "\(NSStringFromRect(window.frame)) screen \(NSStringFromRect(window.screen?.visibleFrame ?? .zero)) filled \(ScreenFill.shared.isFilled(window))"
+                } else { result = "no \(arg) window" }
             case "pop-out": EditorWindow.shared.open()
             case "bring-back": EditorWindow.shared.close()
             case "popped-dial":
@@ -611,6 +632,9 @@ enum DebugCommands {
                     scroll.openDial(at: CGPoint(x: scroll.bounds.midX, y: scroll.bounds.midY), held: false)
                     result = scroll.debugDialInfo
                 }
+            case "sheet-sizes":
+                // How tall the preset editor sheet wants to be, for each preset.
+                result = PresetEditor.debugHeights()
             case "pin-dial":
                 if let window = LibraryWindow.shared.window, let scroll = PanTest.find(window.contentView) { scroll.debugDialState.pinned = arg != "off" }
             case "close-dial":
