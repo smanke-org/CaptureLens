@@ -829,6 +829,8 @@ struct LockedView: View {
 /// captures as they look in the library (annotations and pointer drawn in).
 struct ShareButton: NSViewRepresentable {
     let items: () -> [CaptureItem]
+    /// The symbol's size, to match bigger buttons beside it; standard when nil.
+    var pointSize: CGFloat?
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -846,6 +848,7 @@ struct ShareButton: NSViewRepresentable {
                               target: context.coordinator, action: #selector(Coordinator.share(_:)))
         button.bezelStyle = .texturedRounded
         button.isBordered = false
+        if let pointSize { button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .regular) }
         context.coordinator.items = items
         return button
     }

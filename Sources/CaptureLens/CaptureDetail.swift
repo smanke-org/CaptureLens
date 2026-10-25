@@ -51,18 +51,21 @@ struct SingleCaptureView: View {
 
     private func fit() { zoomToFit += 1 }
 
+    static let barFontSize: CGFloat = 16
+
     /// Edit/Result, then whatever fits.
     private func barRow<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         HStack(spacing: 12) {
             // On: mark up the original. Off: the finished picture, as it's copied and saved.
             Toggle("Edit", isOn: Binding(get: { !editor.showResult }, set: { editor.showResult = !$0 }))
                 .toggleStyle(.switch)
-                .controlSize(.small)
                 .fixedSize()
                 .help(editor.showResult ? "Turn on to annotate and adjust the picture"
                                         : "Turn off to see the finished picture, as it's copied and saved")
             content()
         }
+        // A quarter bigger than standard, so the buttons are easy to hit.
+        .font(.system(size: Self.barFontSize))
         .labelStyle(.iconOnly)
         .buttonStyle(.borderless)
         .fixedSize(horizontal: true, vertical: false)
@@ -73,7 +76,7 @@ struct SingleCaptureView: View {
             .help("Copy")
         Button { Exporter.save(item) } label: { Label("Save As…", systemImage: "square.and.arrow.down") }
             .help("Save As…")
-        ShareButton(items: { [item] }).fixedSize().help("Share")
+        ShareButton(items: { [item] }, pointSize: Self.barFontSize).fixedSize().help("Share")
         Button { store.toggleFavorite([item.id]) } label: {
             Label("Favorite", systemImage: item.favorite ? "star.fill" : "star")
         }
@@ -632,7 +635,6 @@ struct ZoomControls: View {
             if !compact {
             Slider(value: Binding(get: { log2(zoom.magnification) }, set: { zoom.set(pow(2, $0)) }),
                    in: log2(CanvasZoom.range.lowerBound)...log2(CanvasZoom.range.upperBound))
-                .controlSize(.small)
                 .frame(width: 100)
                 .help("Zoom. Pinch or ⌘-scroll also zoom.")
             }
