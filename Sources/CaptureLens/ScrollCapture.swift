@@ -27,6 +27,9 @@ final class ScrollCapture {
     @ObservationIgnored private var unchangedInARow = 0
     @ObservationIgnored private var region: ScreenRegion?
     @ObservationIgnored private var globalFrame: CGRect = .zero
+    @ObservationIgnored private var scrollGuard = AutoScrollGuard()
+    @ObservationIgnored private var pace = AutoScrollPace()
+    @ObservationIgnored private var keyMonitors: [Any] = []
 
     /// Starts capturing `region` (also given as `frame`, global Cocoa coordinates). `done`
     /// gets the stitched picture, or nil if cancelled.
@@ -45,6 +48,7 @@ final class ScrollCapture {
         worker = StitchWorker()
         showOutline(frame)
         showPanel(near: frame)
+        watchEscape()
         loop = Task { await run() }
     }
 
@@ -64,13 +68,24 @@ final class ScrollCapture {
                     note = "That's as tall as a capture can be."
                     return finish()
                 case .lost:
-                    note = "Scrolled too fast to follow. Scroll back a little."
+                    // Scrolling for you backs up and slows down by itself (see AutoScrollPace).
+                    note = autoScrolling ? nil : "Scrolled too fast to follow. Scroll back a little."
                     unchangedInARow = 0
                 default:
                     unchangedInARow = 0
                     if note != nil { note = nil }
                 }
-                if autoScrolling { scrollStep() }
+                if autoScrolling {
+                    switch scrollGuard.check(pointer: NSEvent.mouseLocation, expected: middle, height: height) {
+                    case .pointerMoved:
+                        autoScrolling = false
+                        note = "Stopped scrolling because the pointer moved. Press Scroll for Me to carry on."
+                    case .noProgress:
+                        return finish()
+                    case nil:
+                        scrollStep(pace.next(after: result, height: globalFrame.height))
+                    }
+                }
             } catch {
                 note = "Couldn't capture the area: \(error.localizedDescription)"
             }
@@ -95,13 +110,33 @@ final class ScrollCapture {
         let mainHeight = NSScreen.screens.first?.frame.height ?? 0
         CGWarpMouseCursorPosition(CGPoint(x: globalFrame.midX, y: mainHeight - globalFrame.midY))
         unchangedInARow = 0
+        scrollGuard = AutoScrollGuard()
+        pace = AutoScrollPace()
+        note = nil
         autoScrolling = true
     }
 
-    private func scrollStep() {
-        // Less than the area's height, so each frame overlaps the last.
-        let step = Int32(max(40, globalFrame.height * 0.45))
-        let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -step, wheel2: 0, wheel3: 0)
+    /// The middle of the area, in global Cocoa coordinates: where scrolling keeps the pointer.
+    private var middle: CGPoint { CGPoint(x: globalFrame.midX, y: globalFrame.midY) }
+
+    /// Esc stops scrolling for you, or else cancels. The panel never takes the keyboard (the
+    /// app being captured keeps it), so the key is watched everywhere; that needs the same
+    /// permission as scrolling for you, and without it Esc works only in CaptureLens.
+    private func watchEscape() {
+        let handler: (NSEvent) -> Void = { event in
+            guard event.keyCode == 53 else { return }
+            MainActor.assumeIsolated {
+                let session = ScrollCapture.shared
+                if session.autoScrolling { session.autoScrolling = false } else { session.cancel() }
+            }
+        }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: handler) { keyMonitors.append(global) }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { handler($0); return $0 }) { keyMonitors.append(local) }
+    }
+
+    /// Scrolls the area by `delta` points: negative goes down the page, positive back up.
+    private func scrollStep(_ delta: Int32) {
+        let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: delta, wheel2: 0, wheel3: 0)
         let mainHeight = NSScreen.screens.first?.frame.height ?? 0
         event?.location = CGPoint(x: globalFrame.midX, y: mainHeight - globalFrame.midY)
         event?.post(tap: .cghidEventTap)
@@ -134,6 +169,8 @@ final class ScrollCapture {
     }
 
     private func tearDown() {
+        keyMonitors.forEach(NSEvent.removeMonitor)
+        keyMonitors = []
         panel?.orderOut(nil)
         outline?.orderOut(nil)
         panel = nil
@@ -183,8 +220,10 @@ private struct ScrollPanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(session.autoScrolling ? "Scrolling for you… it stops at the end." : "Scroll down slowly over the outlined area.")
+            Text(session.autoScrolling ? "Scrolling for you… it stops at the end, or move the pointer or press Esc."
+                                       : "Scroll down slowly over the outlined area.")
                 .font(.callout.weight(.medium))
+                .fixedSize(horizontal: false, vertical: true)
             Text(session.frames == 0 ? "Starting…" : "\(session.height.formatted()) pixels tall so far")
                 .font(.caption).foregroundStyle(.secondary).monospacedDigit()
             if let note = session.note {

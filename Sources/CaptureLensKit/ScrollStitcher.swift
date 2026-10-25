@@ -175,3 +175,69 @@ public final class ScrollStitcher {
         return best.shift
     }
 }
+
+/// When scrolling for the user has to stop. The scroll events go where the pointer is, so
+/// each one puts the pointer back over the area: if it has moved since, the user wants it,
+/// and scrolling stops rather than pull it back. It also stops once the picture hasn't grown
+/// for a few steps (the end of the page), even if something on it keeps moving.
+public struct AutoScrollGuard: Sendable {
+    public enum Stop: Equatable, Sendable {
+        case pointerMoved
+        case noProgress
+    }
+
+    /// How far, in points, the pointer can be from where scrolling left it.
+    public var tolerance: CGFloat
+    /// Steps in a row without the picture growing before it counts as the end.
+    public var stallLimit: Int
+    private var tallest = 0
+    private var stalled = 0
+
+    public init(tolerance: CGFloat = 4, stallLimit: Int = 6) {
+        self.tolerance = tolerance
+        self.stallLimit = stallLimit
+    }
+
+    /// Before each scroll step: `pointer` is where the pointer is, `expected` where scrolling
+    /// put it, and `height` the picture's height so far.
+    public mutating func check(pointer: CGPoint, expected: CGPoint, height: Int) -> Stop? {
+        if hypot(pointer.x - expected.x, pointer.y - expected.y) > tolerance { return .pointerMoved }
+        if height > tallest {
+            tallest = height
+            stalled = 0
+        } else {
+            stalled += 1
+            if stalled >= stallLimit { return .noProgress }
+        }
+        return nil
+    }
+}
+
+/// How far to scroll for the user after each frame. Steps start at under a third of the
+/// area, so frames overlap plenty. When a frame can't be matched (the page went further
+/// than asked, or a sticky bar left little to match), it scrolls back by the step it just
+/// took, so the page returns to the last frame that fit, and goes on in half-size steps.
+public struct AutoScrollPace: Sendable {
+    /// The step, as a share of the area's height.
+    public private(set) var fraction: Double
+    public let smallest: Double
+    /// The last scroll sent, in points: negative is down the page.
+    private var last: Int32 = 0
+
+    public init(fraction: Double = 0.3, smallest: Double = 0.08) {
+        self.fraction = fraction
+        self.smallest = smallest
+    }
+
+    /// The scroll to send after a frame with `result`, for an area `height` points tall:
+    /// negative scrolls down the page, positive back up.
+    public mutating func next(after result: ScrollStitcher.Result, height: Double) -> Int32 {
+        if result == .lost, last < 0 {
+            fraction = max(smallest, fraction / 2)
+            last = -last
+            return last
+        }
+        last = -Int32(max(20, (height * fraction).rounded()))
+        return last
+    }
+}

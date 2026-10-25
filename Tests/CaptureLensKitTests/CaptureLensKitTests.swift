@@ -1060,3 +1060,65 @@ extension CGImage {
         #expect(TopSources.websites(items, since: day(1)).map(\.site).sorted() == ["docs.example.org", "example.com"])
     }
 }
+
+@Suite struct AutoScrollGuardTests {
+    @Test func stopsWhenThePointerMoves() {
+        var guardrail = AutoScrollGuard()
+        let middle = CGPoint(x: 500, y: 400)
+        #expect(guardrail.check(pointer: middle, expected: middle, height: 100) == nil)
+        #expect(guardrail.check(pointer: CGPoint(x: 502, y: 401), expected: middle, height: 200) == nil)
+        #expect(guardrail.check(pointer: CGPoint(x: 540, y: 380), expected: middle, height: 300) == .pointerMoved)
+    }
+
+    @Test func stopsWhenThePictureStopsGrowing() {
+        var guardrail = AutoScrollGuard(stallLimit: 3)
+        let middle = CGPoint(x: 10, y: 10)
+        #expect(guardrail.check(pointer: middle, expected: middle, height: 100) == nil)
+        #expect(guardrail.check(pointer: middle, expected: middle, height: 300) == nil)
+        #expect(guardrail.check(pointer: middle, expected: middle, height: 300) == nil)
+        #expect(guardrail.check(pointer: middle, expected: middle, height: 250) == nil)
+        // Growing again starts the count over.
+        #expect(guardrail.check(pointer: middle, expected: middle, height: 400) == nil)
+        #expect(guardrail.check(pointer: middle, expected: middle, height: 400) == nil)
+        #expect(guardrail.check(pointer: middle, expected: middle, height: 400) == nil)
+        #expect(guardrail.check(pointer: middle, expected: middle, height: 400) == .noProgress)
+    }
+}
+
+extension ScrollStitcherTests {
+    /// Scroll for Me on a page that goes 2.6 times as far as each scroll asks: the first
+    /// steps overshoot what can be matched, so it has to back up and slow down, and the
+    /// stitched picture must still be the whole page.
+    @Test func scrollingForYouRecoversFromOvershooting() throws {
+        let content = 3000, viewport = 400, visible = 400 - 70
+        let full = page(contentHeight: content)
+        let stitcher = ScrollStitcher()
+        var pace = AutoScrollPace()
+        var guardrail = AutoScrollGuard()
+        var offset = 0, lost = 0, steps = 0
+        let middle = CGPoint.zero
+        while steps < 300 {
+            steps += 1
+            let result = stitcher.add(frame(of: full, offset: offset, viewport: viewport))
+            if result == .lost { lost += 1 }
+            if guardrail.check(pointer: middle, expected: middle, height: stitcher.contentHeight) == .noProgress { break }
+            let delta = pace.next(after: result, height: Double(viewport))
+            offset = min(max(0, offset - Int(Double(delta) * 2.6)), content - visible)
+        }
+        #expect(steps < 300, "it never reached the end")
+        #expect(lost > 0, "the first steps should overshoot")
+        #expect(pace.fraction < 0.3, "it slowed down")
+        let stitched = try #require(stitcher.image())
+        #expect(stitched.height == full.height, "\(stitched.height) vs \(full.height)")
+        #expect(rowsEqual(stitched, full))
+    }
+
+    @Test func paceBacksUpAfterALostFrame() {
+        var pace = AutoScrollPace(fraction: 0.4)
+        #expect(pace.next(after: .first, height: 500) == -200)
+        #expect(pace.next(after: .lost, height: 500) == 200)
+        #expect(pace.fraction == 0.2)
+        #expect(pace.next(after: .unchanged, height: 500) == -100)
+        #expect(pace.next(after: .moved(100), height: 500) == -100)
+    }
+}
