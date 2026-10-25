@@ -701,6 +701,83 @@ enum DebugCommands {
             case "sync-state":
                 let defaults = AppDefaults.store
                 result = "settings \(SettingsSync.shared.syncsSettings), localModified \((defaults.object(forKey: "sync.localModified") as? Date).map { "\($0.timeIntervalSince1970)" } ?? "nil"), synced keys include librarySync \(SettingsSync.syncedKeys.contains("librarySync")) libraryBackend \(SettingsSync.syncedKeys.contains("libraryBackend")) doubleClickOpens \(SettingsSync.syncedKeys.contains("doubleClickOpens"))"
+            case "record-bar":
+                // `record-bar` shows the panel before recording (no recording starts); `record-bar:close` hides it.
+                if arg == "close" { await ScreenRecorder.shared.debugReset() } else {
+                    _ = ScreenRecorder.shared.debugShowBar(over: CGRect(x: 300, y: 600, width: 640, height: 360))
+                }
+            case "pref":
+                // `pref:<name>=<on|off|number>` for the recording choices, as Settings would set them.
+                let kv = arg.split(separator: "=").map(String.init)
+                if kv.count == 2 {
+                    let on = kv[1] == "on"
+                    switch kv[0] {
+                    case "sound": prefs.recordSystemAudio = on
+                    case "mic": prefs.recordMicrophone = on
+                    case "clicks": prefs.showClicks = on
+                    case "keys": prefs.showKeys = on
+                    case "countdown": prefs.recordCountdown = Int(kv[1]) ?? 3
+                    case "fps": prefs.recordFrameRate = Int(kv[1]) ?? 30
+                    default: break
+                    }
+                }
+                result = "sound \(prefs.recordSystemAudio) mic \(prefs.recordMicrophone) camera \(prefs.recordCamera) clicks \(prefs.showClicks) keys \(prefs.showKeys) fps \(prefs.recordFrameRate) countdown \(prefs.recordCountdown) mics \(RecordingDevices.microphones().count) cameras \(RecordingDevices.cameras().count)"
+            case "context-menu":
+                // `context-menu:<x>,<y>[,<item title to pick>]`: right-clicks the library window there,
+                // lists the menu (✓ for ticked), and picks that item.
+                let parts = arg.split(separator: ",", maxSplits: 2).map(String.init)
+                let p = parts.prefix(2).compactMap { Double($0) }
+                guard p.count == 2, let window = LibraryWindow.shared.window else { result = "need x,y"; break }
+                window.makeKeyAndOrderFront(nil)
+                try await Task.sleep(for: .milliseconds(300))
+                let pick = parts.count > 2 ? parts[2] : nil
+                var listing = "no menu"
+                let observer = NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: nil) { note in
+                    guard let menu = note.object as? NSMenu else { return }
+                    listing = menu.items.prefix(6).map { ($0.state == .on ? "✓" : "") + ($0.isSeparatorItem ? "—" : $0.title) }.joined(separator: " | ")
+                    let index = pick.flatMap { title in menu.items.firstIndex { $0.title == title } }
+                    let timer = Timer(timeInterval: 0.3, repeats: false) { _ in
+                        menu.cancelTracking()
+                        if let index { menu.performActionForItem(at: index) }
+                    }
+                    RunLoop.main.add(timer, forMode: .common)
+                }
+                let at = CGPoint(x: p[0], y: window.frame.height - p[1])
+                for type in [NSEvent.EventType.rightMouseDown, .rightMouseUp] {
+                    if let event = NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                      windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) {
+                        NSApp.postEvent(event, atStart: false)
+                    }
+                }
+                try await Task.sleep(for: .seconds(1.5))
+                NotificationCenter.default.removeObserver(observer)
+                let state = LibraryWindow.shared.state
+                result = "\(listing) || picked \(pick ?? "-"): editor window \(EditorWindow.shared.isOpen), inspector \(state.showInspector), double-click \(prefs.doubleClickOpens.rawValue), remember \(AppDefaults.store.bool(forKey: "library.rememberOpen"))"
+            case "click-window":
+                // `click-window:<window number>,<x>,<y>`: a click in any of the app's windows (points
+                // from its top left).
+                let p = arg.split(separator: ",").compactMap { Double($0) }
+                if p.count == 3, let window = NSApp.windows.first(where: { $0.windowNumber == Int(p[0]) }) {
+                    let at = CGPoint(x: p[1], y: window.frame.height - p[2])
+                    for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                        if let event = NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                          windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) {
+                            NSApp.postEvent(event, atStart: false)
+                        }
+                        try await Task.sleep(for: .milliseconds(100))
+                    }
+                    try await Task.sleep(for: .milliseconds(400))
+                }
+                result = "clicks \(prefs.showClicks) keys \(prefs.showKeys) countdown \(prefs.recordCountdown)"
+            case "open-as":
+                // `open-as:<sidePane|ownWindow>,<remember on|off>`: what the right-click menu's Open items do.
+                let parts = arg.split(separator: ",").map(String.init)
+                let state = LibraryWindow.shared.state
+                if let place = OpenPlace(rawValue: parts.first ?? ""), let id = state.selectedItems.first?.id {
+                    state.open(id, in: place, remember: parts.count > 1 && parts[1] == "on")
+                }
+                try await Task.sleep(for: .milliseconds(500))
+                result = "editor window \(EditorWindow.shared.isOpen), inspector \(state.showInspector), double-click \(prefs.doubleClickOpens.rawValue)"
             case "held-test": result = SettingsSync.shared.debugHeldTest()
             case "touch-setting": prefs.playSound.toggle(); SettingsSync.shared.localDidChange()
             case "layout":
@@ -850,6 +927,20 @@ enum DebugCommands {
                     scroll.openDial(at: CGPoint(x: scroll.bounds.midX, y: scroll.bounds.midY), held: false)
                     result = scroll.debugDialInfo
                 }
+            case "tab-sizes":
+                // Every Settings tab in turn: the window's size, and whether it's all on its screen.
+                var sizes: [String] = []
+                for tab in ["Capture", "Presets", "Library", "Privacy", "Activity", "General"] {
+                    SettingsWindow.shared.show(tab: tab)
+                    try await Task.sleep(for: .milliseconds(700))
+                    if let window = SettingsWindow.shared.debugWindow {
+                        let onScreen = window.screen.map { $0.visibleFrame.contains(window.frame) } ?? false
+                        let tabs = window.contentViewController as? NSTabViewController
+                        let wanted = tabs.map { $0.tabViewItems[$0.selectedTabViewItemIndex].viewController?.preferredContentSize.height ?? -1 } ?? -1
+                        sizes.append("\(tab) \(Int(window.frame.width))x\(Int(window.frame.height)) (content \(Int(window.contentLayoutRect.height)), wanted \(Int(wanted)))\(onScreen ? "" : " OFF SCREEN")")
+                    }
+                }
+                result = sizes.joined(separator: ", ")
             case "sheet-sizes":
                 // How tall the preset editor sheet wants to be, for each preset.
                 result = PresetEditor.debugHeights()

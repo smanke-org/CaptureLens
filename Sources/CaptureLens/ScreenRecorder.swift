@@ -36,7 +36,7 @@ final class ScreenRecorder: NSObject {
     @ObservationIgnored private var frame: CGRect = .zero
     @ObservationIgnored private var pickedWindow: ScreenWindow?
     @ObservationIgnored private var windows: [ScreenWindow] = []
-    @ObservationIgnored private var preset: CapturePreset?
+    @ObservationIgnored private(set) var preset: CapturePreset?
     @ObservationIgnored private var stream: SCStream?
     @ObservationIgnored private var output: SCRecordingOutput?
     @ObservationIgnored private var segments: [URL] = []
@@ -128,8 +128,8 @@ final class ScreenRecorder: NSObject {
                 prefs.showKeys = false
                 note = "To show keys, allow CaptureLens in Privacy & Security › Accessibility, then turn Keys on again."
             }
-            let seconds = (preset?.delay ?? 0) > 0 ? preset!.delay : 3
-            let go = await Countdown.shared.run(seconds: seconds)
+            let seconds = (preset?.delay ?? 0) > 0 ? preset!.delay : prefs.recordCountdown
+            let go = seconds > 0 ? await Countdown.shared.run(seconds: seconds) : true
             guard go, phase == .countingDown else { return cancel() }
             await startStream()
         }
@@ -171,7 +171,7 @@ final class ScreenRecorder: NSObject {
             config.queueDepth = 6
             config.capturesAudio = prefs.recordSystemAudio
             config.excludesCurrentProcessAudio = true
-            if prefs.recordMicrophone, let mic = AVCaptureDevice.default(for: .audio) {
+            if prefs.recordMicrophone, let mic = RecordingDevices.microphone() {
                 config.captureMicrophone = true
                 config.microphoneCaptureDeviceID = mic.uniqueID
             }
@@ -379,6 +379,14 @@ final class ScreenRecorder: NSObject {
         Task { if on { await showCamera() } else { camera.hide() } }
     }
 
+    /// Another camera picked: the bubble shows it.
+    func setCameraDevice(_ id: String) {
+        Preferences.shared.cameraID = id
+        guard Preferences.shared.recordCamera, camera.isShown else { return }
+        camera.hide()
+        Task { await showCamera() }
+    }
+
     private func showCamera() async {
         guard await AVCaptureDevice.requestAccess(for: .video) else {
             Preferences.shared.recordCamera = false
@@ -402,7 +410,7 @@ final class ScreenRecorder: NSObject {
     }
 
     private func showPanel() {
-        let panel = FloatingPanel(title: "Record", size: CGSize(width: 480, height: 120), resizable: false)
+        let panel = FloatingPanel(title: "Record", size: CGSize(width: 400, height: 360), resizable: false)
         panel.host(RecordingBar())
         panel.place(near: frame)
         panel.orderFrontRegardless()
@@ -501,39 +509,107 @@ private final class FrameSink: NSObject, SCStreamOutput {
 
 // MARK: - The control bar
 
-/// Before: what to record along with the screen, and Record. During: the time, Pause, Stop.
+/// The microphones and cameras a recording can use, and the ones chosen in Settings (the
+/// Mac's default when none is, or the chosen one isn't connected).
+@MainActor
+enum RecordingDevices {
+    static func microphones() -> [AVCaptureDevice] {
+        AVCaptureDevice.DiscoverySession(deviceTypes: [.microphone, .external], mediaType: .audio, position: .unspecified).devices
+    }
+
+    static func cameras() -> [AVCaptureDevice] {
+        AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera, .continuityCamera, .external],
+                                         mediaType: .video, position: .unspecified).devices
+    }
+
+    static func microphone() -> AVCaptureDevice? {
+        let id = Preferences.shared.microphoneID
+        return (id.isEmpty ? nil : AVCaptureDevice(uniqueID: id)) ?? AVCaptureDevice.default(for: .audio)
+    }
+
+    static func camera() -> AVCaptureDevice? {
+        let id = Preferences.shared.cameraID
+        return (id.isEmpty ? nil : AVCaptureDevice(uniqueID: id)) ?? AVCaptureDevice.default(for: .video)
+    }
+}
+
+/// A menu of microphones or cameras, with the Mac's default first. Shown only when there's
+/// more than one to choose from.
+struct DevicePicker: View {
+    let title: String
+    let devices: [AVCaptureDevice]
+    @Binding var selection: String
+
+    var body: some View {
+        if devices.count > 1 {
+            Picker(title, selection: $selection) {
+                Text("Mac's default").tag("")
+                Divider()
+                ForEach(devices, id: \.uniqueID) { Text($0.localizedName).tag($0.uniqueID) }
+                // A chosen device that isn't connected now keeps its place, so the menu shows it.
+                if !selection.isEmpty, !devices.contains(where: { $0.uniqueID == selection }) {
+                    Text("Not connected").tag(selection)
+                }
+            }
+        }
+    }
+}
+
+/// Before: what to record along with the screen, each a labeled switch as in Settings › Capture
+/// (they're the same settings), then Record. During: the time, Pause, Stop.
 private struct RecordingBar: View {
     @State private var recorder = ScreenRecorder.shared
     @State private var prefs = Preferences.shared
+    @State private var microphones = RecordingDevices.microphones()
+    @State private var cameras = RecordingDevices.cameras()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             switch recorder.phase {
             case .ready, .countingDown:
-                HStack(spacing: 6) {
-                    toggle("Sound", "speaker.wave.2", $prefs.recordSystemAudio, help: "Record the Mac's sound (apps playing audio)")
-                    toggle("Mic", "mic", $prefs.recordMicrophone, help: "Record the microphone")
-                    toggle("Camera", "web.camera", Binding(get: { prefs.recordCamera }, set: { recorder.setCamera($0) }),
-                           help: "Show the camera in a round bubble; drag it where you like")
-                    toggle("Clicks", "cursorarrow.click", $prefs.showClicks, help: "Show a ring wherever you click")
-                    toggle("Keys", "command", $prefs.showKeys, help: "Show the shortcuts and special keys you press (not what you type)")
-                    Menu {
-                        Picker("Frame Rate", selection: $prefs.recordFrameRate) {
-                            ForEach(Preferences.frameRates, id: \.rate) { Text($0.title).tag($0.rate) }
-                        }
-                        .pickerStyle(.inline)
-                    } label: {
-                        VStack(spacing: 3) {
-                            Text("\(prefs.recordFrameRate)").font(.system(size: 15, weight: .semibold)).monospacedDigit()
-                            Text("fps").font(.caption2)
-                        }
-                        .frame(width: 44, height: 40)
+                VStack(spacing: 0) {
+                    option("Record the Mac's sound", on: "speaker.wave.2.fill", off: "speaker.slash", $prefs.recordSystemAudio)
+                    Divider()
+                    option("Record the microphone", on: "mic.fill", off: "mic.slash", $prefs.recordMicrophone)
+                    if prefs.recordMicrophone && microphones.count > 1 {
+                        deviceRow(DevicePicker(title: "Microphone", devices: microphones, selection: $prefs.microphoneID))
                     }
-                    .menuStyle(.button)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                    .help("Frames a second: fewer make a smaller video")
+                    Divider()
+                    option("Show the camera in a bubble", on: "web.camera.fill", off: "video.slash",
+                           Binding(get: { prefs.recordCamera }, set: { recorder.setCamera($0) }))
+                    if prefs.recordCamera && cameras.count > 1 {
+                        deviceRow(DevicePicker(title: "Camera", devices: cameras,
+                                               selection: Binding(get: { prefs.cameraID }, set: { recorder.setCameraDevice($0) })))
+                    }
+                    Divider()
+                    option("Show a ring where you click", on: "cursorarrow.click.2", off: "cursorarrow", $prefs.showClicks)
+                    Divider()
+                    option("Show shortcuts you press", on: "command.square.fill", off: "command.square", $prefs.showKeys)
                 }
+                .padding(.horizontal, 12)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.05)))
+                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                    GridRow {
+                        Text("Frame rate")
+                        Picker("Frame rate", selection: $prefs.recordFrameRate) {
+                            ForEach(Preferences.frameRates, id: \.rate) { Text("\($0.rate) frames a second").tag($0.rate) }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                    GridRow {
+                        Text("Countdown")
+                        Picker("Countdown", selection: $prefs.recordCountdown) {
+                            ForEach(Preferences.countdowns, id: \.self) { Text($0 == 0 ? "None" : "\($0) seconds").tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+                        .disabled((recorder.preset?.delay ?? 0) > 0)
+                        .help((recorder.preset?.delay ?? 0) > 0 ? "This preset waits its own delay first" : "Seconds to get ready before recording starts")
+                    }
+                }
+                .padding(.horizontal, 4)
                 HStack {
                     Button("Cancel") { recorder.cancel() }.keyboardShortcut(.cancelAction)
                     Spacer()
@@ -570,19 +646,68 @@ private struct RecordingBar: View {
             }
         }
         .padding(14)
-        .frame(width: 480)
+        .frame(width: 400)
+        // A microphone or camera plugged in while the panel is up.
+        .onReceive(NotificationCenter.default.publisher(for: AVCaptureDevice.wasConnectedNotification)) { _ in refreshDevices() }
+        .onReceive(NotificationCenter.default.publisher(for: AVCaptureDevice.wasDisconnectedNotification)) { _ in refreshDevices() }
     }
 
-    private func toggle(_ title: String, _ symbol: String, _ value: Binding<Bool>, help: String) -> some View {
-        Toggle(isOn: value) {
-            VStack(spacing: 3) {
-                Image(systemName: symbol).font(.system(size: 16))
-                Text(title).font(.caption2)
-            }
-            .frame(width: 58, height: 40)
+    private func refreshDevices() {
+        microphones = RecordingDevices.microphones()
+        cameras = RecordingDevices.cameras()
+    }
+
+    /// One thing to record along with the screen: its symbol (struck through when off, in the
+    /// accent color when on), what it is, and a switch at the right.
+    private func option(_ title: String, on: String, off: String, _ value: Binding<Bool>) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: value.wrappedValue ? on : off)
+                .font(.system(size: 15))
+                .foregroundStyle(value.wrappedValue ? Color.accentColor : Color.secondary)
+                .frame(width: 24)
+            Text(title)
+                .foregroundStyle(value.wrappedValue ? Color.primary : Color.secondary)
+            Spacer(minLength: 8)
+            Toggle(title, isOn: value)
+                .toggleStyle(ClearSwitch())
+                .labelsHidden()
         }
-        .toggleStyle(.button)
-        .help(help)
+        .padding(.vertical, 7)
+        .contentShape(Rectangle())
+        .onTapGesture { value.wrappedValue.toggle() }
+    }
+
+    /// Which microphone or camera, under its switch.
+    private func deviceRow(_ picker: DevicePicker) -> some View {
+        HStack {
+            picker
+                .labelsHidden()
+                .fixedSize()
+            Spacer()
+        }
+        .padding(.leading, 34)
+        .padding(.bottom, 8)
+    }
+}
+
+/// A switch that's blue when on and gray when off whether or not its window is the active one;
+/// the system's turns gray in an inactive window, so on and off looked the same in the panel.
+struct ClearSwitch: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button { configuration.isOn.toggle() } label: {
+            Capsule()
+                .fill(configuration.isOn ? Color.accentColor : Color.primary.opacity(0.15))
+                .frame(width: 38, height: 22)
+                .overlay(alignment: configuration.isOn ? .trailing : .leading) {
+                    Circle()
+                        .fill(.white)
+                        .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+                        .padding(2)
+                }
+                .animation(.easeInOut(duration: 0.15), value: configuration.isOn)
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(configuration.isOn ? "On" : "Off")
     }
 }
 
@@ -735,7 +860,7 @@ final class CameraBubble {
 
     func show(in frame: CGRect) {
         guard window == nil else { return }
-        guard let device = AVCaptureDevice.default(for: .video), let input = try? AVCaptureDeviceInput(device: device) else {
+        guard let device = RecordingDevices.camera(), let input = try? AVCaptureDeviceInput(device: device) else {
             Notice.shared.show(error: "No camera found")
             return
         }

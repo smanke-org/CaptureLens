@@ -256,6 +256,12 @@ final class Preferences {
     /// Keyboard shortcuts and special keys pressed, shown at the bottom of the recording.
     var showKeys = false { didSet { save(showKeys, "showKeys") } }
     var recordFrameRate = 30 { didSet { save(recordFrameRate, "recordFrameRate") } }
+    /// Seconds counted down before a recording starts (0: none). A preset's own delay wins.
+    var recordCountdown = 3 { didSet { save(recordCountdown, "recordCountdown") } }
+    static let countdowns = [0, 3, 5]
+    /// The microphone and camera to use, by ID; empty for the Mac's default. Each Mac has its own.
+    var microphoneID = "" { didSet { save(microphoneID, "microphoneID") } }
+    var cameraID = "" { didSet { save(cameraID, "cameraID") } }
     /// The frame rates offered, with what each is good for. Fewer frames make smaller videos.
     static let frameRates: [(rate: Int, title: String)] = [
         (10, "10 frames a second (smallest; fine for apps and documents)"),
@@ -294,10 +300,11 @@ final class Preferences {
         "copyToClipboard", "afterCapture", "captureCursor", "showCursorByDefault", "windowShadow", "playSound", "showNotice",
         "autoName", "recognizeText", "recordWebAddress", "librarySync", "libraryBackend", "annotationStyle", "quickStyles", "presets", "libraryHotKey", "captureAgainHotKey",
         "recordMicrophone", "recordSystemAudio", "recordCamera", "showClicks", "showKeys", "recordFrameRate", "syncVideos",
-        "toolStyle", "dialTrigger", "doubleClickOpens",
+        "toolStyle", "dialTrigger", "doubleClickOpens", "recordCountdown", "microphoneID", "cameraID",
     ]
-    /// Of those, the ones each Mac chooses for itself: whether, and how, it syncs the library.
-    static let perMacKeys: Set<String> = ["librarySync", "libraryBackend"]
+    /// Of those, the ones each Mac chooses for itself: whether, and how, it syncs the library,
+    /// and its own microphone and camera.
+    static let perMacKeys: Set<String> = ["librarySync", "libraryBackend", "microphoneID", "cameraID"]
 
     @ObservationIgnored private var loading = false
 
@@ -347,6 +354,7 @@ final class Preferences {
             "recordMicrophone": recordMicrophone, "recordSystemAudio": recordSystemAudio, "recordCamera": recordCamera,
             "showClicks": showClicks, "showKeys": showKeys, "recordFrameRate": recordFrameRate, "syncVideos": syncVideos,
             "toolStyle": toolStyle.rawValue, "dialTrigger": dialTrigger.rawValue, "doubleClickOpens": doubleClickOpens.rawValue,
+            "recordCountdown": recordCountdown, "microphoneID": microphoneID, "cameraID": cameraID,
         ]
     }
 
@@ -416,6 +424,9 @@ final class Preferences {
         toolStyle = ToolStyle(rawValue: string("toolStyle")) ?? .toolbar
         dialTrigger = DialTrigger(rawValue: string("dialTrigger")) ?? .rightClick
         doubleClickOpens = OpenPlace(rawValue: string("doubleClickOpens")) ?? .sidePane
+        recordCountdown = d.object(forKey: "recordCountdown") as? Int ?? 3
+        microphoneID = string("microphoneID")
+        cameraID = string("cameraID")
     }
 
     private func save(_ value: Any, _ key: String) {

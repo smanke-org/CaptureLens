@@ -104,12 +104,17 @@ final class LibraryState {
     }
     /// A capture double-clicked: shown beside the captures, or in a window of its own, as
     /// Settings › Library says.
-    func open(_ id: UUID) {
+    /// `place`, from the right-click menu, overrides the setting, and with `remember` becomes it.
+    func open(_ id: UUID, in place: OpenPlace? = nil, remember: Bool = false) {
         selection = [id]
         anchor = id
-        if Preferences.shared.doubleClickOpens == .ownWindow {
+        let prefs = Preferences.shared
+        if let place, remember { prefs.doubleClickOpens = place }
+        if (place ?? prefs.doubleClickOpens) == .ownWindow {
             EditorWindow.shared.open()
         } else {
+            // Out of its own window, back beside the captures.
+            if EditorWindow.shared.isOpen { EditorWindow.shared.close() }
             showInspector = true
             if foldedSide == .editor { fold(nil) }
         }
@@ -1222,9 +1227,20 @@ struct CaptureMenu: View {
 
     private var targets: Set<UUID> { state.selection.contains(item.id) ? state.selection : [item.id] }
 
+    /// Opening a capture from this menu also sets where double-clicking opens captures.
+    @AppStorage("library.rememberOpen", store: AppDefaults.store) private var remember = false
+
     var body: some View {
         let store = LibraryStore.shared
         if targets.count == 1 {
+            // Ticked: where double-clicking opens captures now.
+            let place = Preferences.shared.doubleClickOpens
+            Toggle("Open Beside the Captures", isOn: Binding(get: { place == .sidePane },
+                                                             set: { _ in state.open(item.id, in: .sidePane, remember: remember) }))
+            Toggle("Open in Its Own Window", isOn: Binding(get: { place == .ownWindow },
+                                                           set: { _ in state.open(item.id, in: .ownWindow, remember: remember) }))
+            Toggle("Remember for Double-Click", isOn: $remember)
+            Divider()
             Button("Copy") {
                 if item.kind == .video { return VideoExport.copy(item) }
                 if let png = Flattener.png(item) { Clipboard.copy(png: png); ActivityStore.shared.record(ActivityKey.copies) }

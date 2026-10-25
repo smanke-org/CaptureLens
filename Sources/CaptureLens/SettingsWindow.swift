@@ -37,6 +37,11 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     #endif
 
     func windowWillClose(_ notification: Notification) {}
+
+    /// Moved to another screen (a laptop's, an iPad's): the pane fits that one.
+    func windowDidChangeScreen(_ notification: Notification) {
+        (window?.contentViewController as? SettingsTabs)?.refit()
+    }
 }
 
 /// One toolbar item per pane; the window resizes to fit each pane and takes its name
@@ -45,6 +50,9 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
 final class SettingsTabs: NSTabViewController {
     init() {
         super.init(nibName: nil, bundle: nil)
+        // A display added, removed or resized (an iPad as a second screen, say).
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil,
+                                               queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.refit() } }
         tabStyle = .toolbar
         transitionOptions = [.crossfade, .allowUserInteraction]
         add("Capture", "camera.viewfinder", CaptureSettings())
@@ -91,17 +99,38 @@ final class SettingsTabs: NSTabViewController {
     /// Measures a pane on a throwaway hosting view, so the window never follows SwiftUI.
     private var naturalHeight: [NSTabViewItem: () -> CGFloat] = [:]
 
+    /// The tallest a pane gets on any screen: it fits a 13-inch MacBook Air's with room to
+    /// spare, and the rest scrolls, so Settings looks the same on every Mac.
+    static let tallest: CGFloat = 660
+
     /// Sizes a pane before it's shown (re-measured each time, as panes change), no taller
-    /// than the screen.
-    private func fit(_ item: NSTabViewItem) {
-        guard let height = naturalHeight[item]?() else { return }
+    /// than the screen or `tallest`.
+    @discardableResult
+    private func fit(_ item: NSTabViewItem) -> CGFloat? {
+        guard let height = naturalHeight[item]?() else { return nil }
         let screen = (isViewLoaded ? view.window?.screen : nil) ?? NSScreen.main
         var available = (screen?.visibleFrame.height ?? 800) - 120
         #if DEBUG
         // `CAPTURELENS_DEBUG_SCREEN_HEIGHT=<points>` sizes panes as if for a smaller screen.
         if let height = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SCREEN_HEIGHT"].flatMap(Double.init) { available = height - 120 }
         #endif
-        item.viewController?.preferredContentSize = NSSize(width: 520, height: min(height, available))
+        let fitted = min(height, available, Self.tallest)
+        item.viewController?.preferredContentSize = NSSize(width: 520, height: fitted)
+        return fitted
+    }
+
+    /// The shown pane fitted again (another screen, or the screen changed), keeping the
+    /// window's top where it is and all of it on screen.
+    func refit() {
+        guard isViewLoaded, let window = view.window, selectedTabViewItemIndex >= 0,
+              let height = fit(tabViewItems[selectedTabViewItemIndex]) else { return }
+        var frame = window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: 520, height: height))
+        frame.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
+        if let visible = window.screen?.visibleFrame {
+            frame.origin.y = max(min(frame.origin.y, visible.maxY - frame.height), visible.minY)
+            frame.origin.x = max(min(frame.origin.x, visible.maxX - frame.width), visible.minX)
+        }
+        window.setFrame(frame, display: true, animate: false)
     }
 
     override func tabView(_ tabView: NSTabView, willSelect tabViewItem: NSTabViewItem?) {
@@ -208,16 +237,25 @@ struct CaptureSettings: View {
             Section {
                 Toggle("Record the Mac's sound", isOn: $prefs.recordSystemAudio)
                 Toggle("Record the microphone", isOn: $prefs.recordMicrophone)
+                if prefs.recordMicrophone {
+                    DevicePicker(title: "Microphone", devices: RecordingDevices.microphones(), selection: $prefs.microphoneID)
+                }
                 Toggle("Show the camera in a bubble", isOn: $prefs.recordCamera)
+                if prefs.recordCamera {
+                    DevicePicker(title: "Camera", devices: RecordingDevices.cameras(), selection: $prefs.cameraID)
+                }
                 Toggle("Show a ring where you click", isOn: $prefs.showClicks)
                 Toggle("Show shortcuts you press", isOn: $prefs.showKeys)
                 Picker("Frame rate", selection: $prefs.recordFrameRate) {
                     ForEach(Preferences.frameRates, id: \.rate) { Text($0.title).tag($0.rate) }
                 }
+                Picker("Countdown before recording", selection: $prefs.recordCountdown) {
+                    ForEach(Preferences.countdowns, id: \.self) { Text($0 == 0 ? "None" : "\($0) seconds").tag($0) }
+                }
             } header: {
                 Text("Video recording")
             } footer: {
-                Text("These are also buttons in the bar that appears before you record (the Record Video preset, {hotkey:record}). A lower frame rate makes smaller videos: 10 or 15 is plenty for apps, documents and web pages, while video and animation look smoother at 30 or 60. Only shortcuts and keys like Return or the arrows are shown, never what you type. The camera, microphone and shown keys need your permission the first time; macOS asks.".replacingOccurrences(of: "{hotkey:record}", with: Preferences.shared.presets.first { $0.mode == .recording }?.hotKey?.display ?? "no shortcut set"))
+                Text("The same choices are in the panel that appears before you record (the Record Video preset, {hotkey:record}); a change in either is a change in both. The microphone and camera are chosen on each Mac. A lower frame rate makes smaller videos: 10 or 15 is plenty for apps, documents and web pages, while video and animation look smoother at 30 or 60. Only shortcuts and keys like Return or the arrows are shown, never what you type. The camera, microphone and shown keys need your permission the first time; macOS asks.".replacingOccurrences(of: "{hotkey:record}", with: Preferences.shared.presets.first { $0.mode == .recording }?.hotKey?.display ?? "no shortcut set"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Feedback") {
