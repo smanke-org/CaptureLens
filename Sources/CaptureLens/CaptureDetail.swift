@@ -116,13 +116,28 @@ struct SingleCaptureView: View {
                 .help("Hide the details, for more room to annotate")
             Button { collapsed = .picture } label: { Label("Hide Picture", systemImage: "chevron.up.circle") }
                 .help("Hide the picture, for more room for the details")
-            Button { state.fold(.captures) } label: { Label("Hide Captures", systemImage: "chevron.left.circle") }
-                .help("Hide the captures, so the picture and details fill the window")
-                .disabled(state.foldedSide == .captures)
-            Button { state.fold(.editor) } label: { Label("Hide Picture and Details", systemImage: "chevron.right.circle") }
-                .help("Hide the picture and details, so the captures fill the window")
             Button { editorWindow.open() } label: { Label("Open in Its Own Window", systemImage: "macwindow.badge.plus") }
                 .help("Open the picture and its tools in a window of their own, as big as you like")
+        }
+    }
+
+    /// ‹ and ›, at the edge between the captures and the picture: fold either side away so
+    /// the other fills the window.
+    @ViewBuilder private var sideFolds: some View {
+        if !pictureOnly {
+            HStack(spacing: 6) {
+                Button { state.fold(.captures) } label: { Label("Hide Captures", systemImage: "chevron.left.circle") }
+                    .help("Hide the captures, so the picture and details fill the window")
+                    .disabled(state.foldedSide == .captures)
+                Button { state.fold(.editor) } label: { Label("Hide Picture and Details", systemImage: "chevron.right.circle") }
+                    .help("Hide the picture and details, so the captures fill the window")
+                Divider().frame(height: 16)
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .font(.system(size: 16))
+            .imageScale(.large)
+            .padding(.leading, 10)
         }
     }
 
@@ -170,14 +185,18 @@ struct SingleCaptureView: View {
     private var pictureArea: some View {
         VStack(spacing: 0) {
             if item.kind == .video {
+                if !pictureOnly {
+                    HStack(spacing: 0) { sideFolds; Spacer() }.padding(.vertical, 6)
+                    Divider()
+                }
                 VideoPane(item: item).frame(minHeight: 200)
             } else if editor.showResult {
-                ResultBar(item: item)
+                HStack(spacing: 0) { sideFolds; ResultBar(item: item) }
                 Divider()
                 ResultCanvas(item: item, fitRequest: zoomToFit + CanvasZoom.shared.fitRequested)
                     .frame(minHeight: 200)
             } else {
-                AnnotationToolbar()
+                HStack(spacing: 0) { sideFolds; AnnotationToolbar() }
                 Divider()
                 // The tools float over the picture as a toolbar, or wait in a dial.
                 CaptureCanvas(item: item, fitRequest: zoomToFit + CanvasZoom.shared.fitRequested, editor: editorState)

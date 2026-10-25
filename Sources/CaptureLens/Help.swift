@@ -221,7 +221,7 @@ enum Help {
                 ("Delete", "Delete the selected captures (asks first)"),
                 ("Drag a capture", "Into another app, or a pictures file onto the library to import it"),
                 ("Open in Its Own Window", "The window button under the picture moves the picture and its tools into a window of their own, as big as you like; it follows the capture selected in the library. Bring Back, or closing it, returns it"),
-                ("‹ and › under the picture", "Fold away the captures (the picture and details fill the window) or the picture and details (the captures fill it); the slim bar left at the side brings it back"),
+                ("‹ and › above the picture", "Fold away the captures (the picture and details fill the window) or the picture and details (the captures fill it); the slim bar left at the side brings it back"),
                 ("⋯ under the picture", "In a narrow window, Copy, Save As, Share, zoom and the rest move into this menu"),
                 ("⌄ and ⌃ under the picture", "Fold away the details (more room to annotate) or the picture (more room for the details); the slim bar left behind brings it back"),
                 ("Scroll over the picture", "Move around a zoomed-in picture; or hold Space and drag"),
