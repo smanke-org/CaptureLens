@@ -631,7 +631,7 @@ struct CaptureGrid: View {
         // Measure the room the grid is given, not the grid: its fixed columns would otherwise
         // hold on to a wider pane's width (after Details is hidden and shown again) and spill
         // under the sidebar and the picture.
-        .frame(minWidth: 0, maxWidth: .infinity)
+        .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
         .background(GeometryReader { geo in Color.clear.onAppear { width = geo.size.width }.onChange(of: geo.size.width) { _, w in width = w } })
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             for provider in providers {

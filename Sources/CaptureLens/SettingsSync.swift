@@ -574,6 +574,10 @@ enum DebugCommands {
                     window.setFrame(CGRect(origin: window.frame.origin, size: CGSize(width: size[0], height: size[1])), display: true)
                 }
             case "inspector": LibraryWindow.shared.state.showInspector = arg == "on"
+            case "pan-test":
+                // `pan-test:<zoom>[:typing]`: zooms in, then holds Space and drags 120 pt right and
+                // 60 pt down over the picture with made-up events; reports how far it moved.
+                result = await PanTest.run(arg)
             case "tooltip-delay":
                 // How long AppKit waits before showing a tooltip, from its tooltip manager.
                 let sel = NSSelectorFromString("_getDisplayDelay:inQuickMode:forView:")
@@ -642,6 +646,74 @@ enum DebugImage {
             return true
         }
         return image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+    }
+}
+#endif
+
+#if DEBUG
+/// Drives Space-drag panning on the library's picture with made-up events, as the
+/// `pan-test` debug command.
+@MainActor
+enum PanTest {
+    static func run(_ arg: String) async -> String {
+        let parts = arg.split(separator: ":").map(String.init)
+        let zoom = parts.first.flatMap(Double.init) ?? 4
+        guard let window = LibraryWindow.shared.window, let scroll = find(window.contentView) else { return "no canvas" }
+        if parts.contains("typing") {
+            // A text field has the keys, so Space should type rather than pan.
+            let field = NSTextField(frame: CGRect(x: 0, y: 0, width: 10, height: 10))
+            window.contentView?.addSubview(field)
+            window.makeFirstResponder(field)
+            defer { field.removeFromSuperview() }
+            return await drag(window, scroll, zoom: zoom)
+        }
+        window.makeFirstResponder(DebugShots.find(window.contentView))
+        return await drag(window, scroll, zoom: zoom)
+    }
+
+    private static func drag(_ window: NSWindow, _ scroll: ZoomingScrollView, zoom: Double) async -> String {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        CanvasZoom.shared.set(zoom)
+        try? await Task.sleep(for: .seconds(0.5))
+        let before = scroll.contentView.bounds.origin
+        let start = scroll.convert(CGPoint(x: scroll.bounds.midX, y: scroll.bounds.midY), to: nil)
+        func post(_ event: NSEvent?) async {
+            if let event { NSApp.postEvent(event, atStart: false) }
+            try? await Task.sleep(for: .milliseconds(30))
+        }
+        func key(_ type: NSEvent.EventType, repeating: Bool = false) -> NSEvent? {
+            NSEvent.keyEvent(with: type, location: start, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                             windowNumber: window.windowNumber, context: nil, characters: " ", charactersIgnoringModifiers: " ",
+                             isARepeat: repeating, keyCode: 49)
+        }
+        func mouse(_ type: NSEvent.EventType, _ point: CGPoint) -> NSEvent? {
+            NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                               windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+        }
+        await post(key(.keyDown))
+        await post(key(.keyDown, repeating: true))
+        let held = scroll.debugPanning.panning
+        await post(mouse(.leftMouseDown, start))
+        for step in 1...6 {
+            await post(mouse(.leftMouseDragged, CGPoint(x: start.x + Double(step) * 20, y: start.y - Double(step) * 10)))
+        }
+        await post(mouse(.leftMouseUp, CGPoint(x: start.x + 120, y: start.y - 60)))
+        await post(key(.keyUp))
+        try? await Task.sleep(for: .milliseconds(200))
+        let after = scroll.contentView.bounds.origin
+        let state = scroll.debugPanning
+        let marks = AnnotationEditor.shared.annotations.count
+        return String(format: "zoom %.2f held %@ moved x %.1f y %.1f (expect %.1f, %.1f) after: panning %@ grabbing %@ cursorRects %@ marks %d",
+                      scroll.magnification, "\(held)", after.x - before.x, after.y - before.y, -120 / scroll.magnification, -60 / scroll.magnification,
+                      "\(state.panning)", "\(state.grabbing)", "\(window.areCursorRectsEnabled)", marks)
+    }
+
+    private static func find(_ view: NSView?) -> ZoomingScrollView? {
+        guard let view else { return nil }
+        if let scroll = view as? ZoomingScrollView { return scroll }
+        for sub in view.subviews { if let hit = find(sub) { return hit } }
+        return nil
     }
 }
 #endif

@@ -55,7 +55,7 @@ struct SingleCaptureView: View {
 
     /// Edit/Result, then whatever fits.
     private func barRow<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             // On: mark up the original. Off: the finished picture, as it's copied and saved.
             Toggle("Edit", isOn: Binding(get: { !editor.showResult }, set: { editor.showResult = !$0 }))
                 .toggleStyle(.switch)
@@ -664,7 +664,106 @@ struct ZoomControls: View {
 
 /// The Edit view's scroll view: scrolling (mouse wheel or trackpad) zooms around the pointer
 /// instead of moving the picture. Holding ⇧ scrolls as usual, to move around a zoomed picture.
+///
+/// Holding Space with the pointer over the picture turns the pointer into a hand, whatever
+/// the tool: drag to move around the picture, let go of Space to carry on. Space still types
+/// a space while a text box, the notes or any other text field is being typed in.
 final class ZoomingScrollView: NSScrollView {
+    private var monitor: Any?
+    /// Space is held, so a drag moves the picture.
+    private var panning = false
+    /// Mid-drag, and where the pointer was last, in the window; the drag carries on if Space
+    /// is let go first.
+    private var grabbing = false
+    private var lastPoint = CGPoint.zero
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+        guard window != nil else { return endPanning() }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .leftMouseDown, .leftMouseDragged, .leftMouseUp,
+                                                              .mouseMoved, .cursorUpdate]) { [weak self] event in
+            guard let self else { return event }
+            return MainActor.assumeIsolated { self.handle(event) }
+        }
+    }
+
+    private func handle(_ event: NSEvent) -> NSEvent? {
+        guard let window, event.window === window else {
+            if panning, !grabbing { endPanning() }
+            return event
+        }
+        switch event.type {
+        case .keyDown where event.keyCode == 49: // Space
+            if panning { return nil } // the key repeating
+            guard window.isKeyWindow, isPointerOver(event), !isTyping(in: window),
+                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
+            panning = true
+            window.disableCursorRects()
+            NSCursor.openHand.set()
+            return nil
+        case .keyUp where event.keyCode == 49:
+            guard panning else { return event }
+            if !grabbing { endPanning() } else { panning = false }
+            return nil
+        case .leftMouseDown where panning && isPointerOver(event):
+            grabbing = true
+            lastPoint = event.locationInWindow
+            NSCursor.closedHand.set()
+            return nil
+        case .leftMouseDragged where grabbing:
+            let point = event.locationInWindow
+            pan(by: CGPoint(x: point.x - lastPoint.x, y: point.y - lastPoint.y))
+            lastPoint = point
+            return nil
+        case .leftMouseUp where grabbing:
+            grabbing = false
+            if panning { NSCursor.openHand.set() } else { endPanning() }
+            return nil
+        case .mouseMoved, .cursorUpdate:
+            guard panning else { return event }
+            NSCursor.openHand.set()
+            return nil
+        default:
+            return event
+        }
+    }
+
+    private func endPanning() {
+        guard panning || grabbing || window?.areCursorRectsEnabled == false else { return }
+        panning = false
+        grabbing = false
+        window?.enableCursorRects()
+        window?.invalidateCursorRects(for: self)
+        window?.resetCursorRects()
+        NSCursor.arrow.set()
+    }
+
+    private func isPointerOver(_ event: NSEvent) -> Bool {
+        bounds.contains(convert(event.locationInWindow, from: nil))
+    }
+
+    /// Typing in a text box on the picture, or in any field, rather than editing the picture.
+    private func isTyping(in window: NSWindow) -> Bool {
+        guard let responder = window.firstResponder else { return false }
+        return responder is NSText || responder is NSTextField
+    }
+
+    #if DEBUG
+    var debugPanning: (panning: Bool, grabbing: Bool) { (panning, grabbing) }
+    #endif
+
+    /// Moves the picture with the pointer: `delta` is in window points, up positive.
+    private func pan(by delta: CGPoint) {
+        let clip = contentView
+        let scale = max(magnification, 0.01)
+        var origin = clip.bounds.origin
+        origin.x -= delta.x / scale
+        origin.y += (clip.isFlipped ? delta.y : -delta.y) / scale
+        clip.scroll(to: clip.constrainBoundsRect(NSRect(origin: origin, size: clip.bounds.size)).origin)
+        reflectScrolledClipView(clip)
+    }
+
     override func scrollWheel(with event: NSEvent) {
         guard allowsMagnification, !event.modifierFlags.contains(.shift) else { return super.scrollWheel(with: event) }
         // A trackpad's coasting after the fingers lift would keep zooming; ignore it.
