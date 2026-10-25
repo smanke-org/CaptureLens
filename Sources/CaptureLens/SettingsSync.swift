@@ -566,6 +566,19 @@ enum DebugCommands {
             case "remove-icloud": LibrarySync.shared.removeFromICloud()
             case "settings": SettingsWindow.shared.show()
             case "close-windows": for window in NSApp.windows where window.isVisible { window.close() }
+            case "library":
+                // `library:<width>x<height>`: the library window at that size, first capture selected.
+                LibraryWindow.shared.show(select: store.items.first?.id)
+                let size = arg.split(separator: "x").compactMap { Double($0) }
+                if size.count == 2, let window = LibraryWindow.shared.window {
+                    window.setFrame(CGRect(origin: window.frame.origin, size: CGSize(width: size[0], height: size[1])), display: true)
+                }
+            case "inspector": LibraryWindow.shared.state.showInspector = arg == "on"
+            case "shoot-library":
+                if let window = LibraryWindow.shared.window {
+                    let out = URL(fileURLWithPath: arg)
+                    await DebugShots.shoot(window, out.deletingPathExtension().lastPathComponent, out: out.deletingLastPathComponent()) { _ in }
+                }
             case "sync-off": sync.isEnabled = false
             case "delete-zone":
                 // Removes the test zone from iCloud once a test is over.
