@@ -169,7 +169,14 @@ enum DebugShots {
             try image.pngData?.write(to: out.appending(path: "\(name).png"))
             note("\(name): \(image.width)×\(image.height)")
         } catch {
-            note("\(name): FAILED \(error.localizedDescription)")
+            // Without Screen Recording permission (a build signed differently), ask whoever runs the
+            // shoot: `want-<name>.txt` holds the window number; wait for `<name>.png` to appear.
+            let want = out.appending(path: "want-\(name).txt")
+            let png = out.appending(path: "\(name).png")
+            try? String(window.windowNumber).write(to: want, atomically: true, encoding: .utf8)
+            for _ in 0..<60 where !FileManager.default.fileExists(atPath: png.path) { try? await Task.sleep(for: .milliseconds(250)) }
+            try? FileManager.default.removeItem(at: want)
+            note("\(name): \(FileManager.default.fileExists(atPath: png.path) ? "shot outside" : "FAILED \(error.localizedDescription)")")
         }
     }
 

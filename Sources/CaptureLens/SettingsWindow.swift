@@ -192,10 +192,16 @@ struct ValueSlider: View {
 struct CaptureSettings: View {
     @State private var prefs = Preferences.shared
     @State private var screenGranted = ScreenAccess.granted
+    /// The website's pictures, from a test build that may not have Screen Recording access.
+    #if DEBUG
+    private static let shooting = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SHOTS"] != nil
+    #else
+    private static let shooting = false
+    #endif
 
     var body: some View {
         Form {
-            if !screenGranted {
+            if !screenGranted && !Self.shooting {
                 Section {
                     Label("CaptureLens needs Screen Recording access to capture the screen. Turn on CaptureLens in Screen & System Audio Recording.",
                           systemImage: "exclamationmark.triangle.fill")
