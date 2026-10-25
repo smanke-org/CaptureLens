@@ -15,7 +15,10 @@ enum DebugShots {
         guard env["CAPTURELENS_DEFAULTS_SUITE"] != nil, env["CAPTURELENS_LIBRARY_FOLDER"] != nil else { exit(2) }
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         AppDefaults.store.set("dark", forKey: AppAppearance.key)
+        AppDefaults.store.set("left", forKey: "editor.palettePlacement")
+        AppDefaults.store.set("info", forKey: "library.detailsTab")
         let prefs = Preferences.shared
+        prefs.toolStyle = .toolbar
         prefs.autoName = false
         prefs.copyToClipboard = false
         Task {
@@ -35,7 +38,36 @@ enum DebugShots {
             guard let window = library.window else { return note("no library window") }
             place(window, size: CGSize(width: 1440, height: 900), on: screen)
             try? await Task.sleep(for: .seconds(3))
+            CanvasZoom.shared.fitRequested += 1
+            try? await Task.sleep(for: .seconds(1))
             await shoot(window, "library-editor", out: out, note: note)
+
+            // The details folded away, for a big picture: the toolbar, then the dial.
+            AppDefaults.store.set("details", forKey: "library.collapsedPane")
+            AppDefaults.store.set("bottom", forKey: "editor.palettePlacement")
+            try? await Task.sleep(for: .seconds(1))
+            CanvasZoom.shared.fitRequested += 1
+            try? await Task.sleep(for: .seconds(1))
+            await shoot(window, "editor-full", out: out, note: note)
+            AppDefaults.store.set("left", forKey: "editor.palettePlacement")
+            prefs.toolStyle = .dial
+            try? await Task.sleep(for: .seconds(1))
+            if let scroll = findScroll(window.contentView) {
+                scroll.openDial(at: CGPoint(x: scroll.bounds.midX + 120, y: scroll.bounds.midY), held: false)
+                try? await Task.sleep(for: .seconds(1))
+                await shoot(window, "dial", out: out, note: note)
+                scroll.closeDial()
+            }
+            prefs.toolStyle = .toolbar
+            AppDefaults.store.set("", forKey: "library.collapsedPane")
+            try? await Task.sleep(for: .seconds(1))
+
+            // The Markup tab under the picture.
+            AppDefaults.store.set("markup", forKey: "library.detailsTab")
+            try? await Task.sleep(for: .seconds(1))
+            await shoot(window, "markup-tab", out: out, note: note)
+            AppDefaults.store.set("info", forKey: "library.detailsTab")
+            try? await Task.sleep(for: .seconds(0.5))
 
             // The sidebar with Apps folded away.
             AppDefaults.store.set(false, forKey: "library.sidebar.appsOpen")
@@ -43,7 +75,9 @@ enum DebugShots {
             await shoot(window, "sidebar-apps-folded", out: out, note: note)
             AppDefaults.store.set(true, forKey: "library.sidebar.appsOpen")
 
-            // Smart Move on the settings page, the pointer over its button.
+            // Smart Move on the settings page, the pointer over its button; the toolbar on the
+            // right, clear of the button.
+            AppDefaults.store.set("right", forKey: "editor.palettePlacement")
             library.show(select: ids.settings)
             try? await Task.sleep(for: .seconds(1.5))
             CanvasZoom.shared.fitRequested += 1
@@ -59,6 +93,7 @@ enum DebugShots {
             try? await Task.sleep(for: .seconds(1))
             await shoot(window, "smart-move", out: out, note: note)
             editor.pick(.select)
+            AppDefaults.store.set("left", forKey: "editor.palettePlacement")
 
             // Simplify, shown as the finished picture.
             library.show(select: ids.simplified)
@@ -136,6 +171,13 @@ enum DebugShots {
         } catch {
             note("\(name): FAILED \(error.localizedDescription)")
         }
+    }
+
+    static func findScroll(_ view: NSView?) -> ZoomingScrollView? {
+        guard let view else { return nil }
+        if let scroll = view as? ZoomingScrollView { return scroll }
+        for sub in view.subviews { if let hit = findScroll(sub) { return hit } }
+        return nil
     }
 
     static func find(_ view: NSView?) -> AnnotationLayerView? {

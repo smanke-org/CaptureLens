@@ -611,8 +611,14 @@ enum DebugCommands {
                     scroll.openDial(at: CGPoint(x: scroll.bounds.midX, y: scroll.bounds.midY), held: false)
                     result = scroll.debugDialInfo
                 }
+            case "pin-dial":
+                if let window = LibraryWindow.shared.window, let scroll = PanTest.find(window.contentView) { scroll.debugDialState.pinned = arg != "off" }
             case "close-dial":
                 if let window = LibraryWindow.shared.window, let scroll = PanTest.find(window.contentView) { scroll.closeDial() }
+            case "pin-test":
+                // Pins the dial, clicks a tool on it, draws on the picture, drags the dial,
+                // then unpins and clicks a tool again; reports each step.
+                result = await PanTest.pinAndDrag()
             case "dial-test":
                 // Right-click, Esc, then ⌘⌥ held over the picture with a tool under the pointer.
                 result = await PanTest.dial()
@@ -878,6 +884,57 @@ enum PanTest {
         steps.append("let go of ⌥ over Ellipse: tool \(editor.tool.id), dial \(scroll.isDialOpen)")
         await post(flags([], 55))
         steps.append("⌘ up: tool \(editor.tool.id)")
+        return steps.joined(separator: "; ")
+    }
+
+    static func pinAndDrag() async -> String {
+        guard let window = LibraryWindow.shared.window, let scroll = find(window.contentView) else { return "no canvas" }
+        let editor = AnnotationEditor.shared
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        editor.showResult = false
+        CanvasZoom.shared.set(1)
+        editor.pick(.draw(.rectangle))
+        try? await Task.sleep(for: .seconds(0.4))
+        func post(_ event: NSEvent?) async {
+            if let event { NSApp.postEvent(event, atStart: false) }
+            try? await Task.sleep(for: .milliseconds(120))
+        }
+        func mouse(_ type: NSEvent.EventType, _ p: CGPoint) -> NSEvent? {
+            NSEvent.mouseEvent(with: type, location: p, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                               windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+        }
+        func click(_ p: CGPoint) async { await post(mouse(.leftMouseDown, p)); await post(mouse(.leftMouseUp, p)) }
+        var steps: [String] = []
+        let state = scroll.debugDialState
+        state.pinned = true
+        // Open near the picture's left so there's room to draw on its right.
+        scroll.openDial(at: CGPoint(x: scroll.bounds.minX + 210, y: scroll.bounds.midY), held: false)
+        try? await Task.sleep(for: .seconds(0.6))
+        guard let center = scroll.debugDialCenter else { return "dial didn't open" }
+        // The first tool of the inner ring sits straight above the middle.
+        let first = ToolUse.ranked()[0]
+        await click(CGPoint(x: center.x, y: center.y + 112))
+        steps.append("pinned, clicked \(first.id): tool \(editor.tool.id), open \(scroll.isDialOpen)")
+        // Draw a box on the picture, away from the dial.
+        editor.pick(.draw(.rectangle))
+        let before = editor.annotations.count
+        let a = scroll.convert(CGPoint(x: scroll.bounds.maxX - 160, y: scroll.bounds.midY + 40), to: nil)
+        await post(mouse(.leftMouseDown, a))
+        await post(mouse(.leftMouseDragged, CGPoint(x: a.x + 60, y: a.y - 40)))
+        await post(mouse(.leftMouseDragged, CGPoint(x: a.x + 100, y: a.y - 70)))
+        await post(mouse(.leftMouseUp, CGPoint(x: a.x + 100, y: a.y - 70)))
+        steps.append("drew on the picture: marks +\(editor.annotations.count - before), open \(scroll.isDialOpen)")
+        // Drag the empty ring between the two circles of tools.
+        let grab = CGPoint(x: center.x + 142, y: center.y)
+        await post(mouse(.leftMouseDown, grab))
+        for i in 1...5 { await post(mouse(.leftMouseDragged, CGPoint(x: grab.x + Double(i) * 12, y: grab.y + Double(i) * 8))) }
+        await post(mouse(.leftMouseUp, CGPoint(x: grab.x + 60, y: grab.y + 40)))
+        steps.append("dragged 60 right, 40 up: offset \(Int(state.offset.width)), \(Int(state.offset.height)), open \(scroll.isDialOpen)")
+        // Unpinned, picking a tool closes it.
+        state.pinned = false
+        if let moved = scroll.debugDialCenter { await click(CGPoint(x: moved.x, y: moved.y + 112)) }
+        steps.append("unpinned, clicked a tool: tool \(editor.tool.id), open \(scroll.isDialOpen)")
         return steps.joined(separator: "; ")
     }
 

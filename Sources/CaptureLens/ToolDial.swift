@@ -133,7 +133,24 @@ final class ToolDialState {
     var hovered: AnnotationEditor.Tool?
     /// Opened by holding ⌘⌥: letting go picks the tool under the pointer.
     var held = false
+    /// How far it's been dragged from where it opened (points; down is positive).
+    var offset: CGSize = .zero
+    /// How far it may be dragged and stay inside its area.
+    @ObservationIgnored var limits = (minX: CGFloat(0), maxX: CGFloat(0), minY: CGFloat(0), maxY: CGFloat(0))
+    /// Pinned, it stays open after a tool is picked and clicks on the picture draw as
+    /// usual; Esc or the middle closes it. Remembered for next time.
+    var pinned = AppDefaults.store.bool(forKey: "editor.dialPinned") {
+        didSet { AppDefaults.store.set(pinned, forKey: "editor.dialPinned") }
+    }
     @ObservationIgnored var close: () -> Void = {}
+
+    /// After a tool or action is picked: closes it unless pinned.
+    func done() { if !pinned { close() } }
+
+    func move(to offset: CGSize) {
+        func clamp(_ v: CGFloat, _ lo: CGFloat, _ hi: CGFloat) -> CGFloat { lo > hi ? 0 : min(max(v, lo), hi) }
+        self.offset = CGSize(width: clamp(offset.width, limits.minX, limits.maxX), height: clamp(offset.height, limits.minY, limits.maxY))
+    }
 }
 
 /// The tools in rings around the pointer: the ones used most on the inside, the rest
@@ -142,6 +159,8 @@ final class ToolDialState {
 struct ToolDialView: View {
     let state: ToolDialState
     @State private var editor = AnnotationEditor.shared
+    /// Where a drag started from.
+    @State private var dragStart: CGSize?
 
     static let size = CGSize(width: 404, height: 452)
     private static let center = CGPoint(x: 202, y: 202)
@@ -156,11 +175,24 @@ struct ToolDialView: View {
         let actions: [Action] = [.rotateLeft, .rotateRight, .adjust, .smartRedact, .simplify]
         let outerCount = outer.count + actions.count
         ZStack(alignment: .topLeading) {
+            // The disc itself is the handle: drag any empty part of it to move the dial.
             Circle()
                 .fill(.regularMaterial)
                 .overlay(Circle().strokeBorder(Color.primary.opacity(0.1)))
                 .shadow(color: .black.opacity(0.25), radius: 18, y: 6)
                 .frame(width: 396, height: 396)
+                .contentShape(Circle())
+                .pointerStyle(dragStart == nil ? .grabIdle : .grabActive)
+                .gesture(
+                    DragGesture(minimumDistance: 2, coordinateSpace: .global)
+                        .onChanged { value in
+                            let start = dragStart ?? state.offset
+                            if dragStart == nil { dragStart = start }
+                            state.move(to: CGSize(width: start.width + value.translation.width, height: start.height + value.translation.height))
+                        }
+                        .onEnded { _ in dragStart = nil }
+                )
+                .help("Drag to move the dial")
                 .position(Self.center)
             Circle()
                 .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
@@ -211,7 +243,7 @@ struct ToolDialView: View {
         let hovered = state.hovered == tool
         return Button {
             editor.pick(tool)
-            state.close()
+            state.done()
         } label: {
             Image(systemName: tool.symbol)
                 .font(.system(size: size * 0.4))
@@ -250,19 +282,19 @@ struct ToolDialView: View {
             AdjustMenu(compact: true).clipShape(Circle())
         case .smartRedact:
             Menu {
-                Button("Hide Sensitive Info with Black Boxes") { editor.smartRedact(with: .redact); state.close() }
-                Button("Hide Sensitive Info with Blur") { editor.smartRedact(with: .blur); state.close() }
-                Button("Hide Sensitive Info with Pixels") { editor.smartRedact(with: .pixelate); state.close() }
+                Button("Hide Sensitive Info with Black Boxes") { editor.smartRedact(with: .redact); state.done() }
+                Button("Hide Sensitive Info with Blur") { editor.smartRedact(with: .blur); state.done() }
+                Button("Hide Sensitive Info with Pixels") { editor.smartRedact(with: .pixelate); state.done() }
             } label: { face("wand.and.stars") }
                 .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
                 .help("Smart Redact: find email addresses, phone numbers, card numbers and more, and hide them")
         case .simplify:
             Menu {
-                Button("Simplify in Its Own Colors") { editor.simplify(.original); state.close() }
-                Button("Simplify in Grays") { editor.simplify(.grays); state.close() }
+                Button("Simplify in Its Own Colors") { editor.simplify(.original); state.done() }
+                Button("Simplify in Grays") { editor.simplify(.grays); state.done() }
                 if editor.annotations.contains(where: { $0.kind == .simplify }) {
                     Divider()
-                    Button("Remove Simplify") { editor.removeSimplify(); state.close() }
+                    Button("Remove Simplify") { editor.removeSimplify(); state.done() }
                 }
             } label: { face("rectangle.3.group") }
                 .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
@@ -292,9 +324,19 @@ struct ToolDialView: View {
         .help(AnnotationToolbar.name(color))
     }
 
-    /// Line widths, and the system colors for any other color.
+    /// The pin, line widths, and the system colors for any other color.
     private var widths: some View {
         HStack(spacing: 6) {
+            Button { state.pinned.toggle() } label: {
+                Image(systemName: state.pinned ? "pin.fill" : "pin")
+                    .foregroundStyle(state.pinned ? Color.accentColor : Color.primary)
+                    .rotationEffect(.degrees(45))
+                    .frame(width: 30, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(state.pinned ? "Pinned: the dial stays open after you pick a tool. Click to unpin." : "Pin the dial open, so it stays after you pick a tool")
+            Divider().frame(height: 18)
             ForEach([2.0, 4, 8, 12], id: \.self) { width in
                 let on = editor.style.lineWidth == width
                 Button { editor.style.lineWidth = width } label: {
@@ -359,7 +401,8 @@ struct DialOverlay: View {
             Color.clear
             if let request = presenter.request, request.windowNumber == windowNumber, windowNumber != 0 {
                 ToolDialView(state: request.state)
-                    .position(x: request.frame.midX - area.minX, y: area.maxY - request.frame.midY)
+                    .position(x: request.frame.midX - area.minX + request.state.offset.width,
+                              y: area.maxY - request.frame.midY + request.state.offset.height)
             }
         }
         .allowsHitTesting(presenter.request?.windowNumber == windowNumber)

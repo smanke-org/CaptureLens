@@ -420,7 +420,7 @@ struct LibrarySettings: View {
             } footer: {
                 Text(prefs.toolStyle == .toolbar
                      ? "The tools float over the picture. Drag the toolbar's grip to put it on the left, right or bottom."
-                     : "The tools open in a dial around the pointer, the ones you use most closest to the middle, with colors and line widths. Click a tool, or with ⌘⌥ held, let go over it. Esc closes the dial.")
+                     : "The tools open in a dial around the pointer, the ones you use most closest to the middle, with colors and line widths. Click a tool, or with ⌘⌥ held, let go over it. Drag the dial to move it; its pin keeps it open after you pick a tool. Esc closes it.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {

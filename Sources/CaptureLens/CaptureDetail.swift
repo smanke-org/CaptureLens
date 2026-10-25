@@ -724,7 +724,7 @@ final class ZoomingScrollView: NSScrollView {
                                                                 queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 AnnotationEditor.shared.holdSelect(false)
-                self?.closeDial()
+                if self?.dialState.pinned == false { self?.closeDial() }
             }
         }
         dialState.close = { [weak self] in self?.closeDial() }
@@ -764,12 +764,17 @@ final class ZoomingScrollView: NSScrollView {
                            y: clamp(p.y - (size.height - 202), size.height, area.minY, area.height),
                            width: size.width, height: size.height)
         dialFrame = frame
+        // It may be dragged anywhere its area allows (offsets run down, window coordinates up).
+        dialState.offset = .zero
+        dialState.limits = (minX: area.minX - frame.minX, maxX: area.maxX - frame.maxX,
+                            minY: frame.maxY - area.maxY, maxY: frame.minY - area.minY)
         DialPresenter.shared.request = .init(windowNumber: window.windowNumber, frame: frame, state: dialState)
     }
 
     /// Whether a click or right-click landed on the open dial.
     private func isOnDial(_ event: NSEvent) -> Bool {
-        dialFrame?.contains(event.locationInWindow) == true
+        guard let dialFrame else { return false }
+        return dialFrame.offsetBy(dx: dialState.offset.width, dy: -dialState.offset.height).contains(event.locationInWindow)
     }
 
     func closeDial() {
@@ -781,6 +786,10 @@ final class ZoomingScrollView: NSScrollView {
 
     #if DEBUG
     var debugDialState: ToolDialState { dialState }
+    /// The dial's middle now, in window coordinates.
+    var debugDialCenter: CGPoint? {
+        dialFrame.map { CGPoint(x: $0.midX + dialState.offset.width, y: $0.maxY - 202 - dialState.offset.height) }
+    }
     var debugDialInfo: String {
         guard let dialFrame else { return "closed" }
         return "frame \(dialFrame) in window \(window?.windowNumber ?? 0), content \(window?.contentView?.frame ?? .zero), overlay area \(window.map { DialPresenter.shared.overlayAreas[$0.windowNumber] ?? .zero } ?? .zero)"
@@ -793,7 +802,7 @@ final class ZoomingScrollView: NSScrollView {
         if editor.heldTool != nil, !event.modifierFlags.contains(.command) { editor.holdSelect(false) }
         guard let window, event.window === window else {
             if panning, !grabbing { endPanning() }
-            if isDialOpen, event.type == .leftMouseDown || event.type == .rightMouseDown { closeDial() }
+            if isDialOpen, !dialState.pinned, event.type == .leftMouseDown || event.type == .rightMouseDown { closeDial() }
             return event
         }
         let trigger = Preferences.shared.dialTrigger
@@ -804,7 +813,8 @@ final class ZoomingScrollView: NSScrollView {
                 // Letting go of ⌘ or ⌥ picks the tool under the pointer.
                 if !flags.contains(.command) || !flags.contains(.option) {
                     if let tool = dialState.hovered { editor.pick(tool) }
-                    closeDial()
+                    // Pinned, it stays open where it is, no longer following the keys.
+                    if dialState.pinned { dialState.held = false } else { closeDial() }
                 }
                 return event
             }
@@ -828,8 +838,8 @@ final class ZoomingScrollView: NSScrollView {
             openDial(at: convert(event.locationInWindow, from: nil), held: false)
             return nil
         case .leftMouseDown where isDialOpen:
-            // A click outside the dial closes it, and does nothing else.
-            if isOnDial(event) { return event }
+            // A click outside the dial closes it, and does nothing else; pinned, it draws as usual.
+            if isOnDial(event) || dialState.pinned { return event }
             closeDial()
             return nil
         case .keyDown where isDialOpen && event.keyCode == 53: // Esc
