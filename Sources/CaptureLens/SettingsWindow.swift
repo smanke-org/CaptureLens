@@ -533,6 +533,9 @@ struct LibrarySettings: View {
             } footer: {
                 Text(syncFooter).font(.caption).foregroundStyle(.secondary)
             }
+            #if !APPSTORE
+            CollectSection()
+            #endif
             Section {
                 LabeledContent("Moving from Snagit?") {
                     Button("Import from Snagit…") { SnagitImportWindow.shared.show() }
@@ -553,6 +556,51 @@ struct LibrarySettings: View {
         } message: {
             Text("Your captures are rewritten unencrypted. Anyone who can read your files could then see them.")
         }
+    }
+}
+
+/// Captures from other tools, brought into the library as they're made.
+private struct CollectSection: View {
+    @State private var collector = CaptureCollector.shared
+    /// The tool just switched on, while asking how far back to look.
+    @State private var asking: CaptureCollector.Tool?
+
+    var body: some View {
+        Section {
+            ForEach(CaptureCollector.Tool.allCases) { tool in
+                Toggle(isOn: Binding(get: { collector.isOn(tool) || asking == tool },
+                                     set: { $0 ? (asking = tool) : collector.turnOff(tool) })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(tool.title)
+                        Text(status(tool)).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } header: {
+            Text("Captures from other tools")
+        } footer: {
+            Text("They come into the library as you take them, so it has everything whatever you capture with. The original files stay where they are. Each comes in once, even if you delete it here later, and one another Mac already brought in isn't added twice. Pictures only; the Photos library is never looked at.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .confirmationDialog(asking.map { "Bring in \($0.title) you already have?" } ?? "",
+                            isPresented: Binding(get: { asking != nil }, set: { if !$0 { asking = nil } })) {
+            ForEach(CaptureCollector.Lookback.allCases) { lookback in
+                Button(lookback.title) {
+                    if let tool = asking { collector.turnOn(tool, lookingBack: lookback) }
+                    asking = nil
+                }
+            }
+            Button("Cancel", role: .cancel) { asking = nil }
+        } message: {
+            Text("New ones come in from now on. Ones already there can come too.")
+        }
+    }
+
+    private func status(_ tool: CaptureCollector.Tool) -> String {
+        guard collector.isOn(tool) else { return tool.detail }
+        let count = collector.counts[tool] ?? 0
+        let waiting = collector.waiting > 0 ? " · \(collector.waiting) on the way" : ""
+        return count == 0 ? "On. None yet\(waiting)" : "On. \(count.formatted()) brought in\(waiting)"
     }
 }
 

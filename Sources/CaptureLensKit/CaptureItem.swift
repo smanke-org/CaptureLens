@@ -70,15 +70,18 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
         public var url: String?
         public var pageTitle: String?
         public var displayName: String?
+        /// The tool that took it, when that wasn't CaptureLens: "Screenshot" or "Snagit".
+        public var tool: String?
 
         public init(appName: String? = nil, bundleID: String? = nil, windowTitle: String? = nil, url: String? = nil,
-                    pageTitle: String? = nil, displayName: String? = nil) {
+                    pageTitle: String? = nil, displayName: String? = nil, tool: String? = nil) {
             self.appName = appName
             self.bundleID = bundleID
             self.windowTitle = windowTitle
             self.url = url
             self.pageTitle = pageTitle
             self.displayName = displayName
+            self.tool = tool
         }
 
         /// The site's host without "www.", for filtering by website.

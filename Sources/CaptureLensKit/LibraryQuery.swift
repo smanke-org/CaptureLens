@@ -214,9 +214,12 @@ public enum LibraryQuery {
     /// recent item that uses it.
     public static func tagCounts(_ items: [CaptureItem]) -> [(tag: String, count: Int)] {
         var counts: [String: (tag: String, count: Int, date: Date)] = [:]
+        // The same few tags repeat across thousands of captures, and folding is slow.
+        var folded: [String: String] = [:]
         for item in items {
             for tag in item.tags {
-                let key = fold(tag)
+                let key = folded[tag] ?? fold(tag)
+                folded[tag] = key
                 var entry = counts[key] ?? (tag, 0, .distantPast)
                 entry.count += 1
                 if item.created > entry.date { entry.tag = tag; entry.date = item.created }
@@ -243,6 +246,20 @@ public enum LibraryQuery {
         var counts: [String: Int] = [:]
         for item in items { if let site = item.source.website { counts[site, default: 0] += 1 } }
         return counts.map { ($0.key, $0.value) }.sorted { ($0.count, $1.site) > ($1.count, $0.site) }
+    }
+}
+
+/// Tags, apps and websites in use, with how many captures each has: what the sidebar, the
+/// filter menus and the tag picker list.
+public struct LibraryFacets {
+    public let tags: [(tag: String, count: Int)]
+    public let apps: [(key: String, name: String, count: Int)]
+    public let websites: [(site: String, count: Int)]
+
+    public init(_ items: [CaptureItem]) {
+        tags = LibraryQuery.tagCounts(items)
+        apps = LibraryQuery.appCounts(items)
+        websites = LibraryQuery.websiteCounts(items)
     }
 }
 

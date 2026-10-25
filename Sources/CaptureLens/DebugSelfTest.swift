@@ -445,12 +445,13 @@ enum DebugSelfTest {
     }
 
     /// A Snagit capture file, built the way Snagit writes them.
-    private static func snagx(png: Data?, drawn: Data?, objects: [[String: Any]], tags: [String] = ["work"]) -> Data {
+    static func snagx(png: Data?, drawn: Data?, objects: [[String: Any]], tags: [String] = ["work"],
+                      date: String = "2022-01-01 15:00:00") -> Data {
         var page: [String: Any] = ["CaptureCanvasWidth": png == nil ? 0 : 600, "CaptureCanvasHeight": png == nil ? 0 : 300, "DPI": 72,
                                    "BackgroundSize": png == nil ? "0,0" : "600.000000,300.000000", "CaptureBackgroundLocation": "0.000000,0.000000",
                                    "CaptureObjects": objects]
         if png != nil { page["CaptureBackgroundImage"] = "{P}.png" }
-        let meta: [String: Any] = ["CaptureDate": "2022-01-01 15:00:00", "AppName": "Notes", "WindowName": "Test", "Tags": tags]
+        let meta: [String: Any] = ["CaptureDate": date, "AppName": "Notes", "WindowName": "Test", "Tags": tags]
         var files: [(String, Data)] = [("index.json", (try? JSONSerialization.data(withJSONObject: ["Pages": ["{P}.json"]])) ?? Data()),
                                        ("metadata.json", (try? JSONSerialization.data(withJSONObject: meta)) ?? Data()),
                                        ("{P}.json", (try? JSONSerialization.data(withJSONObject: page)) ?? Data())]

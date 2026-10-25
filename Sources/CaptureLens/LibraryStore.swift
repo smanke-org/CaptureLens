@@ -16,7 +16,22 @@ import UniformTypeIdentifiers
 final class LibraryStore {
     static let shared = LibraryStore()
 
-    private(set) var items: [CaptureItem] = []
+    private(set) var items: [CaptureItem] = [] {
+        didSet { facetCache = nil; revision += 1 }
+    }
+    @ObservationIgnored private var facetCache: LibraryFacets?
+    /// Counts changes to `items`, so lists made from them know when to make them again.
+    @ObservationIgnored private(set) var revision = 0
+
+    /// Tags, apps and websites in use, worked out once per change to the library rather than
+    /// by every view that lists them each time it redraws.
+    var facets: LibraryFacets {
+        let items = items
+        if let facetCache { return facetCache }
+        let facets = LibraryFacets(items)
+        facetCache = facets
+        return facets
+    }
     /// Items being read and named right after capture.
     private(set) var analyzing: Set<UUID> = []
     /// Items in the database this Mac can't open (encrypted with a key that's gone).

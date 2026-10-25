@@ -564,7 +564,7 @@ enum DebugCommands {
                 }
             case "folder": FolderSync.shared.choose(URL(fileURLWithPath: arg, isDirectory: true))
             case "remove-icloud": LibrarySync.shared.removeFromICloud()
-            case "settings": SettingsWindow.shared.show()
+            case "settings": if arg.isEmpty { SettingsWindow.shared.show() } else { SettingsWindow.shared.show(tab: arg) }
             case "close-windows": for window in NSApp.windows where window.isVisible { window.close() }
             case "library":
                 // `library:<width>x<height>`: the library window at that size, first capture selected.
@@ -588,27 +588,63 @@ enum DebugCommands {
                 if let item = store.items.first(where: { $0.name.localizedCaseInsensitiveContains(arg) }) {
                     LibraryWindow.shared.show(select: item.id)
                 } else { result = "no capture named \(arg)" }
-            case "fill", "fill-key", "fill-move", "frame":
-                // `fill:<library|editor>` presses Fill Screen, `fill-key:` types ⌥⌘F in that window,
-                // `fill-move:` nudges it 30 pt; each reports its frame, the screen's and whether it fills.
-                let window = arg == "editor" ? EditorWindow.shared.window : LibraryWindow.shared.window
-                if let window {
-                    switch verb {
-                    case "fill": ScreenFill.shared.toggle(window)
-                    case "fill-key":
-                        window.makeKeyAndOrderFront(nil)
-                        try await Task.sleep(for: .seconds(0.3))
-                        if let key = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command, .option],
-                                                      timestamp: 0, windowNumber: window.windowNumber, context: nil,
-                                                      characters: "f", charactersIgnoringModifiers: "f", isARepeat: false, keyCode: 3) {
-                            NSApp.postEvent(key, atStart: false)
+            case "fold":
+                // `fold:<captures|editor|none>`: folds that side of the library to a slim bar.
+                LibraryWindow.shared.state.fold(LibraryState.Side(rawValue: arg))
+            case "click-at":
+                // `click-at:<x>,<y>`: clicks the library window there (points from its top left);
+                // reports which side is folded after.
+                let p = arg.split(separator: ",").compactMap { Double($0) }
+                if p.count == 2, let window = LibraryWindow.shared.window {
+                    window.makeKeyAndOrderFront(nil)
+                    let at = CGPoint(x: p[0], y: window.frame.height - p[1])
+                    for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                        if let event = NSEvent.mouseEvent(with: type, location: at, modifierFlags: [],
+                                                          timestamp: ProcessInfo.processInfo.systemUptime,
+                                                          windowNumber: window.windowNumber, context: nil,
+                                                          eventNumber: 0, clickCount: 1, pressure: 1) {
+                            NSApp.postEvent(event, atStart: false)
                         }
-                        try await Task.sleep(for: .seconds(1))
-                    case "fill-move": window.setFrameOrigin(NSPoint(x: window.frame.minX + 30, y: window.frame.minY))
-                    default: break
+                        try await Task.sleep(for: .milliseconds(150))
                     }
-                    result = "\(NSStringFromRect(window.frame)) screen \(NSStringFromRect(window.screen?.visibleFrame ?? .zero)) filled \(ScreenFill.shared.isFilled(window))"
-                } else { result = "no \(arg) window" }
+                    try await Task.sleep(for: .milliseconds(500))
+                }
+                result = "folded \(LibraryWindow.shared.state.foldedSide?.rawValue ?? "none")"
+            case "collect":
+                // `collect:<screenshot|snagit>,<none|week|month|quarter|all>`: turns collecting on.
+                let parts = arg.split(separator: ",").map(String.init)
+                if let tool = CaptureCollector.Tool(rawValue: parts.first ?? ""),
+                   let lookback = CaptureCollector.Lookback(rawValue: parts.count > 1 ? parts[1] : "none") {
+                    CaptureCollector.shared.turnOn(tool, lookingBack: lookback)
+                } else { result = "bad collect:\(arg)" }
+            case "make-snagx":
+                // `make-snagx:<path>,<text>`: writes a Snagit capture file of that text, taken now.
+                let parts = arg.split(separator: ",", maxSplits: 1).map(String.init)
+                let formatter = DateFormatter()
+                formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+                if parts.count == 2, let png = DebugImage.make(text: parts[1])?.pngData {
+                    try DebugSelfTest.snagx(png: png, drawn: nil, objects: [], tags: ["collected"], date: formatter.string(from: Date()))
+                        .write(to: URL(fileURLWithPath: parts[0]))
+                }
+            case "collect-off": if let tool = CaptureCollector.Tool(rawValue: arg) { CaptureCollector.shared.turnOff(tool) }
+            case "collected":
+                // Reports what's been brought in, and the newest captures' kind, tool and app.
+                let c = CaptureCollector.shared
+                let newest = store.items.prefix(Int(arg) ?? 3).map {
+                    "\($0.kind.rawValue)/\($0.source.tool ?? "-")/app \($0.source.appName == nil ? "no" : "yes")/window \($0.source.windowTitle == nil ? "no" : "yes")/tags \($0.tags.joined(separator: "+"))/\($0.pixelWidth)x\($0.pixelHeight)@\($0.scale)"
+                }
+                result = "counts \(c.counts.map { "\($0.key.rawValue)=\($0.value)" }.sorted()), waiting \(c.waiting), items \(store.items.count), newest \(newest)"
+            case "bulk":
+                // `bulk:<n>`: adds n small made-up captures with a spread of tags, apps and sites.
+                result = MenuTest.addBulk(Int(arg) ?? 100)
+            case "update-test":
+                // `update-test:<n>`: changes the newest capture's notes n times, timing how long
+                // the window takes to catch up after each.
+                result = await MenuTest.updates(Int(arg) ?? 5)
+            case "bulk-unique": result = MenuTest.addUnique(Int(arg) ?? 100)
+            case "menu-test":
+                // `menu-test:<filter name>`: opens that filter's menu, reports how long it took.
+                result = await MenuTest.open(arg)
             case "pop-out": EditorWindow.shared.open()
             case "bring-back": EditorWindow.shared.close()
             case "popped-dial":
@@ -693,7 +729,8 @@ enum DebugCommands {
             "keyState": "\(sync.keyState)", "syncError": sync.lastError ?? "", "cloudError": CloudSync.shared.lastError ?? "",
             "engineRunning": CloudSync.shared.isRunning, "lastCommand": AppDefaults.store.string(forKey: "debug.lastCommand") ?? "",
             "settingsFrom": sync.lastSource ?? "", "pending": LibrarySync.shared.pendingUploads,
-            "items": store.items.map { item -> [String: Any] in
+            // Each picture is read from the database, too slow for a big test library every second.
+            "items": store.items.count > 200 ? [] : store.items.map { item -> [String: Any] in
                 ["name": item.name, "tags": item.tags, "notes": item.notes, "favorite": item.favorite,
                  "hasImage": store.pngData(item.id) != nil, "origin": item.origin ?? ""]
             },
@@ -730,6 +767,103 @@ enum DebugImage {
 #if DEBUG
 /// Drives Space-drag panning on the library's picture with made-up events, as the
 /// `pan-test` debug command.
+@MainActor
+enum MenuTest {
+    /// `bulk-unique:<n>`: n captures, each with a website and tag of its own.
+    static func addUnique(_ count: Int) -> String {
+        let store = LibraryStore.shared
+        guard let image = DebugImage.make(text: "Bulk", size: CGSize(width: 64, height: 40)) else { return "no image" }
+        for i in 0..<count {
+            let site = "https://unique\(i).example.org/page"
+            guard var item = store.add(image: image, kind: .region, scale: 2,
+                                       source: .init(appName: "Browser \(i % 150)", bundleID: "com.example.browser\(i % 150)",
+                                                     windowTitle: "W", url: site, pageTitle: "P"),
+                                       cursor: nil, created: Date().addingTimeInterval(-Double(i) * 600), analyze: false) else { continue }
+            item.tags = ["unique\(i)"]
+            store.update(item)
+        }
+        return "\(store.items.count) in all"
+    }
+
+    static func addBulk(_ count: Int) -> String {
+        let store = LibraryStore.shared
+        guard let image = DebugImage.make(text: "Bulk", size: CGSize(width: 64, height: 40)) else { return "no image" }
+        let apps = (0..<40).map { ("App \($0)", "com.example.app\($0)") }
+        let start = Date()
+        for i in 0..<count {
+            let app = apps[(i * 7) % apps.count]
+            let site = i % 3 == 0 ? "https://site\(i % 80).example.com/page" : nil
+            guard var item = store.add(image: image, kind: .region, scale: 2,
+                                       source: .init(appName: app.0, bundleID: app.1, windowTitle: "Window \(i)", url: site,
+                                                     pageTitle: site == nil ? nil : "Page \(i)"),
+                                       cursor: nil, created: Date().addingTimeInterval(-Double(i) * 3_600), analyze: false) else { continue }
+            item.tags = ["tag\(i % 60)", "group\(i % 7)"]
+            item.name = "Bulk capture \(i)"
+            item.nameIsAutomatic = false
+            store.update(item)
+        }
+        return "added \(count) in \(Int(Date().timeIntervalSince(start)))s, \(store.items.count) in all"
+    }
+
+    static func updates(_ count: Int) async -> String {
+        let store = LibraryStore.shared
+        var times: [Int] = []
+        for i in 0..<count {
+            guard var item = store.items.first else { return "empty" }
+            let start = Date()
+            item.notes = "Change \(i)"
+            store.update(item)
+            // Two turns of the run loop: SwiftUI redraws in the first.
+            for _ in 0..<2 { await withCheckedContinuation { c in RunLoop.main.perform { c.resume() } } }
+            times.append(Int(Date().timeIntervalSince(start) * 1000))
+            try? await Task.sleep(for: .milliseconds(count > 10 ? 20 : 200))
+        }
+        return "ms per change: \(times.map(String.init).joined(separator: " "))"
+    }
+
+    /// Clicks a filter's menu button (`x,y` in points from the window's top left) and times
+    /// how long until the menu is up, with how many items.
+    static func open(_ arg: String) async -> String {
+        guard let window = LibraryWindow.shared.window else { return "no library window" }
+        let p = arg.split(separator: ",").compactMap { Double($0) }
+        guard p.count >= 2 else { return "need x,y" }
+        let hold = p.count > 2 ? p[2] : 0.3
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        try? await Task.sleep(for: .seconds(0.5))
+        let at = CGPoint(x: p[0], y: window.frame.height - p[1])
+        func mouse(_ type: NSEvent.EventType) -> NSEvent? {
+            NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                               windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+        }
+        var report = "not opened"
+        let start = Date()
+        let observer = NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: nil) { note in
+            guard let menu = note.object as? NSMenu else { return }
+            report = "opened in \(Int(Date().timeIntervalSince(start) * 1000)) ms with \(menu.items.count) items"
+            // A fourth number picks that entry, as a click on it would.
+            if p.count > 3, Int(p[3]) < menu.items.count {
+                let index = Int(p[3])
+                DispatchQueue.main.async {
+                    menu.cancelTracking()
+                    menu.performActionForItem(at: index)
+                }
+            }
+            // Close it again once it has drawn.
+            let timer = Timer(timeInterval: hold, repeats: false) { _ in menu.cancelTracking() }
+            RunLoop.main.add(timer, forMode: .common)
+        }
+        if let down = mouse(.leftMouseDown), let up = mouse(.leftMouseUp) {
+            NSApp.postEvent(down, atStart: false)
+            NSApp.postEvent(up, atStart: false)
+        }
+        try? await Task.sleep(for: .seconds(1.2 + hold))
+        NotificationCenter.default.removeObserver(observer)
+        let filter = LibraryWindow.shared.state.filter
+        return report + "; filter tags \(filter.tags.sorted()) apps \(filter.apps.sorted()) kinds \(filter.kinds.map(\.title)), shown \(LibraryWindow.shared.state.results.count)"
+    }
+}
+
 @MainActor
 enum PanTest {
     static func run(_ arg: String) async -> String {

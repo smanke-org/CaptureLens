@@ -78,7 +78,22 @@ final class LibraryState {
         thumbnailSize = Self.clampSize(thumbnailSize + (bigger ? 40 : -40))
     }
     var showInspector = AppDefaults.store.object(forKey: "library.inspector") as? Bool ?? true {
-        didSet { AppDefaults.store.set(showInspector, forKey: "library.inspector") }
+        didSet {
+            AppDefaults.store.set(showInspector, forKey: "library.inspector")
+            // Asking for the selected capture brings it back from a slim bar too.
+            if showInspector && foldedSide == .editor { foldedSide = nil }
+        }
+    }
+
+    /// The side folded down to a slim bar, so the other fills the window: the captures, or
+    /// the selected capture (its picture and details).
+    enum Side: String { case captures, editor }
+    var foldedSide = Side(rawValue: AppDefaults.store.string(forKey: "library.foldedSide") ?? "") {
+        didSet { AppDefaults.store.set(foldedSide?.rawValue ?? "", forKey: "library.foldedSide") }
+    }
+
+    func fold(_ side: Side?) {
+        withAnimation(.easeInOut(duration: 0.2)) { foldedSide = side }
     }
     /// Asks the grid to scroll to an item.
     var scrollTarget: UUID?
@@ -112,9 +127,26 @@ final class LibraryState {
         return f
     }
 
+    /// The captures shown, in order. The header, the grid and the status bar all ask for them
+    /// each time they redraw, so the list is kept until the library, filter, sort or minute
+    /// (for date ranges) changes.
     var results: [CaptureItem] {
-        LibraryQuery.filter(LibraryStore.shared.items, with: effectiveFilter, sort: sort)
+        let store = LibraryStore.shared
+        let items = store.items
+        let key = ResultsKey(revision: store.revision, filter: effectiveFilter, sort: sort,
+                             minute: Int(Date().timeIntervalSince1970 / 60))
+        if let cached = resultsCache, cached.key == key { return cached.items }
+        let list = LibraryQuery.filter(items, with: key.filter, sort: sort)
+        resultsCache = (key, list)
+        return list
     }
+    private struct ResultsKey: Equatable {
+        let revision: Int
+        let filter: LibraryFilter
+        let sort: LibrarySort
+        let minute: Int
+    }
+    @ObservationIgnored private var resultsCache: (key: ResultsKey, items: [CaptureItem])?
 
     var selectedItems: [CaptureItem] {
         LibraryStore.shared.items.filter { selection.contains($0.id) }
@@ -184,19 +216,28 @@ struct LibraryView: View {
                     .navigationSplitViewColumnWidth(min: LibrarySidebar.railWidth, ideal: 210, max: 300)
             } detail: {
                 HStack(spacing: 0) {
-                    VStack(spacing: 0) {
-                        LibraryHeader(state: state)
-                        FilterBar(state: state)
-                        Divider()
-                        CaptureGrid(state: state)
-                        Divider()
-                        GridStatusBar(state: state)
+                    // Either side can fold to a slim bar, so the other fills the window.
+                    if state.showInspector && state.foldedSide == .captures {
+                        CollapsedSideBar(title: "Captures", symbol: "square.grid.2x2", edge: .leading) { state.fold(nil) }
+                    } else {
+                        VStack(spacing: 0) {
+                            LibraryHeader(state: state)
+                            FilterBar(state: state)
+                            Divider()
+                            CaptureGrid(state: state)
+                            Divider()
+                            GridStatusBar(state: state)
+                        }
+                        .frame(minWidth: 360)
                     }
-                    .frame(minWidth: 360)
                     if state.showInspector {
                         Divider()
-                        CaptureDetail(state: state)
-                            .frame(minWidth: 360, idealWidth: 520)
+                        if state.foldedSide == .editor {
+                            CollapsedSideBar(title: "Picture", symbol: "photo", edge: .trailing) { state.fold(nil) }
+                        } else {
+                            CaptureDetail(state: state)
+                                .frame(minWidth: 360, idealWidth: 520)
+                        }
                     }
                 }
                 // The tool dial floats over the grid and the picture.
@@ -234,6 +275,41 @@ struct LibraryView: View {
 
     private var deleteTitle: String {
         state.confirmDelete.count == 1 ? "Delete this capture?" : "Delete \(state.confirmDelete.count) captures?"
+    }
+}
+
+/// A folded-away side of the library: a slim column with its name; a click anywhere on it
+/// brings it back.
+private struct CollapsedSideBar: View {
+    let title: String
+    let symbol: String
+    let edge: HorizontalEdge
+    let restore: () -> Void
+
+    var body: some View {
+        Button(action: restore) {
+            VStack(spacing: 10) {
+                Image(systemName: edge == .leading ? "chevron.right.circle" : "chevron.left.circle")
+                    .font(.system(size: SingleCaptureView.barFontSize))
+                    .foregroundStyle(Color.accentColor)
+                Image(systemName: symbol).foregroundStyle(.secondary)
+                // Reads bottom to top, like a book's spine.
+                Text(title)
+                    .font(.callout.weight(.medium))
+                    .lineLimit(1)
+                    .fixedSize()
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 20, height: 110)
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 14)
+            .frame(width: 34)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(.bar)
+        .help("Show the \(title.lowercased()) again")
     }
 }
 
@@ -398,7 +474,7 @@ struct LibrarySidebar: View {
                 row("Last 7 Days", "calendar", nil).tag(LibraryState.Section.recent)
                 row("With Notes", "note.text", items.filter { !$0.notes.isEmpty }.count).tag(LibraryState.Section.notes)
             }
-            let tags = LibraryQuery.tagCounts(items)
+            let tags = store.facets.tags
             if !tags.isEmpty {
                 Section {
                     // Tags as chips: many fit in little room. Click one to show its captures,
@@ -439,7 +515,7 @@ struct LibrarySidebar: View {
                     FoldingHeader(title: "Tags", count: tags.count, open: $tagsOpen)
                 }
             }
-            let apps = LibraryQuery.appCounts(items)
+            let apps = store.facets.apps
             if !apps.isEmpty {
                 Section {
                     if appsOpen { ForEach(apps.prefix(30), id: \.key) { app in
@@ -454,7 +530,7 @@ struct LibrarySidebar: View {
                     FoldingHeader(title: "Apps", count: apps.count, open: $appsOpen)
                 }
             }
-            let sites = LibraryQuery.websiteCounts(items)
+            let sites = store.facets.websites
             if !sites.isEmpty {
                 Section {
                     if sitesOpen { ForEach(sites.prefix(30), id: \.site) { site in
@@ -489,9 +565,9 @@ struct LibrarySidebar: View {
     /// Drag the edge out again for the full list.
     private var rail: some View {
         let items = store.items
-        let tags = LibraryQuery.tagCounts(items)
-        let apps = LibraryQuery.appCounts(items)
-        let sites = LibraryQuery.websiteCounts(items)
+        let tags = store.facets.tags
+        let apps = store.facets.apps
+        let sites = store.facets.websites
         return ScrollView(.vertical) {
             VStack(spacing: 6) {
                 railButton("All Captures", "photo.on.rectangle", items.count, .all)
@@ -635,7 +711,7 @@ struct LibraryHeader: View {
         case .recent: "Last 7 Days"
         case .notes: "With Notes"
         case .tag(let tag): "#\(tag)"
-        case .app(let key): LibraryQuery.appCounts(store.items).first { $0.key == key }?.name ?? "App"
+        case .app(let key): store.facets.apps.first { $0.key == key }?.name ?? "App"
         case .site(let site): site
         }
     }
@@ -663,17 +739,14 @@ struct FilterBar: View {
     @State private var customEnd = Date()
 
     var body: some View {
-        let items = store.items
         // Pills wrap onto more lines when the window is too narrow for one.
         FlowLayout(spacing: 6) {
                 Chip(title: state.filter.dateRange == .any ? "Date" : state.filter.dateRange.title,
                      symbol: "calendar", active: state.filter.dateRange != .any,
                      clear: { state.filter.dateRange = .any }) {
-                    ForEach(LibraryFilter.DateRange.presets, id: \.self) { range in
-                        Button(range.title) { state.filter.dateRange = range }
-                    }
-                    Divider()
-                    Button("Choose Dates…") { customDates = true }
+                    LibraryFilter.DateRange.presets.map { range in
+                        .action(range.title, checked: state.filter.dateRange == range) { state.filter.dateRange = range }
+                    } + [.separator, .action("Choose Dates…") { customDates = true }]
                 }
                 .popover(isPresented: $customDates) {
                     VStack(alignment: .leading, spacing: 10) {
@@ -694,36 +767,28 @@ struct FilterBar: View {
 
                 Chip(title: chipTitle(state.filter.kinds.map(\.title), fallback: "Type"), symbol: "rectangle.dashed",
                      active: !state.filter.kinds.isEmpty, clear: { state.filter.kinds = [] }) {
-                    ForEach(CaptureItem.Kind.allCases, id: \.self) { kind in
-                        Toggle(kind.title, isOn: toggle(\.kinds, kind))
-                    }
+                    CaptureItem.Kind.allCases.map { kind in toggle(\.kinds, kind, title: kind.title) }
                 }
 
-                let tags = LibraryQuery.tagCounts(items)
+                // The lists are made when a menu opens, from counts the library keeps.
                 Chip(title: chipTitle(Array(state.filter.tags), fallback: "Tags"), symbol: "tag",
                      active: !state.filter.tags.isEmpty, clear: { state.filter.tags = [] }) {
-                    if tags.isEmpty { Text("No tags yet") }
-                    ForEach(tags, id: \.tag) { entry in
-                        Toggle("\(entry.tag) (\(entry.count))", isOn: toggle(\.tags, entry.tag))
-                    }
+                    let tags = store.facets.tags
+                    return tags.isEmpty ? [.note("No tags yet")]
+                        : tags.map { toggle(\.tags, $0.tag, title: "\($0.tag) (\($0.count))") }
                 }
 
-                let apps = LibraryQuery.appCounts(items)
-                Chip(title: chipTitle(apps.filter { state.filter.apps.contains($0.key) }.map(\.name), fallback: "App"),
+                Chip(title: chipTitle(store.facets.apps.filter { state.filter.apps.contains($0.key) }.map(\.name), fallback: "App"),
                      symbol: "app", active: !state.filter.apps.isEmpty, clear: { state.filter.apps = [] }) {
-                    if apps.isEmpty { Text("No apps yet") }
-                    ForEach(apps, id: \.key) { app in
-                        Toggle("\(app.name) (\(app.count))", isOn: toggle(\.apps, app.key))
-                    }
+                    let apps = store.facets.apps
+                    return apps.isEmpty ? [.note("No apps yet")]
+                        : apps.map { toggle(\.apps, $0.key, title: "\($0.name) (\($0.count))") }
                 }
 
-                let sites = LibraryQuery.websiteCounts(items)
-                if !sites.isEmpty {
+                if !store.facets.websites.isEmpty {
                     Chip(title: chipTitle(Array(state.filter.websites), fallback: "Website"), symbol: "globe",
                          active: !state.filter.websites.isEmpty, clear: { state.filter.websites = [] }) {
-                        ForEach(sites, id: \.site) { site in
-                            Toggle("\(site.site) (\(site.count))", isOn: toggle(\.websites, site.site))
-                        }
+                        store.facets.websites.map { toggle(\.websites, $0.site, title: "\($0.site) (\($0.count))") }
                     }
                 }
 
@@ -750,44 +815,109 @@ struct FilterBar: View {
         }
     }
 
-    private func toggle<T: Hashable>(_ path: WritableKeyPath<LibraryFilter, Set<T>>, _ value: T) -> Binding<Bool> {
-        Binding(get: { state.filter[keyPath: path].contains(value) },
-                set: { on in if on { state.filter[keyPath: path].insert(value) } else { state.filter[keyPath: path].remove(value) } })
+    /// A menu entry, ticked while its value is in the filter, that adds or removes it.
+    private func toggle<T: Hashable>(_ path: WritableKeyPath<LibraryFilter, Set<T>>, _ value: T, title: String) -> ChipMenu.Item {
+        let on = state.filter[keyPath: path].contains(value)
+        return .action(title, checked: on) {
+            if on { state.filter[keyPath: path].remove(value) } else { state.filter[keyPath: path].insert(value) }
+        }
     }
 }
 
 /// A filter as a rounded button with a menu, tinted while it narrows the list, with an ×
 /// to clear it.
-struct Chip<Content: View>: View {
+struct Chip: View {
     let title: String
     let symbol: String
     let active: Bool
     let clear: () -> Void
-    @ViewBuilder let content: () -> Content
+    /// The menu's entries, made when it opens.
+    let items: () -> [ChipMenu.Item]
+    @State private var anchor = ChipMenu.Anchor()
 
     var body: some View {
         HStack(spacing: 2) {
-            Menu {
-                content()
-            } label: {
-                Label(title, systemImage: symbol).lineLimit(1)
+            // All of the pill but the × opens the menu.
+            Button { ChipMenu.show(items(), below: anchor.view) } label: {
+                HStack(spacing: 2) {
+                    Label(title, systemImage: symbol).lineLimit(1)
+                    if !active { Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.secondary) }
+                }
+                .padding(.leading, 10)
+                .padding(.trailing, active ? 0 : 10)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
             }
-            .menuStyle(.button)
             .buttonStyle(.plain)
             .fixedSize()
             if active {
                 Button(action: clear) { Image(systemName: "xmark.circle.fill") }
                     .buttonStyle(.plain)
                     .help("Clear this filter")
-            } else {
-                Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.secondary)
+                    .padding(.trailing, 10)
             }
         }
         .font(.callout)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
         .background(active ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.10), in: Capsule())
         .overlay(Capsule().strokeBorder(active ? Color.accentColor.opacity(0.5) : .clear))
+        .background(ChipMenu.AnchorView(anchor: anchor))
+    }
+}
+
+/// The filters' menus, made in AppKit when one is clicked: a SwiftUI menu with hundreds of
+/// tags or websites took a moment to build, and waited for the window to finish redrawing.
+@MainActor
+enum ChipMenu {
+    enum Item {
+        case action(String, checked: Bool = false, () -> Void)
+        case note(String)
+        case separator
+    }
+
+    /// The chip's place in the window, for opening the menu under it.
+    final class Anchor { weak var view: NSView? }
+
+    struct AnchorView: NSViewRepresentable {
+        let anchor: Anchor
+        func makeNSView(context: Context) -> NSView {
+            let view = NSView()
+            anchor.view = view
+            return view
+        }
+        func updateNSView(_ view: NSView, context: Context) { anchor.view = view }
+    }
+
+    private final class Handler: NSObject {
+        let perform: () -> Void
+        init(_ perform: @escaping () -> Void) { self.perform = perform }
+        @objc func run(_ sender: Any?) { perform() }
+    }
+
+    static func show(_ items: [Item], below view: NSView?) {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        for item in items {
+            switch item {
+            case .separator:
+                menu.addItem(.separator())
+            case .note(let text):
+                let entry = NSMenuItem(title: text, action: nil, keyEquivalent: "")
+                entry.isEnabled = false
+                menu.addItem(entry)
+            case .action(let title, let checked, let perform):
+                let handler = Handler(perform)
+                let entry = NSMenuItem(title: title, action: #selector(Handler.run(_:)), keyEquivalent: "")
+                entry.target = handler
+                entry.representedObject = handler // the target is weak; this keeps it
+                entry.state = checked ? .on : .off
+                menu.addItem(entry)
+            }
+        }
+        if let view {
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.isFlipped ? view.bounds.maxY + 4 : -4), in: view)
+        } else {
+            menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        }
     }
 }
 
@@ -1023,7 +1153,7 @@ struct CaptureMenu: View {
         Button(store.entry(item.id)?.favorite == true && targets.count == 1 ? "Remove from Favorites" : "Add to Favorites") {
             store.toggleFavorite(targets)
         }
-        let tags = LibraryQuery.tagCounts(store.items)
+        let tags = store.facets.tags
         if !tags.isEmpty {
             Menu("Tag") {
                 ForEach(tags, id: \.tag) { entry in

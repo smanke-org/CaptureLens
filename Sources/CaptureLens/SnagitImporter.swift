@@ -261,7 +261,7 @@ final class SnagitImporter {
         if nameCaptures { nameInBackground(named) }
     }
 
-    private static func importedKey(_ fingerprint: String) -> String { "import.snagit.\(fingerprint)" }
+    static func importedKey(_ fingerprint: String) -> String { "import.snagit.\(fingerprint)" }
 
     /// Names the imported captures from what's in them, one at a time.
     private func nameInBackground(_ ids: [UUID]) {
@@ -333,8 +333,8 @@ final class SnagitImporter {
         let scale: Double
         let annotations: [Annotation]
         let created: Date
-        let source: CaptureItem.Source
-        let tags: [String]
+        var source: CaptureItem.Source
+        var tags: [String]
         let favorite: Bool
         let text: String
         /// Came with editable marks.
@@ -343,6 +343,9 @@ final class SnagitImporter {
         let hadMarkup: Bool
         /// How far CaptureLens's drawing was from Snagit's (for tuning; nil if not compared).
         let difference: Double?
+        /// What it comes in as: a macOS screenshot keeps whether it was an area, a window or
+        /// the screen.
+        var kind = CaptureItem.Kind.imported
     }
 
     enum Outcome: Sendable {
@@ -363,12 +366,14 @@ final class SnagitImporter {
         let picture = capture.picture.flatMap(AnnotationRenderer.image(from:))
         let drawn = capture.drawn.flatMap(AnnotationRenderer.image(from:))
 
+        var source = capture.source
+        source.tool = "Snagit"
         func make(_ png: Data, _ image: CGImage, annotations: [Annotation], editable: Bool, difference: Double?) -> Outcome {
             let scale = capture.canvas.width > 0 ? Double(image.width) / capture.canvas.width : capture.scale
             let shown = annotations.isEmpty ? image : (AnnotationRenderer.flatten(base: image, scale: scale, annotations: annotations, cursor: nil) ?? image)
             return .prepared(Prepared(fingerprint: fingerprint, png: png, thumbnail: shown.thumbnail().pngData, pixelWidth: image.width,
                                       pixelHeight: image.height, scale: max(scale, 0.1), annotations: annotations, created: created,
-                                      source: capture.source, tags: capture.tags, favorite: capture.favorite,
+                                      source: source, tags: capture.tags, favorite: capture.favorite,
                                       text: capture.recognizedText, editable: editable, hadMarkup: hadMarkup, difference: difference))
         }
 
@@ -411,7 +416,7 @@ extension LibraryStore {
     func addImported(_ prepared: [SnagitImporter.Prepared]) -> [UUID] {
         guard let db, !prepared.isEmpty else { return [] }
         let rows: [(CaptureItem, image: Data?, thumbnail: Data?)] = prepared.map { p in
-            var item = CaptureItem(created: p.created, kind: .imported, name: CaptureNaming.fallback(source: p.source, date: p.created),
+            var item = CaptureItem(created: p.created, kind: p.kind, name: CaptureNaming.fallback(source: p.source, date: p.created),
                                    tags: p.tags, recognizedText: p.text, favorite: p.favorite, source: p.source,
                                    pixelWidth: p.pixelWidth, pixelHeight: p.pixelHeight, scale: p.scale,
                                    annotations: p.annotations, origin: DeviceIdentity.deviceID)
