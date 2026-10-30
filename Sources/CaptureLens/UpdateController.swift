@@ -409,9 +409,12 @@ enum UpdateController {
 
     /// Makes "Update and Restart" respond only to a deliberate press.
     ///
-    /// The button starts disabled. It is enabled only after the dialog has been key, visible
-    /// and unobscured, with the app active, for `delay` without a break, and it is disabled
-    /// again the moment any of that stops being true. The press is recorded here rather than
+    /// The button starts disabled. It is enabled only after the dialog has been key and
+    /// visible, with the app active, for `delay` without a break, and it is disabled again
+    /// the moment any of that stops being true. Key with the app active means it's in front.
+    /// (It no longer asks whether the window is unobscured: on macOS 27.2 `occlusionState`
+    /// reports this alert as covered while nothing is above it, which left the button
+    /// disabled for good.) The press is recorded here rather than
     /// inferred from runModal's return value, so an install requires this button to have
     /// actually been pressed while enabled.
     @MainActor
@@ -440,7 +443,6 @@ enum UpdateController {
 
         @objc private func tick() {
             let ready = NSApp.isActive && window.isVisible && window.isKeyWindow
-                && window.occlusionState.contains(.visible)
             if ready {
                 let since = readySince ?? Date()
                 readySince = since
