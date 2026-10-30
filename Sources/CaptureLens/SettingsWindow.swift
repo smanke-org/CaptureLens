@@ -55,12 +55,12 @@ final class SettingsTabs: NSTabViewController {
                                                queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.refit() } }
         tabStyle = .toolbar
         transitionOptions = [.crossfade, .allowUserInteraction]
+        add("General", "gearshape", GeneralSettings())
         add("Capture", "camera.viewfinder", CaptureSettings())
         add("Presets", "keyboard", PresetSettings())
         add("Library", "photo.on.rectangle", LibrarySettings())
         add("Privacy", "hand.raised", PrivacySettings())
         add("Activity", "chart.bar.xaxis", ActivitySettings())
-        add("General", "gearshape", GeneralSettings())
     }
 
     required init?(coder: NSCoder) { fatalError() }

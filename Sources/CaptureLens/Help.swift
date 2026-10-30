@@ -51,7 +51,7 @@ enum Help {
     static var debugTokens: String { resolve("{hotkey:capture} {hotkey:screen} {hotkey:window} {hotkey:library} {hotkey:again} {hotkey:scrolling}") }
 
     /// The Settings tabs, for the Debug self-test.
-    static let testTabs = ["Capture", "Presets", "Library", "Privacy", "General"]
+    static let testTabs = ["General", "Capture", "Presets", "Library", "Privacy"]
 
     /// The topic each Settings tab's Help button opens.
     static func topic(forSettingsTab tab: String) -> String {
