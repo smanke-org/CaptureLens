@@ -148,7 +148,7 @@ enum DebugShots {
             }
 
             note("done")
-            NSApp.terminate(nil)
+            QuitConfirmation.quitNow()
         }
     }
 

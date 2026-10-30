@@ -985,7 +985,21 @@ enum DebugCommands {
                 // Removes the test zone from iCloud once a test is over.
                 sync.isEnabled = false
                 _ = try await CloudSync.shared.database.deleteRecordZone(withID: CloudSync.shared.zoneID)
-            case "quit": NSApp.terminate(nil)
+            case "quit": QuitConfirmation.quitNow()
+            case "quit-test":
+                // `quit-test:<return|cancel|quit|suppress|off>`: quits as ⌘Q does, then answers
+                // the question a second later: presses Return, clicks Cancel or Quit (ticking
+                // "Don't ask again" first for `suppress`), or with `off` turns the setting off
+                // first. What the question looked like goes to `debug.quitTest` before any answer.
+                if arg == "off" { prefs.confirmQuit = false }
+                AppDefaults.store.set("no question", forKey: "debug.quitTest")
+                let answer = Timer(timeInterval: 1, repeats: false) { _ in
+                    MainActor.assumeIsolated { QuitTest.answer(arg) }
+                }
+                RunLoop.main.add(answer, forMode: .common)
+                NSApp.terminate(nil)
+                try await Task.sleep(for: .milliseconds(500))
+                result = "still running; \(AppDefaults.store.string(forKey: "debug.quitTest") ?? "-"); confirmQuit \(prefs.confirmQuit); policy \(NSApp.activationPolicy().rawValue)"
             default: result = "unknown command"
             }
         } catch {
@@ -1391,6 +1405,39 @@ enum PanTest {
         if let scroll = view as? ZoomingScrollView { return scroll }
         for sub in view.subviews { if let hit = find(sub) { return hit } }
         return nil
+    }
+}
+
+/// Answers the quit question for `quit-test`, recording what it showed first.
+@MainActor
+enum QuitTest {
+    static func answer(_ how: String) {
+        guard let window = NSApp.modalWindow else { return }
+        var texts: [String] = []
+        var buttons: [NSButton] = []
+        func walk(_ view: NSView) {
+            if let button = view as? NSButton { buttons.append(button) }
+            else if let field = view as? NSTextField, !field.stringValue.isEmpty { texts.append(field.stringValue) }
+            view.subviews.forEach(walk)
+        }
+        if let content = window.contentView { walk(content) }
+        let titles = buttons.map { "\($0.title)[\($0.keyEquivalent == "\r" ? "Return" : $0.keyEquivalent == "\u{1b}" ? "Esc" : $0.keyEquivalent)]" }
+        AppDefaults.store.set("asked \(texts) buttons \(titles) key \(window.isKeyWindow) active \(NSApp.isActive) policy \(NSApp.activationPolicy().rawValue)",
+                              forKey: "debug.quitTest")
+        AppDefaults.store.synchronize()
+        switch how {
+        case "return":
+            if let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                            windowNumber: window.windowNumber, context: nil, characters: "\r",
+                                            charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36) {
+                NSApp.postEvent(event, atStart: false)
+            }
+        case "cancel": buttons.first { $0.title == "Cancel" }?.performClick(nil)
+        case "quit", "suppress":
+            if how == "suppress" { buttons.first { $0.title == "Don't ask again" }?.performClick(nil) }
+            buttons.first { $0.title == "Quit" }?.performClick(nil)
+        default: break
+        }
     }
 }
 #endif

@@ -284,6 +284,10 @@ final class Preferences {
     var dialTrigger = DialTrigger.rightClick { didSet { save(dialTrigger.rawValue, "dialTrigger") } }
     var doubleClickOpens = OpenPlace.sidePane { didSet { save(doubleClickOpens.rawValue, "doubleClickOpens") } }
 
+    // MARK: General
+    /// Quitting asks first, so a stray ⌘Q doesn't stop the capture shortcuts.
+    var confirmQuit = true { didSet { save(confirmQuit, "confirmQuit") } }
+
     // MARK: Presets and shortcuts
     var presets: [CapturePreset] = CapturePreset.defaults { didSet { saveCodable(presets, "presets") } }
     var libraryHotKey: HotKey? = Defaults.libraryHotKey { didSet { saveCodable(libraryHotKey, "libraryHotKey") } }
@@ -300,7 +304,7 @@ final class Preferences {
         "copyToClipboard", "afterCapture", "captureCursor", "showCursorByDefault", "windowShadow", "playSound", "showNotice",
         "autoName", "recognizeText", "recordWebAddress", "librarySync", "libraryBackend", "annotationStyle", "quickStyles", "presets", "libraryHotKey", "captureAgainHotKey",
         "recordMicrophone", "recordSystemAudio", "recordCamera", "showClicks", "showKeys", "recordFrameRate", "syncVideos",
-        "toolStyle", "dialTrigger", "doubleClickOpens", "recordCountdown", "microphoneID", "cameraID",
+        "toolStyle", "dialTrigger", "doubleClickOpens", "recordCountdown", "microphoneID", "cameraID", "confirmQuit",
     ]
     /// Of those, the ones each Mac chooses for itself: whether, and how, it syncs the library,
     /// and its own microphone and camera.
@@ -355,6 +359,7 @@ final class Preferences {
             "showClicks": showClicks, "showKeys": showKeys, "recordFrameRate": recordFrameRate, "syncVideos": syncVideos,
             "toolStyle": toolStyle.rawValue, "dialTrigger": dialTrigger.rawValue, "doubleClickOpens": doubleClickOpens.rawValue,
             "recordCountdown": recordCountdown, "microphoneID": microphoneID, "cameraID": cameraID,
+            "confirmQuit": confirmQuit,
         ]
     }
 
@@ -427,6 +432,7 @@ final class Preferences {
         recordCountdown = d.object(forKey: "recordCountdown") as? Int ?? 3
         microphoneID = string("microphoneID")
         cameraID = string("cameraID")
+        confirmQuit = bool("confirmQuit", true)
     }
 
     private func save(_ value: Any, _ key: String) {

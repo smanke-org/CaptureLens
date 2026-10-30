@@ -706,6 +706,8 @@ struct GeneralSettings: View {
                 if let error = login.lastError {
                     Text(error).font(.callout).foregroundStyle(.red)
                 }
+                Toggle("Ask before quitting", isOn: $prefs.confirmQuit)
+                    .help("Quitting CaptureLens asks first, so a stray ⌘Q doesn't stop the capture shortcuts.")
             }
             Section {
                 Toggle("Sync with your other Macs", isOn: $sync.isEnabled)

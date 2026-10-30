@@ -110,7 +110,7 @@ enum DebugSelfTest {
             (NSApp.delegate as? NSMenuDelegate)?.menuNeedsUpdate?(menu)
             note("menu: \(menu.items.map(\.title).filter { !$0.isEmpty })")
             note("done")
-            NSApp.terminate(nil)
+            QuitConfirmation.quitNow()
         }
     }
 
@@ -518,7 +518,7 @@ enum DebugSelfTest {
             lines.append("closest rejected: \(diffs.filter { !$0.1 }.sorted { $0.0 < $1.0 }.prefix(8).map { "\(Int($0.0)) \($0.2)" })")
             lines.append("worst accepted: \(diffs.filter { $0.1 }.sorted { $0.0 > $1.0 }.prefix(8).map { "\(Int($0.0)) \($0.2)" })")
             try? lines.joined(separator: "\n").appending("\ndone\n").write(to: out.appending(path: "report.txt"), atomically: true, encoding: .utf8)
-            await MainActor.run { NSApp.terminate(nil) }
+            await MainActor.run { QuitConfirmation.quitNow() }
         }
     }
 

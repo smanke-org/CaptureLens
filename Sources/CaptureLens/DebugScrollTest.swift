@@ -51,7 +51,7 @@ enum DebugScrollTest {
             save(stitched, "stitched.png")
             log.append("stitched \(stitched.map { "\($0.width)×\($0.height)" } ?? "nil")")
             write()
-            NSApp.terminate(nil)
+            QuitConfirmation.quitNow()
         }
     }
 }

@@ -86,6 +86,7 @@ enum Help {
             .text("CaptureLens needs Screen Recording permission to see the screen. If the menu bar menu shows \"Allow Screen Recording…\", choose it, switch CaptureLens on, and open CaptureLens again."),
             .tip("The screen freezes while you pick, so a menu, tooltip or video frame stays put while you select it."),
             .tip("While ToolHUD is running, CaptureLens's menu moves into ToolHUD's menu bar menu as a submenu, and the icon here steps aside until ToolHUD quits. To keep the icon, turn off \"Put in ToolHUD's menu while ToolHUD is running\" in Settings."),
+            .tip("Quitting asks first, since capture shortcuts stop while CaptureLens is closed. Turn off \"Ask before quitting\" in Settings › General, or tick \"Don't ask again\" when it asks."),
         ]),
 
         HelpTopic(id: "capture", title: "Capturing", symbol: "camera.viewfinder", blocks: [
@@ -256,7 +257,7 @@ enum Help {
         HelpTopic(id: "settings-sync", title: "Settings on Every Mac", symbol: "arrow.triangle.2.circlepath", blocks: [
             .text("Turn on \"Sync with your other Macs\" in Settings › General, choose a sync passphrase there, and enter the same passphrase on each of your Macs. With Settings switched on below it, a change on one Mac shows up on the others."),
             .keys([
-                ("Follow you", "Presets and their shortcuts, the library shortcut, Capture options, video recording choices and countdown, naming and search options, markup styles, what double-clicking a capture does, appearance, Show in Dock and menu bar, ToolHUD's menu, update choices, and the library window's layout"),
+                ("Follow you", "Presets and their shortcuts, the library shortcut, Capture options, video recording choices and countdown, naming and search options, markup styles, what double-clicking a capture does, appearance, Show in Dock and menu bar, ToolHUD's menu, update choices, asking before quitting, and the library window's layout"),
                 ("Stay on each Mac", "Open at login, encrypting the library, the library lock, the microphone and camera chosen for recording, captures from other tools, the window's own size, and whether (and how) this Mac syncs its settings and library"),
             ]),
             .text("Settings and Library are separate switches: a Mac can share its settings but keep its captures, or the other way round. Settings another Mac shares while Settings is off here are taken up when you switch it back on; otherwise this Mac's settings go to the others. The library syncs through iCloud or a sync folder, chosen in Settings › Library on each Mac."),
