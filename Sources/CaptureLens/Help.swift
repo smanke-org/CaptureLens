@@ -40,8 +40,8 @@ enum Help {
         func preset(_ index: Int) -> HotKey? { p.preset(CapturePreset.defaults[index].id)?.hotKey }
         let keys: [(String, HotKey?)] = [
             ("capture", preset(0)), ("screen", preset(1)), ("window", preset(2)),
-            ("library", p.libraryHotKey), ("again", p.captureAgainHotKey), ("scrolling", preset(5)),
-            ("record", p.preset(CapturePreset.defaults[6].id)?.hotKey ?? p.presets.first { $0.mode == .recording }?.hotKey),
+            ("library", p.libraryHotKey), ("again", p.captureAgainHotKey), ("scrolling", preset(4)),
+            ("record", p.preset(CapturePreset.defaults[5].id)?.hotKey ?? p.presets.first { $0.mode == .recording }?.hotKey),
         ]
         var out = text
         for (name, key) in keys { out = out.replacingOccurrences(of: "{hotkey:\(name)}", with: key?.display ?? "(no shortcut set)") }

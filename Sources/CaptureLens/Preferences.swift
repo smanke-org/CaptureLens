@@ -203,8 +203,6 @@ struct CapturePreset: Codable, Identifiable, Equatable {
                       hotKey: HotKey(keyCode: UInt32(kVK_ANSI_5), modifiers: optionShiftCommand, display: "⌥⇧⌘5")),
         CapturePreset(id: UUID(uuidString: "6C1D0E2A-0004-4C6E-9C1A-CA9701E50004")!, name: "Area After 5 Seconds",
                       mode: .region, delay: 5),
-        CapturePreset(id: UUID(uuidString: "6C1D0E2A-0005-4C6E-9C1A-CA9701E50005")!, name: "1280 × 720",
-                      mode: .fixedSize, width: 1280, height: 720),
         CapturePreset(id: UUID(uuidString: "6C1D0E2A-0006-4C6E-9C1A-CA9701E50006")!, name: "Scrolling Capture", mode: .scrolling,
                       hotKey: HotKey(keyCode: UInt32(kVK_ANSI_6), modifiers: optionShiftCommand, display: "⌥⇧⌘6")),
         CapturePreset(id: UUID(uuidString: "6C1D0E2A-0007-4C6E-9C1A-CA9701E50007")!, name: "Record Video", mode: .recording,
@@ -316,7 +314,12 @@ final class Preferences {
         load()
         // Not from here: saving presets updates the shortcuts, which read `shared`, which is
         // still being made.
-        DispatchQueue.main.async { MainActor.assumeIsolated { Preferences.shared.addNewDefaultPresets() } }
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                Preferences.shared.removeRetiredDefaultPresets()
+                Preferences.shared.addNewDefaultPresets()
+            }
+        }
     }
 
     /// Presets added to the defaults after a version shipped join existing lists once (by
@@ -335,6 +338,21 @@ final class Preferences {
             presets.append(copy)
         }
         AppDefaults.store.set(Array(added), forKey: key)
+    }
+
+    /// Defaults dropped after a version shipped leave existing lists once, unless they were
+    /// changed (a renamed or resized one is the user's own now).
+    private func removeRetiredDefaultPresets() {
+        let key = "presets.removedDefaults"
+        var removed = Set(AppDefaults.store.stringArray(forKey: key) ?? [])
+        let fixed1280 = UUID(uuidString: "6C1D0E2A-0005-4C6E-9C1A-CA9701E50005")!
+        guard !removed.contains(fixed1280.uuidString) else { return }
+        removed.insert(fixed1280.uuidString)
+        presets.removeAll {
+            $0.id == fixed1280 && $0.name == "1280 × 720" && $0.mode == .fixedSize && $0.width == 1280 && $0.height == 720
+                && $0.delay == 0 && $0.hotKey == nil
+        }
+        AppDefaults.store.set(Array(removed), forKey: key)
     }
 
     /// Puts every setting back to how a new install starts. Where the app appears,
