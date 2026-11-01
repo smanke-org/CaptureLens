@@ -5,6 +5,8 @@ need means opening them one by one. CaptureLens keeps every capture in a library
 named from what's in it ("Quarterly Revenue Chart", "Xcode Build Error") by Apple Intelligence on your Mac, and
 you can find it again by its name, the date, its tags or notes, or any text that appears in the picture.
 
+<p align="center"><img src="docs/images/capturelens-library-editor.webp" width="800" alt="The CaptureLens library with nine sample captures, filters for tags, apps and websites, and a sales chart open beside them with the markup toolbar"></p>
+
 CaptureLens also:
 - **Captures** the whole screen, one window (even where others cover it), an area you drag out, or a frame of an
   exact size, now or after a countdown, each from its own preset and shortcut.
@@ -55,6 +57,23 @@ CaptureLens also:
    the first time you turn them on.
 
 Requires macOS 26 or later. Automatic names need Apple Intelligence turned on.
+
+## Screenshots
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/capturelens-annotate.jpg" alt="A sample sales chart marked up with a numbered box, a callout and an arrow, above the markup toolbar"><br><sub><b>Markup.</b> Boxes, arrows, callouts and steps that stay editable.</sub></td>
+<td width="50%"><img src="docs/images/capturelens-dial.webp" alt="The markup tools as a radial dial over a capture, with colors inside and line widths underneath"><br><sub><b>Toolbar or dial.</b> The tools as a radial dial, pinned open.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/images/capturelens-smart-move.webp" alt="Smart Move outlining the fields, buttons and lines of text in a sample Account Settings capture"><br><sub><b>Smart Move.</b> Pick up parts of the picture and move them.</sub></td>
+<td width="50%"><img src="docs/images/capturelens-video.webp" alt="A screen recording in the library, with the timeline below it showing trimmed ends and a section cut out"><br><sub><b>Video editing.</b> Trim the ends and cut sections out.</sub></td>
+</tr>
+<tr>
+<td width="50%" align="center"><img src="docs/images/capturelens-record-bar.webp" width="320" alt="The Record panel with switches for the Mac's sound, microphone, camera bubble, click rings and shortcuts, plus frame rate and countdown"><br><sub><b>Record.</b> Sound, camera, clicks and countdown, set before you start.</sub></td>
+<td width="50%" align="center"><img src="docs/images/capturelens-snagit-import.webp" width="400" alt="The Import from Snagit window listing two capture folders, with options to bring in a video and name captures"><br><sub><b>Import from Snagit.</b> Bring your old library along.</sub></td>
+</tr>
+</table>
 
 ## Use it
 
