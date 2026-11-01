@@ -424,6 +424,13 @@ struct LibraryToolbar: ToolbarContent {
                 }
                 .help("\(preset.name)\(preset.hotKey.map { " (\($0.display))" } ?? "") — \(preset.summary)")
             }
+            Button {
+                LibraryWindow.shared.window?.orderOut(nil)
+                CaptureEngine.shared.captureText()
+            } label: {
+                Label("Capture Text", systemImage: "text.viewfinder")
+            }
+            .help("Capture Text\(Preferences.shared.captureTextHotKey.map { " (\($0.display))" } ?? "") — drag over text on screen to copy it")
         }
         ToolbarItemGroup(placement: .primaryAction) {
             // A toolbar button like its neighbors (an AppKit one sits smaller and off-center

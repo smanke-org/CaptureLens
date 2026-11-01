@@ -110,7 +110,7 @@ enum Help {
         ]),
 
         HelpTopic(id: "capture-text", title: "Capture Text", symbol: "text.viewfinder", blocks: [
-            .text("Press {hotkey:text} (or choose Capture Text in the menu bar menu) and drag over any text on screen: in a picture, a video, a PDF, or an app that won't let you select it. The text is read on this Mac and copied, ready to paste."),
+            .text("Press {hotkey:text} (or choose Capture Text in the menu bar menu, or click its button in the library's toolbar) and drag over any text on screen: in a picture, a video, a PDF, or an app that won't let you select it. The text is read on this Mac and copied, ready to paste."),
             .text("The picture also goes into the library as a Text capture, with a strip along the bottom of its thumbnail showing the first words that were copied. Search finds it by its text, the Text filter shows only these, and right-click › Copy Text copies the text again."),
             .tip("Text keeps its line breaks, so tables and lists paste the way they looked. If nothing was found, try a bigger area or zoom in first."),
         ]),
