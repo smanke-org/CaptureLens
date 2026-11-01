@@ -90,6 +90,28 @@ enum CaptureBarSize: String, CaseIterable {
     }
 }
 
+/// The capture bar's look: SnagAnything's own (Settings › General › Appearance), or always
+/// Light or always Dark.
+enum CaptureBarLook: String, CaseIterable {
+    case app, light, dark
+
+    var title: String {
+        switch self {
+        case .app: "Same as App"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
+
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .app: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
 /// Where the capture bar sits: the screen it's on (by name) and how far across and up the
 /// free space of that screen it is, 0 to 1, so it lands in the same spot on any size of
 /// screen and on another Mac.
@@ -353,6 +375,7 @@ final class Preferences {
     var captureBarSize = CaptureBarSize.medium { didSet { save(captureBarSize.rawValue, "captureBarSize") } }
     /// Each group of buttons on a tint of its color; off, the whole bar is gray.
     var captureBarColors = true { didSet { save(captureBarColors, "captureBarColors") } }
+    var captureBarLook = CaptureBarLook.app { didSet { save(captureBarLook.rawValue, "captureBarLook") } }
     /// Nil until it's first moved: then it starts at the top middle of the main screen.
     var captureBarPosition: CaptureBarPosition? = nil { didSet { saveCodable(captureBarPosition, "captureBarPosition") } }
 
@@ -380,7 +403,7 @@ final class Preferences {
         "captureTextHotKey", "recordMicrophone", "recordSystemAudio", "recordCamera", "showClicks", "showKeys", "recordFrameRate", "syncVideos",
         "toolStyle", "dialTrigger", "doubleClickOpens", "recordCountdown", "microphoneID", "cameraID", "confirmQuit",
         "showCaptureBar", "captureBarLayout", "captureBarPosition", "captureBarHotKey",
-        "captureBarSize", "captureBarColors",
+        "captureBarSize", "captureBarColors", "captureBarLook",
     ]
     /// Of those, the ones each Mac chooses for itself: whether, and how, it syncs the library,
     /// and its own microphone and camera.
@@ -460,6 +483,7 @@ final class Preferences {
             "showCaptureBar": showCaptureBar, "captureBarLayout": captureBarLayout.rawValue,
             "captureBarPosition": data(captureBarPosition), "captureBarHotKey": data(captureBarHotKey),
             "captureBarSize": captureBarSize.rawValue, "captureBarColors": captureBarColors,
+            "captureBarLook": captureBarLook.rawValue,
         ]
     }
 
@@ -540,6 +564,7 @@ final class Preferences {
         captureBarHotKey = codable("captureBarHotKey", nil as HotKey?)
         captureBarSize = CaptureBarSize(rawValue: string("captureBarSize")) ?? .medium
         captureBarColors = bool("captureBarColors", true)
+        captureBarLook = CaptureBarLook(rawValue: string("captureBarLook")) ?? .app
     }
 
     private func save(_ value: Any, _ key: String) {

@@ -258,11 +258,16 @@ struct CaptureSettings: View {
                 .disabled(!prefs.showCaptureBar)
                 Toggle("Color highlighting", isOn: $prefs.captureBarColors)
                     .disabled(!prefs.showCaptureBar)
+                Picker("Appearance", selection: $prefs.captureBarLook) {
+                    ForEach(CaptureBarLook.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .disabled(!prefs.showCaptureBar)
                 LabeledContent("Show or hide it with") { ShortcutRecorder(hotKey: $prefs.captureBarHotKey) }
             } header: {
                 Text("Capture bar")
             } footer: {
-                Text("Capture buttons that float above every window. The bar steps aside as soon as a capture starts and comes back when it's saved or cancelled. Point at a button to see its name and shortcut. Drag the grip to move the bar; right-click the grip for color highlighting, size and layout. Its settings and where it sits follow you to your other Macs while settings sync is on.")
+                Text("Capture buttons that float above every window. The bar steps aside as soon as a capture starts and comes back when it's saved or cancelled. Point at a button to see its name and shortcut. Drag the grip to move the bar; right-click the grip for color highlighting, size, appearance and layout. Same as App follows Appearance in Settings › General. In Dark mode the bar is gray, with no color highlighting. Its settings and where it sits follow you to your other Macs while settings sync is on.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {

@@ -126,11 +126,11 @@ enum Help {
                 ("Gray buttons", "Capture the same area again, or open the library"),
                 ("Point at a button", "See its name and shortcut, just outside the bar"),
                 ("Drag the grip", "Move the bar"),
-                ("Right-click the grip", "Color highlighting on or off, small, medium or large icons, horizontal or vertical, its settings, or hide it"),
+                ("Right-click the grip", "Color highlighting on or off, small, medium or large icons, Light or Dark (or the same as the app), horizontal or vertical, its settings, or hide it"),
             ]),
             .text("As soon as a capture starts, from the bar, a shortcut, a menu or ToolHUD, the bar steps aside. It comes back when the capture is saved or cancelled, and after a recording or step recording stops."),
             .tip("SnagAnything never captures its own windows, so the bar can't end up in a picture."),
-            .tip("With color highlighting off, every group is gray and the bar blends in with other windows."),
+            .tip("With color highlighting off, every group is gray and the bar blends in with other windows. In Dark mode the bar is always gray."),
             .tip("Whether the bar is showing, its size, colors, which way it runs and where it sits follow you to your other Macs while settings sync is on. On a Mac without that screen, it goes to the same spot on the main screen."),
         ]),
 

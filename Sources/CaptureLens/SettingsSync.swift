@@ -734,6 +734,7 @@ enum DebugCommands {
                 case "horizontal": prefs.captureBarLayout = .horizontal
                 case "size": if let size = CaptureBarSize(rawValue: parts.count > 1 ? parts[1] : "") { prefs.captureBarSize = size }
                 case "colors": prefs.captureBarColors = (parts.count > 1 ? parts[1] : "") == "on"
+                case "look": if let look = CaptureBarLook(rawValue: parts.count > 1 ? parts[1] : "") { prefs.captureBarLook = look }
                 case "grip-menu":
                     result = bar.gripMenu().items.map { "\($0.state == .on ? "✓" : "")\($0.title)" }.joined(separator: ", ") + " ; "
                 case "busy": CaptureEngine.shared.debugSetBusy(true)
@@ -758,7 +759,7 @@ enum DebugCommands {
                 try await Task.sleep(for: .milliseconds(600))
                 let panel = bar.debugPanel
                 let position = prefs.captureBarPosition.map { "\($0.screen) \($0.x),\($0.y)" } ?? "nil"
-                result = (result == "ok" ? "" : result) + "show \(prefs.showCaptureBar) layout \(prefs.captureBarLayout.rawValue) visible \(panel?.isVisible ?? false) window \(panel?.windowNumber ?? 0) frame \(panel.map { NSStringFromRect($0.frame) } ?? "-") level \(panel?.level.rawValue ?? 0) position \(position) size \(prefs.captureBarSize.rawValue) colors \(prefs.captureBarColors) label \(bar.debugLabel)"
+                result = (result == "ok" ? "" : result) + "show \(prefs.showCaptureBar) layout \(prefs.captureBarLayout.rawValue) visible \(panel?.isVisible ?? false) window \(panel?.windowNumber ?? 0) frame \(panel.map { NSStringFromRect($0.frame) } ?? "-") level \(panel?.level.rawValue ?? 0) position \(position) size \(prefs.captureBarSize.rawValue) colors \(prefs.captureBarColors) look \(prefs.captureBarLook.rawValue)/\(panel?.effectiveAppearance.name.rawValue ?? "-") label \(bar.debugLabel)"
             case "record-bar":
                 // `record-bar` shows the panel before recording (no recording starts); `record-bar:close` hides it.
                 if arg == "close" { await ScreenRecorder.shared.debugReset() } else {

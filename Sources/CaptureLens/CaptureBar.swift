@@ -81,6 +81,7 @@ final class CaptureBar: NSObject, NSWindowDelegate {
             panel.setContentSize(hosting.view.fittingSize)
             self.panel = panel
         }
+        applyLook()
         place()
         panel?.orderFrontRegardless()
     }
@@ -152,16 +153,25 @@ final class CaptureBar: NSObject, NSWindowDelegate {
             _ = prefs.showCaptureBar
             _ = prefs.captureBarLayout
             _ = prefs.captureBarPosition
+            _ = prefs.captureBarLook
         } onChange: {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     let bar = CaptureBar.shared
+                    bar.applyLook()
                     bar.refresh()
                     if Preferences.shared.captureBarPosition != bar.savedPosition { bar.place() }
                     bar.observePreferences()
                 }
             }
         }
+    }
+
+    /// Light or Dark whatever the app's look, or nil to follow it. The label matches the bar.
+    private func applyLook() {
+        let appearance = Preferences.shared.captureBarLook.nsAppearance
+        panel?.appearance = appearance
+        labelPanel?.appearance = appearance
     }
 
     // MARK: Hover labels
@@ -227,6 +237,7 @@ final class CaptureBar: NSObject, NSWindowDelegate {
             label.contentViewController = host
             labelPanel = label
             labelHost = host
+            applyLook()
         }
         guard let label = labelPanel, let host = labelHost else { return }
         host.rootView = view
@@ -296,6 +307,13 @@ final class CaptureBar: NSObject, NSWindowDelegate {
         for size in CaptureBarSize.allCases {
             let item = ActionMenuItem(size.title) { prefs.captureBarSize = size }
             item.state = prefs.captureBarSize == size ? .on : .off
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        menu.addItem(.sectionHeader(title: "Appearance"))
+        for look in CaptureBarLook.allCases {
+            let item = ActionMenuItem(look.title) { prefs.captureBarLook = look }
+            item.state = prefs.captureBarLook == look ? .on : .off
             menu.addItem(item)
         }
         menu.addItem(.separator())
@@ -369,19 +387,21 @@ final class CaptureBarPanel: NSPanel {
 /// Design: the Capture button (the first preset, with every other way to capture behind its
 /// arrow) in the accent color, then tinted groups: red for video and steps, teal for text,
 /// and plain for capturing the same area again and opening the library. With color
-/// highlighting off, every group is plain gray.
+/// highlighting off, or in Dark mode (where the tints look muddy), every group is plain gray.
 struct CaptureBarView: View {
     @State private var prefs = Preferences.shared
+    @Environment(\.colorScheme) private var colorScheme
 
     private var vertical: Bool { prefs.captureBarLayout == .vertical }
     private var size: CaptureBarSize { prefs.captureBarSize }
     private var stack: AnyLayout { vertical ? AnyLayout(VStackLayout(spacing: 5)) : AnyLayout(HStackLayout(spacing: 5)) }
-    private func tint(_ color: Color) -> Color? { prefs.captureBarColors ? color : nil }
+    private var colored: Bool { prefs.captureBarColors && colorScheme == .light }
+    private func tint(_ color: Color) -> Color? { colored ? color : nil }
 
     var body: some View {
         stack {
             GripHandle(vertical: vertical, size: size)
-            CaptureSplitButton(preset: prefs.presets.first, vertical: vertical, size: size, colored: prefs.captureBarColors)
+            CaptureSplitButton(preset: prefs.presets.first, vertical: vertical, size: size, colored: colored)
             BarSegment(tint: tint(.red), vertical: vertical) {
                 ForEach(prefs.presets.filter { $0.mode == .recording }) { preset in
                     BarButton(title: preset.name, symbol: "record.circle", hotKey: preset.hotKey, size: size) {
@@ -411,6 +431,9 @@ struct CaptureBarView: View {
             Toggle("Color Highlighting", isOn: $prefs.captureBarColors)
             Picker("Icon Size", selection: $prefs.captureBarSize) {
                 ForEach(CaptureBarSize.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            Picker("Appearance", selection: $prefs.captureBarLook) {
+                ForEach(CaptureBarLook.allCases, id: \.self) { Text($0.title).tag($0) }
             }
             Picker("Layout", selection: $prefs.captureBarLayout) {
                 ForEach(CaptureBarLayout.allCases, id: \.self) { Text($0.title).tag($0) }
