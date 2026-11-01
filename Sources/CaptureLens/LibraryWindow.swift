@@ -572,11 +572,6 @@ struct LibrarySidebar: View {
             if compact { rail } else { list }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // The last capture unpinned (here, in the picture's menu or on another Mac): the
-        // Pinned list leaves the sidebar, so go back to All Captures.
-        .onChange(of: store.items.contains(where: \.pinned)) { _, any in
-            if !any && state.section == .pinned { state.section = .all }
-        }
         .onGeometryChange(for: Bool.self) { $0.size.width < Self.compactBelow } action: { compact = $0 }
         // Noted for the layout other Macs follow.
         .onGeometryChange(for: Double.self) { Double($0.size.width.rounded()) } action: { LibraryLayout.sidebarWidth = $0 }
@@ -587,9 +582,7 @@ struct LibrarySidebar: View {
         return List(selection: Binding(get: { state.section }, set: { state.section = $0 ?? .all; state.selection = [] })) {
             Section("Library") {
                 row("All Captures", "photo.on.rectangle", items.count).tag(LibraryState.Section.all)
-                // Appears with the first pinned capture.
-                let pinned = items.filter(\.pinned).count
-                if pinned > 0 { row("Pinned", "pin", pinned).tag(LibraryState.Section.pinned) }
+                row("Pinned", "pin", items.filter(\.pinned).count).tag(LibraryState.Section.pinned)
                 row("Favorites", "star", items.filter(\.favorite).count).tag(LibraryState.Section.favorites)
                 row("Last 7 Days", "calendar", nil).tag(LibraryState.Section.recent)
                 row("With Notes", "note.text", items.filter { !$0.notes.isEmpty }.count).tag(LibraryState.Section.notes)
@@ -692,8 +685,7 @@ struct LibrarySidebar: View {
         return ScrollView(.vertical) {
             VStack(spacing: 6) {
                 railButton("All Captures", "photo.on.rectangle", items.count, .all)
-                let pinned = items.filter(\.pinned).count
-                if pinned > 0 { railButton("Pinned", "pin", pinned, .pinned) }
+                railButton("Pinned", "pin", items.filter(\.pinned).count, .pinned)
                 railButton("Favorites", "star", items.filter(\.favorite).count, .favorites)
                 railButton("Last 7 Days", "calendar", nil, .recent)
                 railButton("With Notes", "note.text", items.filter { !$0.notes.isEmpty }.count, .notes)
@@ -1075,10 +1067,25 @@ struct CaptureGrid: View {
 
     private var columns: Int { max(1, Int((width - 24) / (state.thumbnailSize + 16))) }
 
+    /// What an empty Pinned or Text Captures list says instead of "No Matches".
+    private var emptyList: (title: String, symbol: String, hint: String)? {
+        switch state.section {
+        case .pinned:
+            ("No Pinned Captures", "pin", "Right-click a capture and choose Pin Image to keep it here.")
+        case .text:
+            ("No Text Captures", "text.viewfinder",
+             "Press \(Preferences.shared.captureTextHotKey?.display ?? "the Capture Text button") and drag over text on screen. The text is copied, and the capture is kept here.")
+        default: nil
+        }
+    }
+
     var body: some View {
         let list = state.results
         Group {
-            if list.isEmpty {
+            if list.isEmpty, !store.items.isEmpty, state.filter.isEmpty, let empty = emptyList {
+                // A sidebar list with nothing in it yet says how things get there.
+                ContentUnavailableView(empty.title, systemImage: empty.symbol, description: Text(empty.hint))
+            } else if list.isEmpty {
                 ContentUnavailableView {
                     Label(store.items.isEmpty ? "No Captures Yet" : "No Matches",
                           systemImage: store.items.isEmpty ? "camera.viewfinder" : "magnifyingglass")
@@ -1333,8 +1340,6 @@ struct CaptureMenu: View {
         let allPinned = targets.allSatisfy { store.entry($0)?.pinned == true }
         Button(allPinned ? (targets.count > 1 ? "Unpin Images" : "Unpin Image") : (targets.count > 1 ? "Pin Images" : "Pin Image")) {
             store.togglePinned(targets)
-            // Unpinning the last one empties the Pinned list, which then leaves the sidebar.
-            if state.section == .pinned && !store.items.contains(where: \.pinned) { state.section = .all }
         }
         Button(store.entry(item.id)?.favorite == true && targets.count == 1 ? "Remove from Favorites" : "Add to Favorites") {
             store.toggleFavorite(targets)
