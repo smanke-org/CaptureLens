@@ -4,7 +4,7 @@ import CryptoKit
 import Observation
 import UniformTypeIdentifiers
 
-/// Every capture, saved in Application Support/CaptureLens/Library.sqlite: each item, its
+/// Every capture, saved in Application Support/SnagAnything/Library.sqlite: each item, its
 /// full-size picture and a thumbnail (see `LibraryDatabase`). With encryption on (the
 /// default), all of it is sealed with a key kept in this Mac's keychain. With sync on,
 /// items also travel between Macs, end-to-end encrypted (see `LibrarySync`).
@@ -76,7 +76,7 @@ final class LibraryStore {
             unreadable = db.sealKey == nil ? db.unreadableCount : max(0, db.count - items.count)
         } catch {
             lastError = error.localizedDescription
-            NSLog("CaptureLens: \(error.localizedDescription)")
+            NSLog("SnagAnything: \(error.localizedDescription)")
         }
     }
 
@@ -85,17 +85,18 @@ final class LibraryStore {
     /// Saves a new capture, then reads its text and names it in the background.
     @discardableResult
     func add(image: CGImage, kind: CaptureItem.Kind, scale: Double, source: CaptureItem.Source,
-             cursor: CursorLayer?, created: Date = Date(), video: VideoInfo? = nil, analyze: Bool = true) -> CaptureItem? {
+             cursor: CursorLayer?, created: Date = Date(), video: VideoInfo? = nil, text: String = "",
+             analyze: Bool = true) -> CaptureItem? {
         guard let db, let png = image.pngData else { return nil }
         let item = CaptureItem(created: created, kind: kind, name: CaptureNaming.fallback(source: source, date: created),
-                               source: source, pixelWidth: image.width, pixelHeight: image.height, scale: scale,
+                               recognizedText: text, source: source, pixelWidth: image.width, pixelHeight: image.height, scale: scale,
                                cursor: cursor, video: video, origin: DeviceIdentity.deviceID)
         let thumb = image.thumbnail().pngData
         do {
             try db.upsert(item, image: png, thumbnail: thumb)
         } catch {
             lastError = error.localizedDescription
-            NSLog("CaptureLens: couldn't save the capture: \(error.localizedDescription)")
+            NSLog("SnagAnything: couldn't save the capture: \(error.localizedDescription)")
             return nil
         }
         items.insert(item, at: 0)
@@ -219,7 +220,7 @@ final class LibraryStore {
         do {
             try db.delete(Array(ids), tombstone: Date())
         } catch {
-            NSLog("CaptureLens: couldn't delete from the library: \(error.localizedDescription)")
+            NSLog("SnagAnything: couldn't delete from the library: \(error.localizedDescription)")
             return
         }
         for id in ids { thumbnailCache[id] = nil }
@@ -234,7 +235,7 @@ final class LibraryStore {
         var item = item
         if touch { item.modified = Self.now }
         do { try db.upsert(item) } catch {
-            NSLog("CaptureLens: couldn't save to the library: \(error.localizedDescription)")
+            NSLog("SnagAnything: couldn't save to the library: \(error.localizedDescription)")
             return
         }
         let before = items[index]
@@ -259,7 +260,7 @@ final class LibraryStore {
             return (item, image: image, thumbnail: thumb)
         }
         do { try db.upsert(rows) } catch {
-            NSLog("CaptureLens: couldn't save synced captures: \(error.localizedDescription)")
+            NSLog("SnagAnything: couldn't save synced captures: \(error.localizedDescription)")
             return
         }
         var byID = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -287,7 +288,7 @@ final class LibraryStore {
                 for (id, at) in deletions { try db.delete([id], tombstone: at) }
             }
         } catch {
-            NSLog("CaptureLens: couldn't apply synced deletions: \(error.localizedDescription)")
+            NSLog("SnagAnything: couldn't apply synced deletions: \(error.localizedDescription)")
             return
         }
         for id in ids { thumbnailCache[id] = nil }
@@ -356,7 +357,7 @@ final class LibraryStore {
                 store.isEncrypted = on
                 AppDefaults.store.set(on, forKey: Self.encryptKey)
                 if failures != 0 { store.lastError = "Some captures couldn't be rewritten." }
-                NSLog("CaptureLens: library encryption \(on ? "on" : "off")")
+                NSLog("SnagAnything: library encryption \(on ? "on" : "off")")
             }
         }
     }
@@ -389,7 +390,7 @@ enum LibraryKeychain {
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
         let status = SecItemAdd(query as CFDictionary, nil)
-        if status != errSecSuccess { NSLog("CaptureLens: couldn't save the library key (\(status))") }
+        if status != errSecSuccess { NSLog("SnagAnything: couldn't save the library key (\(status))") }
     }
 
     static func loadKey() -> SymmetricKey? {

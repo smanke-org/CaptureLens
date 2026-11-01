@@ -4,11 +4,11 @@ import CryptoKit
 import Foundation
 import Observation
 
-/// What CaptureLens has done, per day, for Settings › Activity: captures by kind, imports,
+/// What SnagAnything has done, per day, for Settings › Activity: captures by kind, imports,
 /// time recorded, marks added, and captures copied, saved, exported, dragged and shared.
 ///
 /// Kept apart from the library on purpose: deleting captures shouldn't rewrite how much
-/// CaptureLens was used. Only numbers are stored, in Application Support/CaptureLens/
+/// SnagAnything was used. Only numbers are stored, in Application Support/SnagAnything/
 /// activity.json.
 @Observable
 @MainActor
@@ -44,6 +44,7 @@ final class ActivityStore {
             case .video: ActivityKey.video
             case .imported: ActivityKey.imported
             case .region: ActivityKey.area
+            case .text: ActivityKey.text
             }
         }
         record(key)
@@ -60,6 +61,7 @@ final class ActivityStore {
             case .video: ActivityKey.video
             case .imported: ActivityKey.imported
             case .region: ActivityKey.area
+            case .text: ActivityKey.text
             }
             log.record(key, at: item.created)
             if let video = item.video { log.record(ActivityKey.recordingSeconds, count: Int(video.duration.rounded()), at: item.created) }
@@ -72,12 +74,12 @@ final class ActivityStore {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try JSONEncoder().encode(log).write(to: url, options: .atomic)
         } catch {
-            NSLog("CaptureLens: couldn't save activity: \(error.localizedDescription)")
+            NSLog("SnagAnything: couldn't save activity: \(error.localizedDescription)")
         }
     }
 }
 
-/// Adds up Activity from every Mac that shares CaptureLens settings.
+/// Adds up Activity from every Mac that shares SnagAnything settings.
 ///
 /// Each Mac writes only its own CloudKit record, `Device_<device>` (of the Capture record
 /// type, so no new type has to be published; versions that don't know it skip it), sealed

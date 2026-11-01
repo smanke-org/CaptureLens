@@ -2,7 +2,7 @@ import AppKit
 
 /// Where the app shows itself: a Dock icon, a menu bar icon, both, or neither.
 ///
-/// CaptureLens is a menu bar app, so the menu bar icon is on and the Dock icon off
+/// SnagAnything is a menu bar app, so the menu bar icon is on and the Dock icon off
 /// by default. Right-clicking the Dock icon offers the settings window (macOS only
 /// shows an app's own Dock-menu items while it is running with a Dock icon). With
 /// both off the app runs with no icon at all; opening it again from Applications

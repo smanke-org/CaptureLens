@@ -31,7 +31,7 @@ final class StepRecorder {
         isRecording = true
         steps = []
         tag = "Steps " + Date().formatted(date: .abbreviated, time: .shortened)
-        // Clicks in other apps; CaptureLens's own windows (this panel) don't report here.
+        // Clicks in other apps; SnagAnything's own windows (this panel) don't report here.
         monitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { _ in
             let point = NSEvent.mouseLocation
             MainActor.assumeIsolated { StepRecorder.shared.clicked(at: point) }
@@ -89,7 +89,7 @@ final class StepRecorder {
                 display = screen.displayID
             }
         } catch {
-            NSLog("CaptureLens: step capture failed: \(error.localizedDescription)")
+            NSLog("SnagAnything: step capture failed: \(error.localizedDescription)")
             return
         }
         let scale = frame.width > 0 ? Double(image.width) / frame.width : 2

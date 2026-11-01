@@ -4,7 +4,7 @@ import Foundation
 
 /// Reading a Snagit capture (`.snagx`): a zip holding the picture, Snagit's own drawing of it
 /// with its markup (thumbnail.png, full size), the markup itself, and where and when it was
-/// captured. Markup with a CaptureLens counterpart becomes editable marks; anything else
+/// captured. Markup with a SnagAnything counterpart becomes editable marks; anything else
 /// means the capture comes in as Snagit drew it.
 public enum SnagitImport {
     public struct Capture {
@@ -26,7 +26,7 @@ public enum SnagitImport {
         /// canvas was enlarged around it).
         public var pictureFillsCanvas: Bool
         public var annotations: [Annotation]
-        /// Markup with no CaptureLens counterpart ("Image", "Shape (rotated)"…).
+        /// Markup with no SnagAnything counterpart ("Image", "Shape (rotated)"…).
         public var unsupported: [String]
 
         /// Whether the markup came across whole, so the picture can come in with editable marks.

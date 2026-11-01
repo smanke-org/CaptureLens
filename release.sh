@@ -48,27 +48,28 @@ fi
 ./notarize.sh
 ./make_dmg.sh
 
-VERSIONED=".build/app/CaptureLens-${VERSION}.dmg"
-STABLE=".build/app/CaptureLens.dmg"
-for f in "${VERSIONED}" "${STABLE}"; do
+VERSIONED=".build/app/SnagAnything-${VERSION}.dmg"
+STABLE=".build/app/SnagAnything.dmg"
+OLD_NAME=".build/app/CaptureLens.dmg"
+for f in "${VERSIONED}" "${STABLE}" "${OLD_NAME}"; do
   [ -f "$f" ] || { echo "Missing ${f}." >&2; exit 1; }
 done
 
 echo "==> Tagging ${TAG}"
-git tag -a "${TAG}" -m "CaptureLens ${VERSION}${STAGE:+ ${STAGE}}"
+git tag -a "${TAG}" -m "SnagAnything ${VERSION}${STAGE:+ ${STAGE}}"
 git push origin "${TAG}"
 
 echo "==> Publishing ${TAG}"
-# Both assets go up: the version-stamped one to pin to, and the fixed-name one the
-# README's permanent download link resolves against.
-gh release create "${TAG}" "${VERSIONED}" "${STABLE}" \
-  --title "CaptureLens ${VERSION}${STAGE:+ ${STAGE}}" \
+# The version-stamped image to pin to, the fixed-name one the README's permanent download
+# link resolves against, and the same image under the old CaptureLens name for older links.
+gh release create "${TAG}" "${VERSIONED}" "${STABLE}" "${OLD_NAME}" \
+  --title "SnagAnything ${VERSION}${STAGE:+ ${STAGE}}" \
   --notes "${RELEASE_NOTES:-See the commit history for what changed in ${VERSION}.}"
 
 echo "==> Verifying the permanent download link"
 # GitHub takes a moment to point the latest-release redirect at a new asset, so this
 # retries rather than reporting a failure that would have resolved on its own.
-URL="https://github.com/smanke-org/CaptureLens/releases/latest/download/CaptureLens.dmg"
+URL="https://github.com/smanke-org/SnagAnything/releases/latest/download/SnagAnything.dmg"
 for attempt in 1 2 3 4 5 6; do
   CODE=$(curl -sL -o /dev/null -w "%{http_code}" "${URL}")
   if [ "${CODE}" = "200" ]; then

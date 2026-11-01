@@ -69,6 +69,57 @@ final class CaptureEngine {
         }
     }
 
+    /// Capture Text: drag over an area, copy the text in it, and keep the picture in the
+    /// library as a text capture with what was read.
+    func captureText() {
+        guard !busy, !ScreenRecorder.shared.isActive else { return }
+        guard ensureAccess() else { return }
+        busy = true
+        Activity.shared.touch()
+        let windows = ScreenWindow.onScreen()
+        Task {
+            defer { busy = false }
+            // Started from the menu bar menu: let it finish fading out so it isn't in the picture.
+            try? await Task.sleep(for: .milliseconds(180))
+            let frozen: [CGDirectDisplayID: CGImage]
+            do {
+                frozen = try await ScreenGrabber.captureAllScreens()
+            } catch {
+                return fail(error)
+            }
+            guard let pick = await CaptureOverlay.shared.pick(mode: .region, fixedSize: .zero, images: frozen,
+                                                              prompt: "Drag over the text to copy  ·  Esc to cancel"),
+                  case .region(let region, let image, let frame) = pick else { return }
+            await deliverText(from: image, frame: frame, display: region.displayID, windows: windows)
+        }
+    }
+
+    /// Reads the picked area, copies its text, and saves it to the library as a text capture.
+    func deliverText(from image: CGImage, frame: CGRect, display: CGDirectDisplayID?, windows: [ScreenWindow]) async {
+        let text = ((try? await Recognizer.text(in: image)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            Sounds.failure()
+            Notice.shared.show(error: "No text found", near: frame)
+            return
+        }
+        Clipboard.copy(text: text)
+        Sounds.success()
+        let count = text.count
+        Notice.shared.show("Copied \(count) character\(count == 1 ? "" : "s")", symbol: "text.viewfinder", near: frame)
+
+        var source = SourceInfo.describe(frame: frame, windows: windows, window: nil, display: display)
+        if Preferences.shared.recordWebAddress, let bundleID = source.bundleID, SourceInfo.isBrowser(bundleID),
+           let page = await SourceInfo.webPage(bundleID: bundleID) {
+            source.url = page.url
+            source.pageTitle = page.title
+        }
+        let scale = frame.width > 0 ? Double(image.width) / frame.width : 2
+        if LibraryStore.shared.add(image: image, kind: .text, scale: scale, source: source, cursor: nil, text: text) == nil {
+            Notice.shared.show(error: "Copied the text, but couldn't save it to the library")
+        }
+        ActivityStore.shared.recordCapture(.text)
+    }
+
     private func ensureAccess() -> Bool {
         if ScreenAccess.granted { return true }
         ScreenAccess.request()
@@ -157,7 +208,7 @@ final class CaptureEngine {
     }
 
     private func fail(_ error: Error) {
-        NSLog("CaptureLens: capture failed: \(error.localizedDescription)")
+        NSLog("SnagAnything: capture failed: \(error.localizedDescription)")
         Sounds.failure()
         if !ScreenAccess.granted { ScreenAccess.explainDenied() } else { Notice.shared.show(error: error.localizedDescription) }
     }
@@ -299,7 +350,7 @@ enum Flattener {
     static func temporaryFile(_ item: CaptureItem) -> URL? {
         if item.kind == .video, VideoStore.shared.has(item.id) { return VideoExport.temporaryFile(item) }
         guard let png = png(item) else { return nil }
-        let folder = FileManager.default.temporaryDirectory.appending(path: "CaptureLens Drag/\(item.id.uuidString)")
+        let folder = FileManager.default.temporaryDirectory.appending(path: "SnagAnything Drag/\(item.id.uuidString)")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let url = folder.appending(path: "\(item.name).png")
         do { try png.write(to: url) } catch { return nil }

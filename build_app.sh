@@ -1,9 +1,9 @@
 #!/bin/bash
-# Builds the GitHub release of CaptureLens into .build/app/CaptureLens.app, ready for
+# Builds the GitHub release of SnagAnything into .build/app/SnagAnything.app, ready for
 # ./notarize.sh and ./make_dmg.sh: Developer ID, hardened runtime, not sandboxed (it
 # replaces itself when updating).
 #
-# CaptureLens syncs through CloudKit, which needs a provisioning profile in the app. So this
+# SnagAnything syncs through CloudKit, which needs a provisioning profile in the app. So this
 # archives the app, then exports it for Developer ID with automatic signing: Xcode (signed
 # in to the developer account) fetches or renews the Developer ID profile as needed.
 #
@@ -30,9 +30,9 @@ PLIST
 xcodebuild -exportArchive -archivePath .build/CaptureLens.xcarchive -exportPath .build/export \
   -exportOptionsPlist .build/export-options.plist -allowProvisioningUpdates | grep -E "error:|EXPORT" || true
 
-APP=".build/export/CaptureLens.app"
+APP=".build/export/SnagAnything.app"
 [ -d "$APP" ] || { echo "Export failed." >&2; exit 1; }
-lipo -archs "$APP/Contents/MacOS/CaptureLens" | grep -q "x86_64 arm64\|arm64 x86_64" || { echo "CaptureLens isn't universal." >&2; exit 1; }
+lipo -archs "$APP/Contents/MacOS/SnagAnything" | grep -q "x86_64 arm64\|arm64 x86_64" || { echo "SnagAnything isn't universal." >&2; exit 1; }
 ENTITLEMENTS=$(codesign -d --entitlements - --xml "$APP" 2>/dev/null || true)
 case "$ENTITLEMENTS" in
   *get-task-allow*) echo "The app carries get-task-allow; notarization would reject it." >&2; exit 1 ;;
@@ -50,7 +50,7 @@ case "$ENTITLEMENTS" in
 esac
 
 mkdir -p .build/app
-ditto "$APP" .build/app/CaptureLens.app
-codesign --verify --deep --strict .build/app/CaptureLens.app
-codesign -dvv .build/app/CaptureLens.app 2>&1 | grep -E "^Authority=Developer ID|^Timestamp="
-echo "Built .build/app/CaptureLens.app ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' .build/app/CaptureLens.app/Contents/Info.plist))"
+ditto "$APP" .build/app/SnagAnything.app
+codesign --verify --deep --strict .build/app/SnagAnything.app
+codesign -dvv .build/app/SnagAnything.app 2>&1 | grep -E "^Authority=Developer ID|^Timestamp="
+echo "Built .build/app/SnagAnything.app ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' .build/app/SnagAnything.app/Contents/Info.plist))"

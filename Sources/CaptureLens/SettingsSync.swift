@@ -8,7 +8,7 @@ import CaptureLensKit
 /// record in CloudKit (see `CloudSync`). Whole-document, last-writer-wins: each change
 /// replaces the record, and a newer one written by another Mac replaces this Mac's settings.
 ///
-/// End-to-end encrypted: every record CaptureLens puts in iCloud is sealed with AES-256-GCM
+/// End-to-end encrypted: every record SnagAnything puts in iCloud is sealed with AES-256-GCM
 /// under a random data key. iCloud holds that key only wrapped by the sync passphrase (the
 /// Keyring record, see `SyncCrypto`); each Mac keeps the unwrapped key in its login
 /// keychain. Until this Mac has the key, the sync engine doesn't run. Left on each Mac:
@@ -109,7 +109,7 @@ final class SettingsSync {
 
     // MARK: - Lifecycle
 
-    /// On a brand-new install, sync data already in iCloud means this user has CaptureLens on
+    /// On a brand-new install, sync data already in iCloud means this user has SnagAnything on
     /// another Mac: turn sync on (it then asks for the passphrase) rather than starting from
     /// the defaults.
     func adoptOnNewInstall() {
@@ -117,7 +117,7 @@ final class SettingsSync {
         Task {
             let found = (try? await CloudSync.shared.fetchKeyring()) != nil
             guard found, !isEnabled else { return }
-            NSLog("CaptureLens: new install found sync data in iCloud; turning sync on")
+            NSLog("SnagAnything: new install found sync data in iCloud; turning sync on")
             isEnabled = true
         }
     }
@@ -225,7 +225,7 @@ final class SettingsSync {
         // This Mac's settings become the shared copy.
         localModified = localModified ?? Self.now
         adopt(newKey)
-        NSLog("CaptureLens: set up encrypted sync (key \(newKeyring.keyID))")
+        NSLog("SnagAnything: set up encrypted sync (key \(newKeyring.keyID))")
     }
 
     /// Unlocks the key another Mac set up. Throws `SyncCrypto.CryptoError.wrongPassphrase`.
@@ -277,7 +277,7 @@ final class SettingsSync {
     func receivedKeyring(_ incoming: SyncCrypto.Keyring) {
         keyring = incoming
         guard let key, SyncCrypto.keyID(for: key) != incoming.keyID else { return }
-        NSLog("CaptureLens: the sync key changed on another Mac")
+        NSLog("SnagAnything: the sync key changed on another Mac")
         CloudSync.shared.resetEngine()
         forgetKey()
         keyState = .needsPassphrase
@@ -435,7 +435,7 @@ final class SettingsSync {
         PresenceSettings.shared.reload()
         localModified = remote.updatedAt
         noteSynced(remote)
-        NSLog("CaptureLens: adopted settings from \(remote.updatedBy) (\(remote.updatedAt))")
+        NSLog("SnagAnything: adopted settings from \(remote.updatedBy) (\(remote.updatedAt))")
     }
 
     private func noteSynced(_ document: Document) {
@@ -471,7 +471,7 @@ enum SyncKeychain {
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
         let status = SecItemAdd(query as CFDictionary, nil)
-        if status != errSecSuccess { NSLog("CaptureLens: couldn't save the sync key (\(status))") }
+        if status != errSecSuccess { NSLog("SnagAnything: couldn't save the sync key (\(status))") }
     }
 
     static func loadKey() -> SymmetricKey? {
@@ -639,7 +639,7 @@ enum DebugCommands {
             case "samples": _ = await DebugShots.addSamples() // the made-up library from the screenshots
             case "shortcut-hint":
                 // `shortcut-hint[:key]`: starts the first shortcut recorder in Settings, then ⌃ goes
-                // down and up (with C between when `key`, as when the keys reach CaptureLens);
+                // down and up (with C between when `key`, as when the keys reach SnagAnything);
                 // reports whether the "nothing came through" hint shows and the button's title.
                 result = await shortcutHintTest(withKey: arg == "key")
             case "drag-sidebar":

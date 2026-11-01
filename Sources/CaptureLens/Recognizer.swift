@@ -76,7 +76,7 @@ enum Recognizer {
             let mask = CIImage(cvPixelBuffer: buffer)
             return CIContext().createCGImage(mask, from: mask.extent, format: .L8, colorSpace: CGColorSpaceCreateDeviceGray())
         } catch {
-            NSLog("CaptureLens: couldn't find the subject: \(error.localizedDescription)")
+            NSLog("SnagAnything: couldn't find the subject: \(error.localizedDescription)")
             return nil
         }
     }

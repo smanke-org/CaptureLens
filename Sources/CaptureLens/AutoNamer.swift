@@ -43,7 +43,7 @@ enum AutoNamer {
             let response = try await session.respond(to: prompt, options: GenerationOptions(temperature: 0.2))
             return CaptureNaming.clean(response.content)
         } catch {
-            NSLog("CaptureLens: naming declined: \(error.localizedDescription)")
+            NSLog("SnagAnything: naming declined: \(error.localizedDescription)")
             return nil
         }
     }

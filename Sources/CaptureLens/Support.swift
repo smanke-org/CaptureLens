@@ -3,7 +3,7 @@ import CaptureLensKit
 import Observation
 import SwiftUI
 
-/// What CaptureLens is doing right now, so an automatic update waits for a quiet moment.
+/// What SnagAnything is doing right now, so an automatic update waits for a quiet moment.
 @Observable
 @MainActor
 final class Activity {

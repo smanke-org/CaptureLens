@@ -26,7 +26,7 @@ enum SourceInfo {
 
     // MARK: Web pages
 
-    /// Browsers CaptureLens can ask for the front page, and how.
+    /// Browsers SnagAnything can ask for the front page, and how.
     private static let safariFamily: Set<String> = ["com.apple.Safari", "com.apple.SafariTechnologyPreview"]
     private static let chromeFamily: Set<String> = [
         "com.google.Chrome", "com.google.Chrome.beta", "com.google.Chrome.canary", "com.brave.Browser",
@@ -39,7 +39,7 @@ enum SourceInfo {
         return safariFamily.contains(bundleID) || chromeFamily.contains(bundleID)
     }
 
-    private static let queue = DispatchQueue(label: "CaptureLens.AppleScript")
+    private static let queue = DispatchQueue(label: "SnagAnything.AppleScript")
 
     /// The address and title of the page in the browser's front window, asked through
     /// AppleScript (macOS asks once for permission to control each browser). Gives up after
@@ -69,7 +69,7 @@ enum SourceInfo {
             queue.async {
                 var error: NSDictionary?
                 let output = NSAppleScript(source: script)?.executeAndReturnError(&error).stringValue
-                if let error { NSLog("CaptureLens: couldn't ask \(bundleID) for its page: \(error[NSAppleScript.errorMessage] ?? error)") }
+                if let error { NSLog("SnagAnything: couldn't ask \(bundleID) for its page: \(error[NSAppleScript.errorMessage] ?? error)") }
                 gate.resume(output)
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + 2) { gate.resume(nil) }

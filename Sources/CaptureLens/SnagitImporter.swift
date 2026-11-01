@@ -4,9 +4,9 @@ import CaptureLensKit
 import Observation
 import SwiftUI
 
-/// Moves a Snagit library into CaptureLens: every capture in Snagit's folders (its autosave
+/// Moves a Snagit library into SnagAnything: every capture in Snagit's folders (its autosave
 /// folder and wherever its library lives, such as a OneDrive folder), with its date, app,
-/// window, web address and tags, and its markup editable where CaptureLens has the same tool.
+/// window, web address and tags, and its markup editable where SnagAnything has the same tool.
 /// Videos are copied to a folder of their own and stay on this Mac. Nothing in Snagit's
 /// folders is changed, and the Photos library is never looked at.
 @Observable
@@ -48,7 +48,7 @@ final class SnagitImporter {
         .appending(path: "CaptureLens Imports", directoryHint: .isDirectory)
     @ObservationIgnored private var cancelled = false
 
-    /// How different (0–255, per 8 × 8 block) CaptureLens's drawing of converted markup may be
+    /// How different (0–255, per 8 × 8 block) SnagAnything's drawing of converted markup may be
     /// from Snagit's before the capture comes in as Snagit drew it instead.
     /// Tuned on a real library: conversions that drew right scored up to 26, ones that didn't
     /// 40 and up.
@@ -83,10 +83,10 @@ final class SnagitImporter {
         var path = url.path
         #if DEBUG
         // The screenshots' made-up folders read like real ones.
-        if let fake = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SHOTS"].flatMap({ _ in path.range(of: "CaptureLens Shot Snagit/") }) {
+        if let fake = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SHOTS"].flatMap({ _ in path.range(of: "SnagAnything Shot Snagit/") }) {
             path = NSHomeDirectory() + "/" + path[fake.upperBound...].replacingOccurrences(of: "OneDrive/", with: "Library/CloudStorage/OneDrive-Personal/")
         }
-        if ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SHOTS"] != nil, path.contains("CaptureLens Shot Videos") {
+        if ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SHOTS"] != nil, path.contains("SnagAnything Shot Videos") {
             path = NSHomeDirectory() + "/Movies/CaptureLens Imports"
         }
         #endif
@@ -317,7 +317,7 @@ final class SnagitImporter {
             } catch {
                 try? FileManager.default.removeItem(at: target)
                 summary.failed += 1
-                NSLog("CaptureLens: couldn't import a Snagit video: \(error.localizedDescription)")
+                NSLog("SnagAnything: couldn't import a Snagit video: \(error.localizedDescription)")
             }
         }
     }
@@ -341,7 +341,7 @@ final class SnagitImporter {
         let editable: Bool
         /// Had markup at all (editable or drawn in).
         let hadMarkup: Bool
-        /// How far CaptureLens's drawing was from Snagit's (for tuning; nil if not compared).
+        /// How far SnagAnything's drawing was from Snagit's (for tuning; nil if not compared).
         let difference: Double?
         /// What it comes in as: a macOS screenshot keeps whether it was an area, a window or
         /// the screen.
@@ -424,7 +424,7 @@ extension LibraryStore {
             return (item, image: p.png, thumbnail: p.thumbnail)
         }
         do { try db.upsert(rows) } catch {
-            NSLog("CaptureLens: couldn't save imported captures: \(error.localizedDescription)")
+            NSLog("SnagAnything: couldn't save imported captures: \(error.localizedDescription)")
             return []
         }
         insertImported(rows.map(\.0))
@@ -471,7 +471,7 @@ private struct SnagitImportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Bring your Snagit captures into CaptureLens, with their dates, apps, web addresses and tags. Markup comes in editable where CaptureLens has the same tool; otherwise the capture comes in as Snagit drew it. Snagit's files aren't changed.")
+            Text("Bring your Snagit captures into SnagAnything, with their dates, apps, web addresses and tags. Markup comes in editable where SnagAnything has the same tool; otherwise the capture comes in as Snagit drew it. Snagit's files aren't changed.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             switch importer.phase {
             case .idle, .scanning:

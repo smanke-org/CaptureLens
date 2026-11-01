@@ -10,10 +10,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-APP_NAME="CaptureLens"
+APP_NAME="SnagAnything"
 APP_DIR=".build/app/${APP_NAME}.app"
 VERSION=$(defaults read "$(pwd)/${APP_DIR}/Contents/Info.plist" CFBundleShortVersionString)
-DMG_PATH=".build/app/CaptureLens-${VERSION}.dmg"
+DMG_PATH=".build/app/SnagAnything-${VERSION}.dmg"
 # Notarization credentials are account-level, not per-app, so an existing
 # profile from another project works fine. Use the first one that answers.
 resolve_profile() {
@@ -64,7 +64,7 @@ echo "Creating ${DMG_PATH}..."
 rm -f "${DMG_PATH}"
 # LZFSE (ULFO), not zlib (UDZO): on macOS 27.0.1 hdiutil writes a corrupt zlib image of
 # this HFS+ volume, which notarytool then refuses as "not a disk image". LZFSE images open
-# on every macOS CaptureLens runs on.
+# on every macOS SnagAnything runs on.
 hdiutil create \
   -volname "${APP_NAME}" \
   -srcfolder "${STAGING}" \
@@ -97,8 +97,11 @@ fi
 # asset whose name is identical in every release — ship only the version-stamped one and
 # that link 404s for everybody. Copied after notarization so it carries the same stapled
 # ticket; it is byte-identical, so it does not matter which the updater picks up.
-STABLE_PATH=".build/app/CaptureLens.dmg"
+STABLE_PATH=".build/app/SnagAnything.dmg"
 cp "${DMG_PATH}" "${STABLE_PATH}"
+# The same image under the app's old name, for links to .../latest/download/CaptureLens.dmg
+# made before it was renamed (the website, old READMEs, bookmarks).
+cp "${DMG_PATH}" ".build/app/CaptureLens.dmg"
 
 echo
 echo "Verifying..."

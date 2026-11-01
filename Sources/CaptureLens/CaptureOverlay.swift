@@ -35,10 +35,12 @@ final class CaptureOverlay {
     fileprivate var pointer = CGPoint.zero
 
     /// Shows the overlay and waits for a pick; nil if cancelled with Esc.
-    func pick(mode: CaptureMode, fixedSize: CGSize, images: [CGDirectDisplayID: CGImage]) async -> Pick? {
+    /// - Parameter prompt: the hint at the top, in place of the mode's own.
+    func pick(mode: CaptureMode, fixedSize: CGSize, images: [CGDirectDisplayID: CGImage], prompt: String? = nil) async -> Pick? {
         guard !isSelecting else { return nil }
         isSelecting = true
         defer { isSelecting = false }
+        customPrompt = prompt
         forRecording = mode == .recording
         let mode: CaptureMode = mode == .recording ? .allInOne : mode
         self.mode = mode
@@ -98,7 +100,10 @@ final class CaptureOverlay {
         return CGRect(origin: origin, size: size).integral
     }
 
+    private var customPrompt: String?
+
     fileprivate var prompt: String {
+        if let customPrompt { return customPrompt }
         if forRecording { return "Click a window or drag over an area to record  ·  Return for the whole screen  ·  Esc to cancel" }
         return switch mode {
         case .allInOne, .scrolling, .recording: "Click a window or drag over an area  ·  Return for the whole screen  ·  Hold ⌥ to open it"

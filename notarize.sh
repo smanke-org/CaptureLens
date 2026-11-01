@@ -15,9 +15,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-APP_NAME="CaptureLens"
+APP_NAME="SnagAnything"
 APP_DIR=".build/app/${APP_NAME}.app"
-ZIP_PATH=".build/app/CaptureLens-notarize.zip"
+ZIP_PATH=".build/app/SnagAnything-notarize.zip"
 # Notarization credentials are account-level, not per-app, so an existing
 # profile from another project works fine. Use the first one that answers.
 resolve_profile() {

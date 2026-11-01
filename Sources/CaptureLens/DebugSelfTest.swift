@@ -14,7 +14,7 @@ enum DebugSelfTest {
     static func run(folder: String) {
         let env = ProcessInfo.processInfo.environment
         guard env["CAPTURELENS_DEFAULTS_SUITE"] != nil, env["CAPTURELENS_LIBRARY_FOLDER"] != nil else {
-            NSLog("CaptureLens: the self-test needs CAPTURELENS_DEFAULTS_SUITE and CAPTURELENS_LIBRARY_FOLDER")
+            NSLog("SnagAnything: the self-test needs CAPTURELENS_DEFAULTS_SUITE and CAPTURELENS_LIBRARY_FOLDER")
             exit(2)
         }
         let out = URL(fileURLWithPath: folder, isDirectory: true)
@@ -390,7 +390,7 @@ enum DebugSelfTest {
     /// Importing made-up Snagit captures and a video into the test library.
     private static func snagitTest(_ note: (String) -> Void, out: URL) async {
         let store = LibraryStore.shared
-        let folder = FileManager.default.temporaryDirectory.appending(path: "CaptureLens Snagit Test \(UUID().uuidString)")
+        let folder = FileManager.default.temporaryDirectory.appending(path: "SnagAnything Snagit Test \(UUID().uuidString)")
         let videos = folder.appending(path: "Imported Videos")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -402,7 +402,7 @@ enum DebugSelfTest {
             ["ToolMode": "Arrow", "StartPoint": "500,250", "EndPoint": "320,130", "ForegroundColor": "#FF0000FF", "StrokeWidth": 4,
              "ArrowStart": "Round", "ArrowEnd": "TaperArrow", "RotationAngle": 0],
         ]
-        // Snagit's own drawing of the marks, as CaptureLens would draw them.
+        // Snagit's own drawing of the marks, as SnagAnything would draw them.
         let converted = try? SnagitImport.read(snagx(png: png, drawn: png, objects: marks), rtf: { _ in nil })
         let drawn = AnnotationRenderer.flatten(base: picture, scale: 1, annotations: converted?.annotations ?? [], cursor: nil)?.pngData ?? png
         guard let other = DebugImage.make(text: "Pasted picture", size: CGSize(width: 400, height: 200))?.pngData else { return }
@@ -526,7 +526,7 @@ enum DebugSelfTest {
     private static func phase5Test(_ note: (String) -> Void, out: URL) async {
         let store = LibraryStore.shared
         let window = LibraryWindow.shared
-        let folder = FileManager.default.temporaryDirectory.appending(path: "CaptureLens Self-Test \(UUID().uuidString)")
+        let folder = FileManager.default.temporaryDirectory.appending(path: "SnagAnything Self-Test \(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         // Two 2-second pieces, as a recording paused once would leave.
@@ -606,7 +606,7 @@ enum DebugSelfTest {
             test.isOpaque = true
             test.backgroundColor = .systemTeal
             test.collectionBehavior = [.canJoinAllSpaces, .stationary]
-            let label = NSTextField(labelWithString: "CaptureLens recording test")
+            let label = NSTextField(labelWithString: "SnagAnything recording test")
             label.font = .systemFont(ofSize: 28, weight: .bold)
             label.frame = CGRect(x: 30, y: 110, width: 420, height: 40)
             test.contentView?.addSubview(label)

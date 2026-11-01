@@ -2,7 +2,7 @@ import CommonCrypto
 import CryptoKit
 import Foundation
 
-/// End-to-end encryption for everything CaptureLens puts in iCloud Drive (settings and capture counts).
+/// End-to-end encryption for everything SnagAnything puts in iCloud Drive (settings and capture counts).
 ///
 /// Every file is sealed with AES-256-GCM under one random 256-bit data key. The data key
 /// itself is stored in iCloud only in wrapped form — sealed with a key derived from your
@@ -18,7 +18,7 @@ public enum SyncCrypto {
         public var errorDescription: String? {
             switch self {
             case .wrongPassphrase: "That passphrase doesn't unlock the synced data."
-            case .notEncrypted: "The file isn't a CaptureLens encrypted file."
+            case .notEncrypted: "The file isn't a SnagAnything encrypted file."
             case .damaged: "The file is damaged or was sealed with a different key."
             }
         }

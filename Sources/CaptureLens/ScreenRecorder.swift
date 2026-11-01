@@ -61,7 +61,7 @@ final class ScreenRecorder: NSObject {
     let overlay = RecordingOverlay()
     let camera = CameraBubble()
 
-    private var workFolder: URL { FileManager.default.temporaryDirectory.appending(path: "CaptureLens Recording", directoryHint: .isDirectory) }
+    private var workFolder: URL { FileManager.default.temporaryDirectory.appending(path: "SnagAnything Recording", directoryHint: .isDirectory) }
 
     // MARK: - Starting
 
@@ -120,13 +120,13 @@ final class ScreenRecorder: NSObject {
             let prefs = Preferences.shared
             if prefs.recordMicrophone, !(await AVCaptureDevice.requestAccess(for: .audio)) {
                 prefs.recordMicrophone = false
-                note = "CaptureLens isn't allowed to use the microphone (System Settings › Privacy & Security › Microphone)."
+                note = "SnagAnything isn't allowed to use the microphone (System Settings › Privacy & Security › Microphone)."
             }
             if prefs.showKeys, !AXIsProcessTrusted() {
                 let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
                 _ = AXIsProcessTrustedWithOptions(options)
                 prefs.showKeys = false
-                note = "To show keys, allow CaptureLens in Privacy & Security › Accessibility, then turn Keys on again."
+                note = "To show keys, allow SnagAnything in Privacy & Security › Accessibility, then turn Keys on again."
             }
             let seconds = (preset?.delay ?? 0) > 0 ? preset!.delay : prefs.recordCountdown
             let go = seconds > 0 ? await Countdown.shared.run(seconds: seconds) : true
@@ -146,7 +146,7 @@ final class ScreenRecorder: NSObject {
             guard let display = content.displays.first(where: { $0.displayID == region.displayID }) else {
                 throw GrabError(message: "That display is no longer connected.")
             }
-            // CaptureLens's own windows stay out, except the camera bubble and the click rings.
+            // SnagAnything's own windows stay out, except the camera bubble and the click rings.
             let own = content.applications.filter { $0.processID == getpid() }
             var numbers = [overlay.windowNumber, camera.windowNumber]
             #if DEBUG
@@ -187,7 +187,7 @@ final class ScreenRecorder: NSObject {
             Sounds.shutter()
             Activity.shared.touch()
         } catch {
-            NSLog("CaptureLens: recording failed to start: \(error.localizedDescription)")
+            NSLog("SnagAnything: recording failed to start: \(error.localizedDescription)")
             Notice.shared.show(error: "Couldn't start recording: \(error.localizedDescription)")
             await tearDown(discard: true)
         }
@@ -315,7 +315,7 @@ final class ScreenRecorder: NSObject {
             if after.opensLibrary || after == .preview || after == .previewAndLibrary { LibraryWindow.shared.show(select: item.id) }
             Notice.shared.show("Recording saved", symbol: "video", near: frame)
         } catch {
-            NSLog("CaptureLens: couldn't save the recording: \(error.localizedDescription)")
+            NSLog("SnagAnything: couldn't save the recording: \(error.localizedDescription)")
             Notice.shared.show(error: "Couldn't save the recording: \(error.localizedDescription)")
         }
     }
@@ -390,7 +390,7 @@ final class ScreenRecorder: NSObject {
     private func showCamera() async {
         guard await AVCaptureDevice.requestAccess(for: .video) else {
             Preferences.shared.recordCamera = false
-            note = "CaptureLens isn't allowed to use the camera (System Settings › Privacy & Security › Camera)."
+            note = "SnagAnything isn't allowed to use the camera (System Settings › Privacy & Security › Camera)."
             return
         }
         camera.show(in: frame)
@@ -473,7 +473,7 @@ extension ScreenRecorder: SCRecordingOutputDelegate, SCStreamDelegate {
 
     nonisolated func recordingOutput(_ recordingOutput: SCRecordingOutput, didFailWithError error: Error) {
         Task { @MainActor in
-            NSLog("CaptureLens: recording failed: \(error.localizedDescription)")
+            NSLog("SnagAnything: recording failed: \(error.localizedDescription)")
             self.failure = error.localizedDescription
             if let waiting = self.started { self.started = nil; waiting.resume(returning: false) }
             if let waiting = self.finished { self.finished = nil; waiting.resume() }
@@ -490,7 +490,7 @@ extension ScreenRecorder: SCRecordingOutputDelegate, SCStreamDelegate {
 
     nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
         Task { @MainActor in
-            NSLog("CaptureLens: the recording stopped: \(error.localizedDescription)")
+            NSLog("SnagAnything: the recording stopped: \(error.localizedDescription)")
             // Save what there is (the display went away, or access was turned off).
             if self.phase == .recording || self.phase == .paused { self.stop() }
         }
@@ -503,7 +503,7 @@ private extension CGRect {
 
 /// Takes the stream's frames and lets them go; the recording output is what saves them.
 private final class FrameSink: NSObject, SCStreamOutput {
-    static let queue = DispatchQueue(label: "CaptureLens.FrameSink", qos: .utility)
+    static let queue = DispatchQueue(label: "SnagAnything.FrameSink", qos: .utility)
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {}
 }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env swift
 // Generates the app icon in the same periodic-table style as M3 Tracker: atomic number
-// "27", tipped 45° to the left, the "Cl" symbol, and the name along the bottom, on
+// "27", tipped 45° to the left, the "Sa" symbol, and the name along the bottom, on
 // a deep camera-lens blue.
 // Run with:
 //   swift Tools/generate_icon.swift
@@ -102,15 +102,15 @@ ctx.restoreGState()
 
 // The element symbol, centered. Without the name below it, it grows and recenters to
 // fill the tile.
-let symbol = "Cl"
+let symbol = "Sa"
 // A two-letter symbol is wider than M3's "M³", so the nameless variant can't grow as far without
 // running into the 27; it sits a little below center to clear it.
-drawSymbol("Cl", in: tile, includeName: includeName, ctx: ctx)
+drawSymbol("Sa", in: tile, includeName: includeName, ctx: ctx)
 
 // Name along the bottom.
 if includeName {
     let nameSize = side * 0.088
-    let name = "CaptureLens"
+    let name = "SnagAnything"
     let nameWidth = size(of: name, size: nameSize).width
     draw(name, size: nameSize, at: CGPoint(
         x: tile.midX - nameWidth / 2,

@@ -291,17 +291,21 @@ final class Preferences {
     var libraryHotKey: HotKey? = Defaults.libraryHotKey { didSet { saveCodable(libraryHotKey, "libraryHotKey") } }
     /// "Capture Again" repeats the last area without selecting.
     var captureAgainHotKey: HotKey? = nil { didSet { saveCodable(captureAgainHotKey, "captureAgainHotKey") } }
+    /// Capture Text: copy the text in an area.
+    var captureTextHotKey: HotKey? = Defaults.captureTextHotKey { didSet { saveCodable(captureTextHotKey, "captureTextHotKey") } }
 
     enum Defaults {
         static let libraryHotKey: HotKey? = HotKey(keyCode: UInt32(kVK_ANSI_L), modifiers: UInt32(optionKey | shiftKey | cmdKey),
                                                    display: "⌥⇧⌘L")
+        static let captureTextHotKey: HotKey? = HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(optionKey | shiftKey | cmdKey),
+                                                       display: "⌥⇧⌘T")
     }
 
     /// Every key this class writes, so a reset can clear them all. All but `perMacKeys` sync.
     static let keys = [
         "copyToClipboard", "afterCapture", "captureCursor", "showCursorByDefault", "windowShadow", "playSound", "showNotice",
         "autoName", "recognizeText", "recordWebAddress", "librarySync", "libraryBackend", "annotationStyle", "quickStyles", "presets", "libraryHotKey", "captureAgainHotKey",
-        "recordMicrophone", "recordSystemAudio", "recordCamera", "showClicks", "showKeys", "recordFrameRate", "syncVideos",
+        "captureTextHotKey", "recordMicrophone", "recordSystemAudio", "recordCamera", "showClicks", "showKeys", "recordFrameRate", "syncVideos",
         "toolStyle", "dialTrigger", "doubleClickOpens", "recordCountdown", "microphoneID", "cameraID", "confirmQuit",
     ]
     /// Of those, the ones each Mac chooses for itself: whether, and how, it syncs the library,
@@ -373,6 +377,7 @@ final class Preferences {
             "recordWebAddress": recordWebAddress, "librarySync": librarySync, "libraryBackend": libraryBackend.rawValue,
             "annotationStyle": data(annotationStyle), "quickStyles": data(quickStyles), "presets": data(presets),
             "libraryHotKey": data(libraryHotKey), "captureAgainHotKey": data(captureAgainHotKey),
+            "captureTextHotKey": data(captureTextHotKey),
             "recordMicrophone": recordMicrophone, "recordSystemAudio": recordSystemAudio, "recordCamera": recordCamera,
             "showClicks": showClicks, "showKeys": showKeys, "recordFrameRate": recordFrameRate, "syncVideos": syncVideos,
             "toolStyle": toolStyle.rawValue, "dialTrigger": dialTrigger.rawValue, "doubleClickOpens": doubleClickOpens.rawValue,
@@ -437,6 +442,7 @@ final class Preferences {
         presets = codable("presets", CapturePreset.defaults)
         libraryHotKey = codable("libraryHotKey", Defaults.libraryHotKey)
         captureAgainHotKey = codable("captureAgainHotKey", nil as HotKey?)
+        captureTextHotKey = codable("captureTextHotKey", Defaults.captureTextHotKey)
         recordMicrophone = bool("recordMicrophone", false)
         recordSystemAudio = bool("recordSystemAudio", true)
         recordCamera = bool("recordCamera", false)

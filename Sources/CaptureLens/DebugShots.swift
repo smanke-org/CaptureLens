@@ -7,7 +7,7 @@ import SwiftUI
 /// `CAPTURELENS_DEBUG_SHOTS=<folder>` (with `CAPTURELENS_DEFAULTS_SUITE` and
 /// `CAPTURELENS_LIBRARY_FOLDER`): fills the test library with made-up captures, opens each
 /// window on a 2× display and saves a picture of just that window (with its shadow) for the
-/// website, then quits. Only CaptureLens's own windows are captured.
+/// website, then quits. Only SnagAnything's own windows are captured.
 @MainActor
 enum DebugShots {
     static func run(out: URL) {
@@ -135,7 +135,7 @@ enum DebugShots {
 
             // Import from Snagit, with made-up Snagit folders.
             if let folder = await sampleSnagitFolder() {
-                SnagitImporter.shared.debugUse([folder.0, folder.1], videoFolder: FileManager.default.temporaryDirectory.appending(path: "CaptureLens Shot Videos"))
+                SnagitImporter.shared.debugUse([folder.0, folder.1], videoFolder: FileManager.default.temporaryDirectory.appending(path: "SnagAnything Shot Videos"))
                 SnagitImporter.shared.nameCaptures = true
                 SnagitImportWindow.shared.show()
                 try? await Task.sleep(for: .seconds(1.5))
@@ -244,7 +244,7 @@ enum DebugShots {
                                 Annotation(kind: .text, rect: CGRect(x: 336, y: 430, width: 220, height: 30), text: "Best region", style: AnnotationStyle(color: .orange, lineWidth: 3, fontSize: 18)),
                             ])
         // A short recording.
-        let movie = FileManager.default.temporaryDirectory.appending(path: "CaptureLens Shot \(UUID().uuidString).mp4")
+        let movie = FileManager.default.temporaryDirectory.appending(path: "SnagAnything Shot \(UUID().uuidString).mp4")
         var video: UUID?
         if await DebugMovie.write(to: movie, seconds: 6, startFrame: 0, size: CGSize(width: 1520, height: 960), background: Mock.dashboard()) {
             let asset = AVURLAsset(url: movie)
@@ -265,7 +265,7 @@ enum DebugShots {
 
     /// Two made-up Snagit folders, so the import window has something to show.
     static func sampleSnagitFolder() async -> (URL, URL)? {
-        let base = FileManager.default.temporaryDirectory.appending(path: "CaptureLens Shot Snagit")
+        let base = FileManager.default.temporaryDirectory.appending(path: "SnagAnything Shot Snagit")
         let autosave = base.appending(path: "Pictures/Snagit/Autosaved Captures"), cloud = base.appending(path: "OneDrive/Snagit")
         for folder in [autosave, cloud] { try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
         for i in 0..<3 { try? Data("x".utf8).write(to: autosave.appending(path: "2025-0\(i + 1)-01_10-00-00.snagx")) }

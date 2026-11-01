@@ -78,7 +78,7 @@ final class LibrarySync {
                 guard let self, self.started, let db = self.db else { return }
                 CloudSync.shared.queueSave(LibraryStore.shared.items.map { CloudSync.Name.capture($0.id) })
                 try? db.set(keyID, forKey: Keys.uploadedFor)
-                NSLog("CaptureLens: uploading \(LibraryStore.shared.items.count) captures")
+                NSLog("SnagAnything: uploading \(LibraryStore.shared.items.count) captures")
             }
         }
         let cutoff = Date().addingTimeInterval(-Self.tombstoneLifetime)
@@ -157,7 +157,7 @@ final class LibrarySync {
     }
 
     func videoFailed(_ id: UUID, _ message: String) {
-        NSLog("CaptureLens: a video couldn't go to iCloud: \(message)")
+        NSLog("SnagAnything: a video couldn't go to iCloud: \(message)")
         videoProblem = "A video couldn't go to iCloud: \(message)"
         try? db?.set(Data([0]), forKey: Keys.videoSentPrefix + id.uuidString)
         if let file = preparedVideos.removeValue(forKey: id) { try? FileManager.default.removeItem(at: file) }
@@ -175,7 +175,7 @@ final class LibrarySync {
             if !VideoStore.shared.has(id) { try? db.set(Data([1]), forKey: Keys.videoWaitingPrefix + id.uuidString) }
             return
         }
-        let copy = FileManager.default.temporaryDirectory.appending(path: "CaptureLens-\(UUID().uuidString).clvideo")
+        let copy = FileManager.default.temporaryDirectory.appending(path: "SnagAnything-\(UUID().uuidString).clvideo")
         guard (try? FileManager.default.copyItem(at: assetFile, to: copy)) != nil else { return }
         Task { await receive(id, assetFile: copy) }
     }
@@ -228,7 +228,7 @@ final class LibrarySync {
         try? db.removeValues(withPrefix: Keys.videoSentPrefix)
         try? db.set(nil as String?, forKey: Keys.uploadedFor)
         CloudSync.shared.sendNow()
-        NSLog("CaptureLens: removing \(names.count) captures from iCloud")
+        NSLog("SnagAnything: removing \(names.count) captures from iCloud")
     }
 
     // MARK: - From CloudSync
@@ -283,7 +283,7 @@ final class LibrarySync {
         }
         LibraryStore.shared.applyRemote(updates)
         CloudSync.shared.queueSave(resend)
-        if !updates.isEmpty { NSLog("CaptureLens: library sync brought \(updates.count) change(s)") }
+        if !updates.isEmpty { NSLog("SnagAnything: library sync brought \(updates.count) change(s)") }
     }
 
     /// Captures deleted on another Mac.

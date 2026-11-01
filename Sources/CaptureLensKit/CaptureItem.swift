@@ -9,6 +9,9 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
         case region, window, screen, imported
         /// A screen recording; its picture is the poster frame.
         case video
+        /// Capture Text: an area whose text was read and copied. Versions before 1.1.0 read
+        /// it as an area.
+        case text
 
         public var title: String {
             switch self {
@@ -17,6 +20,7 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
             case .screen: "Full Screen"
             case .imported: "Imported"
             case .video: "Video"
+            case .text: "Text"
             }
         }
 
@@ -27,6 +31,7 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
             case .screen: "display"
             case .imported: "square.and.arrow.down"
             case .video: "video"
+            case .text: "text.viewfinder"
             }
         }
     }
@@ -70,7 +75,7 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
         public var url: String?
         public var pageTitle: String?
         public var displayName: String?
-        /// The tool that took it, when that wasn't CaptureLens: "Screenshot" or "Snagit".
+        /// The tool that took it, when that wasn't SnagAnything: "Screenshot" or "Snagit".
         public var tool: String?
 
         public init(appName: String? = nil, bundleID: String? = nil, windowTitle: String? = nil, url: String? = nil,

@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import ServiceManagement
 
-/// Whether CaptureLens opens when you log in, backed by the system's login-item
+/// Whether SnagAnything opens when you log in, backed by the system's login-item
 /// registration rather than a stored preference.
 ///
 /// The registration is the only truth: it can be switched off in System Settings › General ›
@@ -38,7 +38,7 @@ final class LaunchAtLogin {
             // Registration needs a signed app in /Applications; from anywhere else it fails.
             lastError = Bundle.main.bundlePath.hasPrefix("/Applications/")
                 ? "macOS refused to change the login item: \(error.localizedDescription)"
-                : "Move CaptureLens to your Applications folder to open it at login."
+                : "Move SnagAnything to your Applications folder to open it at login."
         }
         refresh()
     }

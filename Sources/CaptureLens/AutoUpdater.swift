@@ -3,7 +3,7 @@ import IOKit.pwr_mgt
 import Observation
 import UserNotifications
 
-/// What CaptureLens does when a newer release appears.
+/// What SnagAnything does when a newer release appears.
 enum UpdatePolicy: String, CaseIterable {
     /// Download, verify and install on its own, at a moment it can't interrupt anything.
     case automatic
@@ -33,7 +33,7 @@ enum UpdatePolicy: String, CaseIterable {
 /// Looks for updates as often as the user chose (once a day unless they change it) and,
 /// depending on the policy, notifies or installs.
 ///
-/// An automatic install relaunches CaptureLens, which would end a capture in progress or a
+/// An automatic install relaunches SnagAnything, which would end a capture in progress or a
 /// region being watched. So a downloaded update waits until all of these hold:
 /// - no capture, watched region or live translation is active, and none for 30 minutes;
 /// - no app is holding the display awake (Keynote, PowerPoint, screen sharing and video
@@ -71,7 +71,7 @@ final class AutoUpdater: NSObject, UNUserNotificationCenterDelegate {
     private(set) var staged: (version: String, app: URL)?
     private(set) var lastError: String?
     private(set) var lastChecked: Date?
-    /// Whether macOS lets CaptureLens post notifications; without them "Ask me first" can only
+    /// Whether macOS lets SnagAnything post notifications; without them "Ask me first" can only
     /// use the menu, and the note after an automatic update never appears.
     private(set) var notificationsAllowed = true
 
@@ -104,6 +104,9 @@ final class AutoUpdater: NSObject, UNUserNotificationCenterDelegate {
         return
         #else
         if policy != .off { requestNotificationPermission() }
+        // Before "welcomed" is set for a new install, and before the automatic-update record is read.
+        WhatsNew.shared.noteLaunch(newInstall: !AppDefaults.store.bool(forKey: "welcomed"),
+                                   autoInstalledFrom: AppDefaults.store.string(forKey: Self.installedFromKey))
         announceIfJustUpdated()
 
         checkIfDue()
@@ -169,17 +172,17 @@ final class AutoUpdater: NSObject, UNUserNotificationCenterDelegate {
                     let app = try await UpdateController.downloadAndStage(release)
                     try UpdateController.verifyCandidate(app, version: release.version)
                     staged = (release.version, app)
-                    NSLog("CaptureLens: update \(release.version) verified; waiting for a quiet moment to install")
+                    NSLog("SnagAnything: update \(release.version) verified; waiting for a quiet moment to install")
                     waitForQuietMoment()
                 }
             } catch {
                 lastError = error.localizedDescription
                 if !reachedGitHub { AppDefaults.store.removeObject(forKey: Self.lastCheckKey) }
-                NSLog("CaptureLens: update check failed: \(error.localizedDescription)")
+                NSLog("SnagAnything: update check failed: \(error.localizedDescription)")
                 // An automatic install that failed falls back to asking, once per version.
                 if policy == .automatic, let version = UpdateAvailability.shared.pending {
-                    notify(id: "update-failed-\(version)", title: "CaptureLens couldn't update itself",
-                           body: "\(error.localizedDescription) You can install \(version) from the CaptureLens menu.", installable: true)
+                    notify(id: "update-failed-\(version)", title: "SnagAnything couldn't update itself",
+                           body: "\(error.localizedDescription) You can install \(version) from the SnagAnything menu.", installable: true)
                 }
             }
         }
@@ -205,14 +208,14 @@ final class AutoUpdater: NSObject, UNUserNotificationCenterDelegate {
             install(staged.app, version: staged.version)
             return
         }
-        NSLog("CaptureLens: holding update \(staged.version): \(reason)")
+        NSLog("SnagAnything: holding update \(staged.version): \(reason)")
     }
 
     /// Why now would be a bad time to restart, or nil if it's fine.
     func busyReason() -> String? {
         let activity = Activity.shared
         if let busy = activity.busyReason { return busy }
-        if Date().timeIntervalSince(activity.lastActive) < effectsQuiet { return "CaptureLens was in use recently" }
+        if Date().timeIntervalSince(activity.lastActive) < effectsQuiet { return "SnagAnything was in use recently" }
         if let app = Self.appKeepingDisplayAwake() { return "\(app) is keeping the display awake" }
         let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
         if idle < userIdle { return "the Mac is in use" }
@@ -240,11 +243,11 @@ final class AutoUpdater: NSObject, UNUserNotificationCenterDelegate {
             // processes of this user can write to.
             try UpdateController.verifyCandidate(app, version: version)
             AppDefaults.store.set(AppInfo.version, forKey: Self.installedFromKey)
-            NSLog("CaptureLens: installing update \(version)")
+            NSLog("SnagAnything: installing update \(version)")
             try UpdateController.installAndRelaunch(from: app)
         } catch {
             AppDefaults.store.removeObject(forKey: Self.installedFromKey)
-            NSLog("CaptureLens: update \(version) not installed: \(error.localizedDescription)")
+            NSLog("SnagAnything: update \(version) not installed: \(error.localizedDescription)")
             lastError = error.localizedDescription
             staged = nil
         }
@@ -267,7 +270,7 @@ final class AutoUpdater: NSObject, UNUserNotificationCenterDelegate {
 
     func requestNotificationPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
-            NSLog("CaptureLens: notification permission granted=\(granted) error=\(error?.localizedDescription ?? "none")")
+            NSLog("SnagAnything: notification permission granted=\(granted) error=\(error?.localizedDescription ?? "none")")
             DispatchQueue.main.async { MainActor.assumeIsolated { AutoUpdater.shared.refreshNotificationStatus() } }
         }
     }
@@ -277,14 +280,14 @@ final class AutoUpdater: NSObject, UNUserNotificationCenterDelegate {
         guard let from = AppDefaults.store.string(forKey: Self.installedFromKey) else { return }
         AppDefaults.store.removeObject(forKey: Self.installedFromKey)
         guard from != AppInfo.version else { return }
-        notify(id: "updated-\(AppInfo.version)", title: "CaptureLens updated to \(AppInfo.labeledVersion)",
-               body: "It installed itself while your Mac wasn't in use.", installable: false)
+        notify(id: "updated-\(AppInfo.version)", title: "\(AppInfo.name) updated to \(AppInfo.labeledVersion)",
+               body: "It installed itself while your Mac wasn't in use. Click to see what's new.", installable: false)
     }
 
     private func notifyAvailable(_ version: String) {
         guard AppDefaults.store.string(forKey: Self.notifiedVersionKey) != version else { return }
         AppDefaults.store.set(version, forKey: Self.notifiedVersionKey)
-        notify(id: "available-\(version)", title: "CaptureLens \(version) is available",
+        notify(id: "available-\(version)", title: "SnagAnything \(version) is available",
                body: "Click to review and install it. You're on \(AppInfo.labeledVersion).", installable: true)
     }
 
@@ -294,7 +297,7 @@ final class AutoUpdater: NSObject, UNUserNotificationCenterDelegate {
         content.body = body
         if installable { content.categoryIdentifier = Self.category }
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: content, trigger: nil)) { error in
-            NSLog("CaptureLens: notification \(id) posted, error=\(error?.localizedDescription ?? "none")")
+            NSLog("SnagAnything: notification \(id) posted, error=\(error?.localizedDescription ?? "none")")
         }
     }
 
@@ -308,11 +311,14 @@ final class AutoUpdater: NSObject, UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
         let installable = response.notification.request.content.categoryIdentifier == Self.category
+        let updated = response.notification.request.identifier.hasPrefix("updated-")
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
                 // Clicking the banner or its Install button opens the usual confirmation,
                 // so the user still sees what they're agreeing to.
                 if installable { UpdateController.checkForUpdates() }
+                // "Updated": Settings, which shows what changed.
+                if updated { SettingsWindow.shared.show() }
             }
         }
         completionHandler()

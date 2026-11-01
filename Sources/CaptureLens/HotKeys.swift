@@ -93,6 +93,7 @@ final class HotKeyCenter {
     enum Action: Hashable {
         case preset(UUID)
         case captureAgain
+        case captureText
         case library
     }
 
@@ -108,6 +109,7 @@ final class HotKeyCenter {
         var out: [(Action, HotKey)] = []
         if let key = prefs.libraryHotKey { out.append((.library, key)) }
         if let key = prefs.captureAgainHotKey { out.append((.captureAgain, key)) }
+        if let key = prefs.captureTextHotKey { out.append((.captureText, key)) }
         for preset in prefs.presets { if let key = preset.hotKey { out.append((.preset(preset.id), key)) } }
         return out
     }
@@ -125,12 +127,12 @@ final class HotKeyCenter {
                 refs[number] = ref
                 actions[number] = action
             } else {
-                NSLog("CaptureLens: shortcut \(key.display) not registered (\(status)), probably taken by another app")
+                NSLog("SnagAnything: shortcut \(key.display) not registered (\(status)), probably taken by another app")
             }
         }
     }
 
-    /// Whether a key press is one of CaptureLens's own shortcuts.
+    /// Whether a key press is one of SnagAnything's own shortcuts.
     func isOwnHotKey(keyCode: UInt16, flags: NSEvent.ModifierFlags) -> Bool {
         bindings.contains { $0.1.matches(keyCode: keyCode, flags: flags) }
     }

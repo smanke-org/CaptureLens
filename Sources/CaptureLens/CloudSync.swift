@@ -4,7 +4,7 @@ import Foundation
 import Observation
 import CaptureLensKit
 
-/// CaptureLens's link to CloudKit: one `CKSyncEngine` on the private database, in the zone
+/// SnagAnything's link to CloudKit: one `CKSyncEngine` on the private database, in the zone
 /// "CaptureLens" of container iCloud.com.smanke.CaptureLens.
 ///
 /// Records (everything but the keyring is sealed with the sync key before it leaves the Mac):
@@ -117,7 +117,7 @@ final class CloudSync: CKSyncEngineDelegate {
         if fresh || state == nil {
             engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zoneID))])
         }
-        NSLog("CaptureLens: CloudKit sync started (zone \(zoneID.zoneName)\(fresh ? ", fresh" : ""))")
+        NSLog("SnagAnything: CloudKit sync started (zone \(zoneID.zoneName)\(fresh ? ", fresh" : ""))")
         updatePending()
         fetchNow()
         // Test copies on one Mac share its push address, and pushes can be late: look now
@@ -144,7 +144,7 @@ final class CloudSync: CKSyncEngineDelegate {
         fetchTimer = nil
         afterFirstFetch.removeAll()
         updatePending()
-        NSLog("CaptureLens: CloudKit sync stopped")
+        NSLog("SnagAnything: CloudKit sync stopped")
     }
 
     /// Forgets everything known about the server (after starting over or an account change).
@@ -274,7 +274,7 @@ final class CloudSync: CKSyncEngineDelegate {
         var out: [(String, URL)] = []
         for (id, result) in results {
             guard case .success(let record) = result, let asset = (record["image"] as? CKAsset)?.fileURL else { continue }
-            let copy = FileManager.default.temporaryDirectory.appending(path: "CaptureLens-\(UUID().uuidString).clsync")
+            let copy = FileManager.default.temporaryDirectory.appending(path: "SnagAnything-\(UUID().uuidString).clsync")
             if (try? FileManager.default.copyItem(at: asset, to: copy)) != nil { out.append((id.recordName, copy)) }
         }
         return out
@@ -316,13 +316,13 @@ final class CloudSync: CKSyncEngineDelegate {
 
     /// Whether iCloud can be used, with a message for Settings if not.
     func accountProblem() async -> String? {
-        guard Self.isEntitled else { return "This copy of CaptureLens isn't signed for iCloud, so it can't sync." }
+        guard Self.isEntitled else { return "This copy of SnagAnything isn't signed for iCloud, so it can't sync." }
         do {
             switch try await container.accountStatus() {
             case .available: return nil
             case .noAccount: return "Sign in to iCloud in System Settings to sync."
             case .restricted: return "iCloud is restricted on this Mac."
-            case .temporarilyUnavailable: return "iCloud is temporarily unavailable. CaptureLens will try again."
+            case .temporarilyUnavailable: return "iCloud is temporarily unavailable. SnagAnything will try again."
             default: return "iCloud isn't available right now."
             }
         } catch {
@@ -373,7 +373,7 @@ final class CloudSync: CKSyncEngineDelegate {
             }
 
         case .fetchedRecordZoneChanges(let changes):
-            // The engine reports every zone in the database; only CaptureLens's own counts.
+            // The engine reports every zone in the database; only SnagAnything's own counts.
             applyFetched(changes.modifications.map(\.record).filter { $0.recordID.zoneID == zoneID },
                          deletions: changes.deletions.map(\.recordID).filter { $0.zoneID == zoneID })
 
@@ -389,7 +389,7 @@ final class CloudSync: CKSyncEngineDelegate {
             for id in sent.deletedRecordIDs { removeSystemFields(id.recordName) }
             for failure in sent.failedRecordSaves { handleFailedSave(failure.record, failure.error) }
             for (id, error) in sent.failedRecordDeletes where error.code != .unknownItem {
-                NSLog("CaptureLens: couldn't delete \(id.recordName): \(error.localizedDescription)")
+                NSLog("SnagAnything: couldn't delete \(id.recordName): \(error.localizedDescription)")
             }
             for url in tempAssets { try? FileManager.default.removeItem(at: url) }
             tempAssets.removeAll()
@@ -398,7 +398,7 @@ final class CloudSync: CKSyncEngineDelegate {
 
         case .sentDatabaseChanges(let sent):
             for failure in sent.failedZoneSaves {
-                NSLog("CaptureLens: couldn't create the sync zone: \(failure.error.localizedDescription)")
+                NSLog("SnagAnything: couldn't create the sync zone: \(failure.error.localizedDescription)")
                 note(failure.error)
             }
 
@@ -450,7 +450,7 @@ final class CloudSync: CKSyncEngineDelegate {
                     captures.append((name, meta, image))
                 }
             default:
-                NSLog("CaptureLens: ignoring unknown record \(name)")
+                NSLog("SnagAnything: ignoring unknown record \(name)")
             }
         }
         LibrarySync.shared.received(captures)
@@ -480,7 +480,7 @@ final class CloudSync: CKSyncEngineDelegate {
                 if error.code == .unknownItem { removeSystemFields(name) }
                 queueSave([name])
             default:
-                NSLog("CaptureLens: couldn't save activity: \(error.localizedDescription)")
+                NSLog("SnagAnything: couldn't save activity: \(error.localizedDescription)")
             }
             return
         }
@@ -529,7 +529,7 @@ final class CloudSync: CKSyncEngineDelegate {
             queueSave([name])
             note(error)
         default:
-            NSLog("CaptureLens: couldn't save \(name): \(error.localizedDescription)")
+            NSLog("SnagAnything: couldn't save \(name): \(error.localizedDescription)")
             note(error)
         }
     }
@@ -544,12 +544,12 @@ final class CloudSync: CKSyncEngineDelegate {
         guard let error = error as? CKError else { return error.localizedDescription }
         // Seen only before a new record type is published to the Production environment.
         if error.localizedDescription.contains("production schema") {
-            return "iCloud isn't set up for CaptureLens yet: its record types haven't been published to Production in the CloudKit Console. Once they are, try again."
+            return "iCloud isn't set up for SnagAnything yet: its record types haven't been published to Production in the CloudKit Console. Once they are, try again."
         }
         switch error.code {
-        case .quotaExceeded: return "Your iCloud storage is full, so CaptureLens can't sync."
+        case .quotaExceeded: return "Your iCloud storage is full, so SnagAnything can't sync."
         case .notAuthenticated: return "Sign in to iCloud in System Settings to sync."
-        case .networkFailure, .networkUnavailable: return "Can't reach iCloud right now. CaptureLens will try again."
+        case .networkFailure, .networkUnavailable: return "Can't reach iCloud right now. SnagAnything will try again."
         default: return error.localizedDescription
         }
     }
@@ -610,7 +610,7 @@ final class CloudSync: CKSyncEngineDelegate {
             // The picture goes up once; later changes send only the details, and CloudKit
             // keeps the fields a save doesn't touch.
             if let image = LibrarySync.shared.sealedImageIfNeeded(uuid, using: key, serverKnowsRecord: known) {
-                let file = FileManager.default.temporaryDirectory.appending(path: "CaptureLens-\(UUID().uuidString).clsync")
+                let file = FileManager.default.temporaryDirectory.appending(path: "SnagAnything-\(UUID().uuidString).clsync")
                 guard (try? image.write(to: file)) != nil else { return nil }
                 tempAssets.append(file)
                 record["image"] = CKAsset(fileURL: file)

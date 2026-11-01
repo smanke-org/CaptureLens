@@ -21,8 +21,8 @@ enum ScreenAccess {
     @MainActor
     static func explainDenied() {
         let alert = NSAlert()
-        alert.messageText = "CaptureLens needs Screen Recording access"
-        alert.informativeText = "CaptureLens takes pictures of your screen, which macOS only allows once you switch CaptureLens on in System Settings › Privacy & Security › Screen & System Audio Recording. Captures stay in your library on this Mac (and your other Macs, if you sync)."
+        alert.messageText = "SnagAnything needs Screen Recording access"
+        alert.informativeText = "SnagAnything takes pictures of your screen, which macOS only allows once you switch SnagAnything on in System Settings › Privacy & Security › Screen & System Audio Recording. Captures stay in your library on this Mac (and your other Macs, if you sync)."
         alert.addButton(withTitle: "Not Now")
         let open = alert.addButton(withTitle: "Open System Settings")
         open.keyEquivalent = ""
@@ -38,7 +38,7 @@ struct GrabError: LocalizedError {
     var errorDescription: String? { message }
 }
 
-/// Pictures of the screen through ScreenCaptureKit, always leaving out CaptureLens's own
+/// Pictures of the screen through ScreenCaptureKit, always leaving out SnagAnything's own
 /// windows (the selection overlay, the countdown, the preview).
 enum ScreenGrabber {
     /// A picture of one window on its own, even where other windows cover it, at full
@@ -220,7 +220,7 @@ struct ScreenWindow {
     let ownerPID: pid_t
     let title: String?
 
-    /// Ordinary app windows on screen, frontmost first, leaving out CaptureLens's own.
+    /// Ordinary app windows on screen, frontmost first, leaving out SnagAnything's own.
     @MainActor static func onScreen() -> [ScreenWindow] {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
                 as? [[String: Any]] else { return [] }

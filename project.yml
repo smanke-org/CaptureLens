@@ -56,7 +56,9 @@ targets:
       - package: CaptureLensKit
     settings:
       base:
-        PRODUCT_NAME: CaptureLens
+        # Renamed SnagAnything in 1.1.0; the bundle ID, iCloud container and keychain
+        # items keep the old name, so updates, permissions and data carry over.
+        PRODUCT_NAME: SnagAnything
         PRODUCT_BUNDLE_IDENTIFIER: com.smanke.CaptureLens
         INFOPLIST_FILE: Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Resources/CaptureLens.entitlements

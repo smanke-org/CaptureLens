@@ -1426,7 +1426,7 @@ final class EditorWindow: NSObject, NSWindowDelegate {
             self.window = window
         }
         let selected = LibraryWindow.shared.state.selectedItems
-        window?.title = selected.count == 1 ? selected[0].name : "CaptureLens Editor"
+        window?.title = selected.count == 1 ? selected[0].name : "SnagAnything Editor"
         isOpen = true
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
@@ -1469,7 +1469,7 @@ private struct PoppedEditor: View {
             } else {
                 ContentUnavailableView("Select a Capture", systemImage: "photo",
                                        description: Text("Pick one capture in the library to edit it here."))
-                    .onAppear { EditorWindow.shared.setTitle("CaptureLens Editor") }
+                    .onAppear { EditorWindow.shared.setTitle("SnagAnything Editor") }
             }
         }
         .frame(minWidth: 520, minHeight: 420)

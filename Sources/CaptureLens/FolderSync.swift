@@ -140,7 +140,7 @@ final class FolderSync {
                 keyMismatch = false
             } catch FolderIO.Problem.otherKey {
                 keyMismatch = true
-                lastError = "This folder holds a CaptureLens library encrypted with a different sync passphrase."
+                lastError = "This folder holds a SnagAnything library encrypted with a different sync passphrase."
                 stop(keepError: true)
                 return
             } catch {
@@ -163,7 +163,7 @@ final class FolderSync {
                     MainActor.assumeIsolated { FolderSync.shared.scanSoon() }
                 }
             }
-            NSLog("CaptureLens: folder sync started at \(root.path)")
+            NSLog("SnagAnything: folder sync started at \(root.path)")
             // What's already in the folder comes in first, so newer copies there win.
             await scan()
             // Everything this Mac has goes into the folder once per key and folder.
@@ -173,7 +173,7 @@ final class FolderSync {
                 let missing = await io.missingItems(root: root, ids: ids)
                 await write(Set(missing))
                 try? db?.set(tag, forKey: Keys.uploadedFor)
-                NSLog("CaptureLens: put \(missing.count) captures in the sync folder")
+                NSLog("SnagAnything: put \(missing.count) captures in the sync folder")
             }
             let outbox = loadOutbox()
             if !outbox.isEmpty {
@@ -407,7 +407,7 @@ final class FolderSync {
         saveSeen()
         if !resend.isEmpty { await write(resend) }
         if !updates.isEmpty || !deletions.isEmpty {
-            NSLog("CaptureLens: folder sync brought \(updates.count) change(s), \(deletions.count) deletion(s)")
+            NSLog("SnagAnything: folder sync brought \(updates.count) change(s), \(deletions.count) deletion(s)")
         }
         lastSynced = Date()
         if !keyMismatch { lastError = nil }
@@ -457,7 +457,7 @@ final class FolderSync {
         if let problem = error as? FolderIO.Problem { return problem.message }
         let ns = error as NSError
         if ns.domain == NSCocoaErrorDomain && [NSFileReadNoPermissionError, NSFileWriteNoPermissionError].contains(ns.code) {
-            return "CaptureLens isn't allowed to use that folder. Choose it again, and allow access if macOS asks."
+            return "SnagAnything isn't allowed to use that folder. Choose it again, and allow access if macOS asks."
         }
         return error.localizedDescription
     }
@@ -471,8 +471,8 @@ final class FolderIO: @unchecked Sendable {
 
         var message: String {
             switch self {
-            case .otherKey: "This folder holds a CaptureLens library encrypted with a different sync passphrase."
-            case .notReady: "The sync folder is still arriving on this Mac. CaptureLens will look again shortly."
+            case .otherKey: "This folder holds a SnagAnything library encrypted with a different sync passphrase."
+            case .notReady: "The sync folder is still arriving on this Mac. SnagAnything will look again shortly."
             case .missing: "The sync folder isn't there. Is its drive connected, and is the sync app running?"
             }
         }
@@ -486,7 +486,7 @@ final class FolderIO: @unchecked Sendable {
         var key: String { "\(entry.kind.folder)/\(url.lastPathComponent)" }
     }
 
-    private let queue = DispatchQueue(label: "CaptureLens.FolderIO", qos: .utility)
+    private let queue = DispatchQueue(label: "SnagAnything.FolderIO", qos: .utility)
 
     private func run<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
@@ -598,7 +598,7 @@ final class FolderIO: @unchecked Sendable {
             var result: URL?
             var error: NSError?
             NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &error) { source in
-                let copy = FileManager.default.temporaryDirectory.appending(path: "CaptureLens-\(UUID().uuidString).clvideo")
+                let copy = FileManager.default.temporaryDirectory.appending(path: "SnagAnything-\(UUID().uuidString).clvideo")
                 if (try? FileManager.default.copyItem(at: source, to: copy)) != nil { result = copy }
             }
             return result

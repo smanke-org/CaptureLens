@@ -80,23 +80,23 @@ final class VideoStore {
     /// A movie that arrived from another Mac, sealed with the sync key.
     func receive(_ id: UUID, sealedWith key: SymmetricKey, from file: URL) async {
         guard !has(id) else { return }
-        let plain = FileManager.default.temporaryDirectory.appending(path: "CaptureLens-\(UUID().uuidString).mp4")
+        let plain = FileManager.default.temporaryDirectory.appending(path: "SnagAnything-\(UUID().uuidString).mp4")
         do {
             try await Task.detached(priority: .utility) { try ChunkedSeal.open(file, to: plain, key: key) }.value
             try store(plain, for: id)
-            NSLog("CaptureLens: a video arrived from another Mac")
+            NSLog("SnagAnything: a video arrived from another Mac")
         } catch {
             try? FileManager.default.removeItem(at: plain)
-            NSLog("CaptureLens: couldn't open a synced video: \(error.localizedDescription)")
+            NSLog("SnagAnything: couldn't open a synced video: \(error.localizedDescription)")
         }
     }
 
     /// The movie sealed with the sync key, in a temporary file, for sending to other Macs.
     nonisolated static func sealedForSync(_ stored: (url: URL, sealed: Bool), libraryKey: SymmetricKey?, syncKey: SymmetricKey) throws -> URL {
-        let out = FileManager.default.temporaryDirectory.appending(path: "CaptureLens-\(UUID().uuidString).clvideo")
+        let out = FileManager.default.temporaryDirectory.appending(path: "SnagAnything-\(UUID().uuidString).clvideo")
         if stored.sealed {
             guard let libraryKey else { throw ChunkedSeal.Failure.damaged }
-            let plain = FileManager.default.temporaryDirectory.appending(path: "CaptureLens-\(UUID().uuidString).mp4")
+            let plain = FileManager.default.temporaryDirectory.appending(path: "SnagAnything-\(UUID().uuidString).mp4")
             defer { try? FileManager.default.removeItem(at: plain) }
             try ChunkedSeal.open(stored.url, to: plain, key: libraryKey)
             try ChunkedSeal.seal(plain, to: out, key: syncKey)
@@ -124,7 +124,7 @@ final class VideoStore {
             }.value
             return copy
         } catch {
-            NSLog("CaptureLens: couldn't open the video: \(error.localizedDescription)")
+            NSLog("SnagAnything: couldn't open the video: \(error.localizedDescription)")
             return nil
         }
     }
@@ -160,7 +160,7 @@ final class VideoStore {
                         try FileManager.default.removeItem(at: url)
                     }
                 } catch {
-                    NSLog("CaptureLens: couldn't rewrite a video: \(error.localizedDescription)")
+                    NSLog("SnagAnything: couldn't rewrite a video: \(error.localizedDescription)")
                 }
             }
         }.value
@@ -204,7 +204,7 @@ extension LibraryStore {
         do {
             try VideoStore.shared.store(movie, for: item.id)
         } catch {
-            NSLog("CaptureLens: couldn't keep the video: \(error.localizedDescription)")
+            NSLog("SnagAnything: couldn't keep the video: \(error.localizedDescription)")
             delete([item.id])
             return nil
         }

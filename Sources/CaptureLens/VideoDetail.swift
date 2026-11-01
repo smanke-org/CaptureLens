@@ -476,7 +476,7 @@ enum VideoExport {
     /// without re-encoding is quick).
     @MainActor static func temporaryFile(_ item: CaptureItem) -> URL? {
         guard let source = playableNow(item.id), let info = item.video else { return nil }
-        let folder = FileManager.default.temporaryDirectory.appending(path: "CaptureLens Drag/\(item.id.uuidString)")
+        let folder = FileManager.default.temporaryDirectory.appending(path: "SnagAnything Drag/\(item.id.uuidString)")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let url = folder.appending(path: "\(item.name).mp4")
         let done = DispatchSemaphore(value: 0)
@@ -496,7 +496,7 @@ enum VideoExport {
             guard let source = await VideoStore.shared.playableURL(item.id), let info = item.video else {
                 return Notice.shared.show(error: "The video isn't on this Mac")
             }
-            let folder = FileManager.default.temporaryDirectory.appending(path: "CaptureLens Copy/\(item.id.uuidString)")
+            let folder = FileManager.default.temporaryDirectory.appending(path: "SnagAnything Copy/\(item.id.uuidString)")
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let url = folder.appending(path: "\(item.name).mp4")
             do {

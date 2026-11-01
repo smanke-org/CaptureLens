@@ -20,7 +20,7 @@ final class LibraryWindow: NSObject, NSWindowDelegate {
             let hosting = NSHostingController(rootView: LibraryView(state: state))
             hosting.sizingOptions = []
             let window = NSWindow(contentViewController: hosting)
-            window.title = "CaptureLens"
+            window.title = "SnagAnything"
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
             window.toolbarStyle = .unified
             window.setContentSize(NSScreen.fitting(NSSize(width: 1180, height: 760)))
@@ -450,7 +450,7 @@ struct LibraryToolbar: ToolbarContent {
             Button { state.showInspector.toggle() } label: { Label("Details", systemImage: "sidebar.right") }
                 .help(state.showInspector ? "Hide the selected capture" : "Show the selected capture")
             Button { SettingsWindow.shared.show() } label: { Label("Settings", systemImage: "gearshape") }
-                .help("CaptureLens Settings")
+                .help("SnagAnything Settings")
         }
     }
 
@@ -1190,12 +1190,16 @@ struct CaptureCell: View {
                         .padding(6)
                 }
             }
+            .overlay(alignment: .bottom) {
+                if item.kind == .text { TextPreviewStrip(text: item.recognizedText, size: size) }
+            }
             .overlay(alignment: .topTrailing) {
                 if item.favorite {
                     Image(systemName: "star.fill").foregroundStyle(.yellow).shadow(radius: 1).padding(6)
                 }
             }
-            .overlay(alignment: .bottomLeading) {
+            // A text capture's strip has the bottom, so its tags go to the top.
+            .overlay(alignment: item.kind == .text ? .topLeading : .bottomLeading) {
                 if !item.tags.isEmpty {
                     Text(item.tags.prefix(2).joined(separator: " · ") + (item.tags.count > 2 ? " +\(item.tags.count - 2)" : ""))
                         .font(.caption2.weight(.medium))
@@ -1217,6 +1221,34 @@ struct CaptureCell: View {
         }
         .contentShape(Rectangle())
         .help(item.name)
+    }
+}
+
+/// Along the bottom of a Capture Text thumbnail: the first words that were copied, so it
+/// reads as text at a glance.
+struct TextPreviewStrip: View {
+    let text: String
+    let size: Double
+
+    private var preview: String {
+        text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Image(systemName: "text.quote").font(.caption2.weight(.semibold))
+            Text(preview.isEmpty ? "Text" : preview)
+                .font(.caption2)
+                .lineLimit(size >= 220 ? 2 : 1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 7).padding(.vertical, 4)
+        .background(.black.opacity(0.7))
+        .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 8, bottomTrailingRadius: 8))
+        .help(text)
     }
 }
 

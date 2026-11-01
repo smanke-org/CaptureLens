@@ -30,6 +30,15 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         if let tab, let tabs = window?.contentViewController as? SettingsTabs { tabs.select(tab) }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+        #if !APPSTORE
+        // After an update whose notes weren't seen yet.
+        if let window { WhatsNew.shared.present(on: window) }
+        #endif
+    }
+
+    /// This version's release notes, when asked for from Settings.
+    func showWhatsNew() {
+        if let window { WhatsNew.shared.present(on: window, asked: true) }
     }
 
     #if DEBUG
@@ -203,7 +212,7 @@ struct CaptureSettings: View {
         Form {
             if !screenGranted && !Self.shooting {
                 Section {
-                    Label("CaptureLens needs Screen Recording access to capture the screen. Turn on CaptureLens in Screen & System Audio Recording.",
+                    Label("SnagAnything needs Screen Recording access to capture the screen. Turn on SnagAnything in Screen & System Audio Recording.",
                           systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
                     Button("Open Privacy Settings") {
@@ -242,7 +251,7 @@ struct CaptureSettings: View {
             } header: {
                 Text("Naming and search")
             } footer: {
-                Text("Naming uses Apple Intelligence on this Mac, and text is read with macOS's own Live Text. Nothing is sent anywhere. The first time you capture a browser window, macOS asks whether CaptureLens may ask that browser for its page address.")
+                Text("Naming uses Apple Intelligence on this Mac, and text is read with macOS's own Live Text. Nothing is sent anywhere. The first time you capture a browser window, macOS asks whether SnagAnything may ask that browser for its page address.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
@@ -336,6 +345,7 @@ struct PresetSettings: View {
             Section("Other shortcuts") {
                 LabeledContent("Open the library") { ShortcutRecorder(hotKey: $prefs.libraryHotKey) }
                 LabeledContent("Capture the same area again") { ShortcutRecorder(hotKey: $prefs.captureAgainHotKey) }
+                LabeledContent("Capture text") { ShortcutRecorder(hotKey: $prefs.captureTextHotKey) }
             }
         }
         .formStyle(.grouped)
@@ -425,7 +435,7 @@ struct PresetEditor: View {
         case .window: "Click the window to capture. It's captured on its own, even where other windows cover it."
         case .screen: "Captures the whole screen the pointer is on, straight away."
         case .fixedSize: "A frame of this size follows the pointer; click to capture what's inside."
-        case .scrolling: "Click a window or drag over an area, then scroll it (or let CaptureLens scroll it). The frames are stitched into one tall picture."
+        case .scrolling: "Click a window or drag over an area, then scroll it (or let SnagAnything scroll it). The frames are stitched into one tall picture."
         case .recording: "Click a window, drag over an area or press Return for the whole screen, then choose sound, camera and highlights and press Record. The shortcut again stops it. With no delay, it counts down 3 seconds."
         }
     }
@@ -459,7 +469,7 @@ struct LibrarySettings: View {
         case (false, _):
             "Captures stay on this Mac. Settings still sync when that's on in General. Each Mac makes this choice for itself."
         case (true, .iCloud):
-            "Captures, with their names, tags, notes and pictures, go to every Mac where you use CaptureLens with sync on, end-to-end encrypted with your sync passphrase. Deleting a capture removes it everywhere. Captures count against your iCloud storage."
+            "Captures, with their names, tags, notes and pictures, go to every Mac where you use SnagAnything with sync on, end-to-end encrypted with your sync passphrase. Deleting a capture removes it everywhere. Captures count against your iCloud storage."
         case (true, .folder):
             "Captures go into a folder that Dropbox, OneDrive, Google Drive or any other sync app keeps on all your Macs, each file encrypted with your sync passphrase, so the service can't see them. Each Mac picks where that folder is; settings still sync through iCloud. Each Mac makes this choice for itself, so choose the same on every Mac that shares the library."
         }
@@ -598,7 +608,7 @@ struct LibrarySettings: View {
                     Button("Import from Snagit…") { SnagitImportWindow.shared.show() }
                 }
             } footer: {
-                Text("Brings in your Snagit captures with their dates, apps, web addresses and tags, and their markup editable where CaptureLens has the same tool. Videos can come too; they stay on this Mac.")
+                Text("Brings in your Snagit captures with their dates, apps, web addresses and tags, and their markup editable where SnagAnything has the same tool. Videos can come too; they stay on this Mac.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -606,7 +616,7 @@ struct LibrarySettings: View {
         .confirmationDialog("Remove the library's copies from iCloud?", isPresented: $confirmRemoveICloud) {
             Button("Remove from iCloud", role: .destructive) { librarySync.removeFromICloud() }
         } message: {
-            Text("Your captures stay on your Macs and in the sync folder; only the copies in iCloud go. First update CaptureLens to this version on every Mac that syncs: an older version still syncing the library through iCloud would delete those captures too.")
+            Text("Your captures stay on your Macs and in the sync folder; only the copies in iCloud go. First update SnagAnything to this version on every Mac that syncs: an older version still syncing the library through iCloud would delete those captures too.")
         }
         .confirmationDialog("Stop encrypting the library on this Mac?", isPresented: $confirmDecrypt) {
             Button("Stop Encrypting", role: .destructive) { store.setEncrypted(false) }
@@ -675,31 +685,31 @@ struct GeneralSettings: View {
     private var updateFooter: String {
         switch updater.policy {
         case .automatic:
-            "CaptureLens checks \(updater.interval.phrase). A new version installs itself when no capture is under way, CaptureLens hasn't been used for 30 minutes, no app is presenting or keeping the screen awake, and your Mac hasn't been used for 2 minutes. You'll get a notification when it's done."
+            "SnagAnything checks \(updater.interval.phrase). A new version installs itself when no capture is under way, SnagAnything hasn't been used for 30 minutes, no app is presenting or keeping the screen awake, and your Mac hasn't been used for 2 minutes. You'll get a notification when it's done."
         case .ask:
-            "CaptureLens checks \(updater.interval.phrase) and sends a notification when a new version is out. Nothing installs until you choose to."
+            "SnagAnything checks \(updater.interval.phrase) and sends a notification when a new version is out. Nothing installs until you choose to."
         case .off:
-            "CaptureLens won't look for updates on its own. Use Check Now whenever you like."
+            "SnagAnything won't look for updates on its own. Use Check Now whenever you like."
         }
     }
 
     var body: some View {
         Form {
-            AppearanceSection(appName: "CaptureLens") { SettingsSync.shared.localDidChange() }
-            Section("Where CaptureLens appears") {
+            AppearanceSection(appName: "SnagAnything") { SettingsSync.shared.localDidChange() }
+            Section("Where SnagAnything appears") {
                 Toggle("Show in Dock", isOn: $presence.showInDock)
                 Toggle("Show in menu bar", isOn: $presence.showInMenuBar)
                 #if !APPSTORE
                 Toggle("Put in ToolHUD’s menu while ToolHUD is running", isOn: $hub.foldIntoToolHUD)
-                    .help("ToolHUD shows this menu as a submenu of its own, and CaptureLens’s icon leaves the menu bar until ToolHUD quits.")
+                    .help("ToolHUD shows this menu as a submenu of its own, and SnagAnything’s icon leaves the menu bar until ToolHUD quits.")
                 #endif
                 if !presence.showInDock && !presence.showInMenuBar {
-                    Text(AppPresence.hiddenEverywhereNote(appName: "CaptureLens", settingsName: "Settings"))
+                    Text(AppPresence.hiddenEverywhereNote(appName: "SnagAnything", settingsName: "Settings"))
                         .font(.callout).foregroundStyle(.secondary)
                 }
             }
             Section {
-                Toggle("Open CaptureLens at login", isOn: Binding(get: { login.isEnabled }, set: { login.set($0) }))
+                Toggle("Open SnagAnything at login", isOn: Binding(get: { login.isEnabled }, set: { login.set($0) }))
                 if login.needsApproval {
                     Button("Allow in Login Items…") { login.openLoginItemsSettings() }
                 }
@@ -707,7 +717,7 @@ struct GeneralSettings: View {
                     Text(error).font(.callout).foregroundStyle(.red)
                 }
                 Toggle("Ask before quitting", isOn: $prefs.confirmQuit)
-                    .help("Quitting CaptureLens asks first, so a stray ⌘Q doesn't stop the capture shortcuts.")
+                    .help("Quitting SnagAnything asks first, so a stray ⌘Q doesn't stop the capture shortcuts.")
             }
             Section {
                 Toggle("Sync with your other Macs", isOn: $sync.isEnabled)
@@ -769,7 +779,10 @@ struct GeneralSettings: View {
                     }
                 }
                 LabeledContent("Version \(AppInfo.displayVersion)") {
-                    Button("Check Now") { UpdateController.checkForUpdates() }
+                    HStack {
+                        Button("What's New…") { SettingsWindow.shared.showWhatsNew() }
+                        Button("Check Now") { UpdateController.checkForUpdates() }
+                    }
                 }
                 if let error = updater.lastError {
                     Text(error).font(.callout).foregroundStyle(.red)
@@ -778,7 +791,7 @@ struct GeneralSettings: View {
                     LabeledContent {
                         Button("Open Notification Settings") { AutoUpdater.openNotificationSettings() }
                     } label: {
-                        Label("Notifications are off for CaptureLens, so update news only shows in the menu.",
+                        Label("Notifications are off for SnagAnything, so update news only shows in the menu.",
                               systemImage: "bell.slash").foregroundStyle(.orange)
                     }
                 }
@@ -789,7 +802,7 @@ struct GeneralSettings: View {
             }
             #endif
             Section {
-                LabeledContent("All CaptureLens settings") {
+                LabeledContent("All SnagAnything settings") {
                     Button("Reset to Defaults…") { confirmReset = true }
                 }
             }
@@ -799,13 +812,13 @@ struct GeneralSettings: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             updater.refreshNotificationStatus()
         }
-        .confirmationDialog("Reset CaptureLens settings?", isPresented: $confirmReset) {
+        .confirmationDialog("Reset SnagAnything settings?", isPresented: $confirmReset) {
             Button("Reset", role: .destructive) {
                 prefs.resetToDefaults()
                 HotKeyCenter.shared.apply()
             }
         } message: {
-            Text("Presets, shortcuts and options go back to how CaptureLens started. Your library, where CaptureLens appears and login stay as they are.")
+            Text("Presets, shortcuts and options go back to how SnagAnything started. Your library, where SnagAnything appears and login stay as they are.")
         }
     }
 }
@@ -1017,7 +1030,7 @@ struct FolderSyncRows: View {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = "Use This Folder"
-        panel.message = "Choose a folder that your sync app keeps on all your Macs. CaptureLens puts a “CaptureLens Library” folder inside it."
+        panel.message = "Choose a folder that your sync app keeps on all your Macs. SnagAnything puts a “CaptureLens Library” folder inside it."
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let url = panel.url else { return }
         // Picking the library folder itself means its parent.

@@ -40,7 +40,7 @@ enum Help {
         func preset(_ index: Int) -> HotKey? { p.preset(CapturePreset.defaults[index].id)?.hotKey }
         let keys: [(String, HotKey?)] = [
             ("capture", preset(0)), ("screen", preset(1)), ("window", preset(2)),
-            ("library", p.libraryHotKey), ("again", p.captureAgainHotKey), ("scrolling", preset(4)),
+            ("library", p.libraryHotKey), ("again", p.captureAgainHotKey), ("text", p.captureTextHotKey), ("scrolling", preset(4)),
             ("record", p.preset(CapturePreset.defaults[5].id)?.hotKey ?? p.presets.first { $0.mode == .recording }?.hotKey),
         ]
         var out = text
@@ -73,7 +73,7 @@ enum Help {
 
     static var topics: [HelpTopic] { [
         HelpTopic(id: "getting-started", title: "Getting Started", symbol: "sparkles", blocks: [
-            .text("CaptureLens takes pictures of your screen and keeps every one in a searchable library. Each capture is named from what's in it, and you can tag it, add notes, and select and copy the text right in the picture."),
+            .text("SnagAnything takes pictures of your screen and keeps every one in a searchable library. Each capture is named from what's in it, and you can tag it, add notes, and select and copy the text right in the picture."),
             .keys([
                 ("{hotkey:capture}", "Capture a window (click it) or an area (drag over it)"),
                 ("{hotkey:screen}", "Capture the whole screen"),
@@ -83,10 +83,11 @@ enum Help {
                 ("Dock icon or ⌘-Tab", "Open the library (turn on Show in Dock in Settings › General)"),
             ]),
             .heading("Allow Screen Recording"),
-            .text("CaptureLens needs Screen Recording permission to see the screen. If the menu bar menu shows \"Allow Screen Recording…\", choose it, switch CaptureLens on, and open CaptureLens again."),
+            .text("SnagAnything needs Screen Recording permission to see the screen. If the menu bar menu shows \"Allow Screen Recording…\", choose it, switch SnagAnything on, and open SnagAnything again."),
+            .tip("SnagAnything was called CaptureLens before version 1.1.0. Your library, settings, shortcuts and permissions came along with it."),
             .tip("The screen freezes while you pick, so a menu, tooltip or video frame stays put while you select it."),
-            .tip("While ToolHUD is running, CaptureLens's menu moves into ToolHUD's menu bar menu as a submenu, and the icon here steps aside until ToolHUD quits. To keep the icon, turn off \"Put in ToolHUD's menu while ToolHUD is running\" in Settings."),
-            .tip("Quitting asks first, since capture shortcuts stop while CaptureLens is closed. Turn off \"Ask before quitting\" in Settings › General, or tick \"Don't ask again\" when it asks."),
+            .tip("While ToolHUD is running, SnagAnything's menu moves into ToolHUD's menu bar menu as a submenu, and the icon here steps aside until ToolHUD quits. To keep the icon, turn off \"Put in ToolHUD's menu while ToolHUD is running\" in Settings."),
+            .tip("Quitting asks first, since capture shortcuts stop while SnagAnything is closed. Turn off \"Ask before quitting\" in Settings › General, or tick \"Don't ask again\" when it asks."),
         ]),
 
         HelpTopic(id: "capture", title: "Capturing", symbol: "camera.viewfinder", blocks: [
@@ -108,13 +109,20 @@ enum Help {
             .text("Presets can count down before capturing (to open a menu first, say) or capture a frame of an exact size that follows the pointer. See Presets and Shortcuts."),
         ]),
 
+        HelpTopic(id: "capture-text", title: "Capture Text", symbol: "text.viewfinder", blocks: [
+            .text("Press {hotkey:text} (or choose Capture Text in the menu bar menu) and drag over any text on screen: in a picture, a video, a PDF, or an app that won't let you select it. The text is read on this Mac and copied, ready to paste."),
+            .text("The picture also goes into the library as a Text capture, with a strip along the bottom of its thumbnail showing the first words that were copied. Search finds it by its text, the Text filter shows only these, and right-click › Copy Text copies the text again."),
+            .tip("Text keeps its line breaks, so tables and lists paste the way they looked. If nothing was found, try a bigger area or zoom in first."),
+        ]),
+
         HelpTopic(id: "presets", title: "Presets and Shortcuts", symbol: "keyboard", blocks: [
             .text("A preset is a saved way to capture: what to capture, a countdown, an exact size, whether to copy, whether to open the capture in the library, and its own keyboard shortcut. Edit them in Settings › Presets."),
             .keys(presetRows),
             .keys([
                 ("{hotkey:library}", "Open the library"),
                 ("{hotkey:again}", "Capture the same area again"),
-                ("⌘?", "This Help, from CaptureLens's menus"),
+                ("{hotkey:text}", "Capture Text: copy the text in an area"),
+                ("⌘?", "This Help, from SnagAnything's menus"),
             ]),
             .text("Click a shortcut, then press the new keys. Delete clears it; shortcuts need ⌘, ⌥ or ⌃. Right-click a preset to duplicate, delete or try it."),
         ]),
@@ -145,8 +153,8 @@ enum Help {
             .heading("Toolbar or dial"),
             .text("The two buttons at the right of the row above the picture (or Settings › Library, or the Markup tab) switch the tools between the floating toolbar and a radial dial. The dial opens around the pointer when you right-click the picture or hold ⌘⌥ over it, as you choose: the tools you use most are closest to the middle, the rest around them, with colors inside and line widths underneath. Click a tool, or with ⌘⌥ held, let go over it. Esc or a click outside closes it. Drag any empty part of the dial to move it. The pin under it keeps it open: then picking a tool leaves it where it is, and clicks on the picture draw as usual; Esc or the middle of the dial closes it."),
             .heading("Smart tools"),
-            .text("Edit Text changes words in the picture itself. Pick the tool and the lines of text CaptureLens found are outlined; click one and type. The old words are painted out with the background around them, and the new ones are set in a matching size, weight and color. Leave the line empty to just paint it out, or drag over any area to paint it out and type something new there."),
-            .text("Smart Move picks up parts of the picture (buttons, icons, lines of text, fields) and puts them down elsewhere. Pick the tool, click a part and drag it; the spot it leaves is filled in with the background. Drag its handles to make it bigger or smaller, or drag over an area by hand to move something CaptureLens didn't outline."),
+            .text("Edit Text changes words in the picture itself. Pick the tool and the lines of text SnagAnything found are outlined; click one and type. The old words are painted out with the background around them, and the new ones are set in a matching size, weight and color. Leave the line empty to just paint it out, or drag over any area to paint it out and type something new there."),
+            .text("Smart Move picks up parts of the picture (buttons, icons, lines of text, fields) and puts them down elsewhere. Pick the tool, click a part and drag it; the spot it leaves is filled in with the background. Drag its handles to make it bigger or smaller, or drag over an area by hand to move something SnagAnything didn't outline."),
             .text("Simplify (the shapes button) redraws the picture as plain shapes: a bar for each line of text and a box, circle or outline for each other part, in their own colors or in grays. It's handy for showing a layout without its details, or for keeping attention on one part: delete the shapes over the part that matters. Remove Simplify takes them all away."),
             .tip("These work best on screenshots of apps and web pages, with plain backgrounds. Everything they do is an ordinary mark: select it to recolor, move or delete it, and the original picture is never changed."),
             .heading("Adjusting the picture"),
@@ -170,7 +178,7 @@ enum Help {
         ]),
 
         HelpTopic(id: "video", title: "Recording Video", symbol: "video", blocks: [
-            .text("Press {hotkey:record} (the Record Video preset), then click a window, drag over an area, or press Return for the whole screen. A panel appears with a switch for each thing to record along with the screen (a blue symbol is on, a struck-through gray one off); press Record, and after the countdown CaptureLens records. Press {hotkey:record} again, or Stop in the panel or the menu bar menu, to finish: the video goes into the library. The panel's choices are the same settings as Settings › Capture › Video recording; change either and both change."),
+            .text("Press {hotkey:record} (the Record Video preset), then click a window, drag over an area, or press Return for the whole screen. A panel appears with a switch for each thing to record along with the screen (a blue symbol is on, a struck-through gray one off); press Record, and after the countdown SnagAnything records. Press {hotkey:record} again, or Stop in the panel or the menu bar menu, to finish: the video goes into the library. The panel's choices are the same settings as Settings › Capture › Video recording; change either and both change."),
             .keys([
                 ("Record the Mac's sound", "The Mac's own sound: videos, calls, alerts"),
                 ("Record the microphone", "Your voice; with more than one microphone, choose which below the switch"),
@@ -180,17 +188,17 @@ enum Help {
                 ("Frame rate", "Frames a second, from 10 to 60. Fewer make a smaller video: 10 or 15 suits apps, documents and web pages; 30 or 60 suits video and animation"),
                 ("Countdown", "None, 3 or 5 seconds to get ready before recording starts (a preset with its own delay waits that instead)"),
             ]),
-            .text("Pause and Resume leave out the time in between. The panel, the red outline and CaptureLens's other windows are never in the video."),
+            .text("Pause and Resume leave out the time in between. The panel, the red outline and SnagAnything's other windows are never in the video."),
             .heading("In the library"),
             .text("Recordings are named from what's in them and their text is searchable, like pictures; Type › Video in the filters shows just them. With Edit on, the timeline below the player trims and cuts: drag the yellow handles to trim the start and end (or use Start Here and End Here at the playhead), turn on Cut Out and drag across a section to take it out, click a cut and press Delete to put it back. Turn Edit off to watch the finished video. Nothing is cut from the recording itself."),
             .text("Save Frame adds the frame at the playhead to the library as a picture, to mark up like any capture. Copy, Save As (MP4 or an animated GIF), dragging out, sharing and Export all use the finished video."),
             .heading("Syncing videos"),
             .text("Every recording's name, tags, notes and first frame sync like any capture. The video files themselves stay on the Mac that recorded them unless you turn on \"Sync video files\" in Settings › Library; then they go to your other Macs too, encrypted, through iCloud or your sync folder. Long recordings take a lot of space."),
-            .tip("The first time, macOS asks to allow CaptureLens to use the microphone or camera, and Keys needs CaptureLens turned on in Privacy & Security › Accessibility."),
+            .tip("The first time, macOS asks to allow SnagAnything to use the microphone or camera, and Keys needs SnagAnything turned on in Privacy & Security › Accessibility."),
         ]),
 
         HelpTopic(id: "activity", title: "Activity", symbol: "chart.bar.xaxis", blocks: [
-            .text("Settings › Activity shows how many captures you've made, by kind (area, window, full screen, scrolling, steps and video), in a graph that starts at a week and widens to 30, 90 and 180 days, then a year, as you use CaptureLens. Hover over a bar to see its count."),
+            .text("Settings › Activity shows how many captures you've made, by kind (area, window, full screen, scrolling, steps and video), in a graph that starts at a week and widens to 30, 90 and 180 days, then a year, as you use SnagAnything. Hover over a bar to see its count."),
             .text("Below the graph: how many videos you recorded and for how long, the apps and websites you captured most, and how many marks you added and how often you copied, saved, exported, dragged out and shared captures. Imported pictures, such as those brought over from Snagit or collected from macOS screenshots, are counted apart, so an import doesn't swamp the graph."),
             .text("With sync on, This Mac and All Macs switch between this Mac's numbers and every Mac's added together, and All Macs lists each Mac's captures. Only the numbers are kept and shared, encrypted like your settings, never what you captured. The first time, Activity starts from the captures this Mac already took."),
         ]),
@@ -236,20 +244,20 @@ enum Help {
                 ("Slider below the captures, or ⌘+ / ⌘−", "Make the thumbnails bigger or smaller"),
             ]),
             .heading("Captures from other tools"),
-            .text("To keep everything in one library whatever you capture with, turn on macOS screenshots or Snagit captures in Settings › Library › Captures from other tools. New ones come in as you take them, and CaptureLens asks whether to bring in ones you already have: only new ones, the last 7, 30 or 90 days, or all of them. Screenshots taken with ⇧⌘3, ⇧⌘4, ⇧⌘5 or the Screenshot app are found wherever they're saved, and keep whether they were an area, a window or the screen; for one taken while CaptureLens was running, it notes the app and window too. Snagit captures come in as an import from Snagit would."),
+            .text("To keep everything in one library whatever you capture with, turn on macOS screenshots or Snagit captures in Settings › Library › Captures from other tools. New ones come in as you take them, and SnagAnything asks whether to bring in ones you already have: only new ones, the last 7, 30 or 90 days, or all of them. Screenshots taken with ⇧⌘3, ⇧⌘4, ⇧⌘5 or the Screenshot app are found wherever they're saved, and keep whether they were an area, a window or the screen; for one taken while SnagAnything was running, it notes the app and window too. Snagit captures come in as an import from Snagit would."),
             .text("The original files stay where they are. Each comes in once, even if you delete it from the library later, and one another Mac already brought in isn't added twice. Pictures only, for now. Each is tagged OS Screenshot or SnagIt Screenshot, so the Tags filter or the sidebar shows just those, and Info › Source shows which tool took it."),
             .heading("Moving from Snagit"),
-            .text("Choose Import from Snagit… in the menu bar menu (or Settings › Library). CaptureLens finds Snagit's folders, such as its autosave folder and a library kept in OneDrive or iCloud Drive, and shows what's there; add any other folder of Snagit captures. Each capture comes in with its date, app, window, web address and tags. Boxes, ellipses, arrows, lines, text, steps, highlights, pen strokes, magnifiers, blur and callouts become CaptureLens marks you can edit, when they draw the same as in Snagit; otherwise, or with Snagit tools CaptureLens doesn't have, the capture comes in as Snagit drew it. The Photos library is never touched, and Snagit's files aren't changed."),
+            .text("Choose Import from Snagit… in the menu bar menu (or Settings › Library). SnagAnything finds Snagit's folders, such as its autosave folder and a library kept in OneDrive or iCloud Drive, and shows what's there; add any other folder of Snagit captures. Each capture comes in with its date, app, window, web address and tags. Boxes, ellipses, arrows, lines, text, steps, highlights, pen strokes, magnifiers, blur and callouts become SnagAnything marks you can edit, when they draw the same as in Snagit; otherwise, or with Snagit tools SnagAnything doesn't have, the capture comes in as Snagit drew it. The Photos library is never touched, and Snagit's files aren't changed."),
             .text("Videos are copied to a folder of their own (Movies › CaptureLens Imports, unless you choose another). They play in the library but never sync, even with \"Sync video files\" on; deleting one from the library deletes its copy. Empty placeholders Snagit left, duplicates and captures already imported are skipped, so importing again only adds what's new."),
         ]),
 
         HelpTopic(id: "sync", title: "Sync and Security", symbol: "lock.icloud", blocks: [
-            .text("Turn on \"Sync with your other Macs\" in Settings › General and choose a sync passphrase. Your settings and your library then follow you to every Mac with CaptureLens and sync on, end-to-end encrypted: neither Apple nor the developer can see them. Below it, Settings and Library switch each on or off for this Mac alone."),
+            .text("Turn on \"Sync with your other Macs\" in Settings › General and choose a sync passphrase. Your settings and your library then follow you to every Mac with SnagAnything and sync on, end-to-end encrypted: neither Apple nor the developer can see them. Below it, Settings and Library switch each on or off for this Mac alone."),
             .text("The library window's layout comes along too: the sidebar's width and which of its sections are open, the line between the captures and the picture, the line between the picture and its details, which panes are folded or hidden, thumbnail size, sort order, and the Info or Markup tab. Sizes go as shares of the window, so a pane that's half the window on a big screen is half on a small one. The window's own size and place stay with each Mac, and another Mac's layout is taken up the next time you open the library, so nothing moves while you work."),
             .heading("Syncing the library through Dropbox, OneDrive or Google Drive"),
-            .text("In Settings › Library, set \"Sync the library through\" to \"Dropbox, OneDrive or Google Drive\", then choose where the folder is on this Mac: Dropbox, OneDrive and Google Drive are offered when they're installed, or pick any folder that a sync app keeps on all your Macs. CaptureLens puts a \"CaptureLens Library\" folder inside it. Settings and the sync passphrase still go through iCloud."),
+            .text("In Settings › Library, set \"Sync the library through\" to \"Dropbox, OneDrive or Google Drive\", then choose where the folder is on this Mac: Dropbox, OneDrive and Google Drive are offered when they're installed, or pick any folder that a sync app keeps on all your Macs. SnagAnything puts a \"CaptureLens Library\" folder inside it. Settings and the sync passphrase still go through iCloud."),
             .text("Each Mac makes this choice for itself, so choose the same on every Mac that shares the library; each picks its own folder location. On a Mac that hasn't yet, the menu bar menu shows \"Choose Sync Folder…\". Every file in the folder is encrypted with your sync passphrase, so the sync service can't see your captures."),
-            .tip("Changes arrive once the sync app has synced the folder, usually within seconds. If two Macs change the same capture at once, the newest change wins and the sync app's \"conflicted copy\" files are tidied away. After moving the library to a folder, \"Remove from iCloud…\" frees the iCloud space; update CaptureLens on every Mac first."),
+            .tip("Changes arrive once the sync app has synced the folder, usually within seconds. If two Macs change the same capture at once, the newest change wins and the sync app's \"conflicted copy\" files are tidied away. After moving the library to a folder, \"Remove from iCloud…\" frees the iCloud space; update SnagAnything on every Mac first."),
             .text("On each Mac, Settings › Library can encrypt the library file itself and require Touch ID or your password to open the library. The lock comes back after a while away, when the Mac sleeps, or when the screen locks. Capturing keeps working while it's locked."),
             .tip("The sync passphrase can't be recovered. If you forget it, choose \"Forgot It? Start Over…\"; your other Macs then ask for the new one."),
         ]),
@@ -266,7 +274,7 @@ enum Help {
         HelpTopic(id: "updates", title: "Updates", symbol: "arrow.down.circle", blocks: [
             .text("Settings › General › Updates chooses what happens when a new version is out:"),
             .keys([
-                ("Install automatically", "Downloads and checks it, then installs when no capture is under way, CaptureLens hasn't been used for 30 minutes, nothing is presenting, and your Mac has been idle for 2 minutes"),
+                ("Install automatically", "Downloads and checks it, then installs when no capture is under way, SnagAnything hasn't been used for 30 minutes, nothing is presenting, and your Mac has been idle for 2 minutes"),
                 ("Ask me first", "Sends a notification; nothing installs until you choose to"),
                 ("Don't check", "Only Check Now looks for updates"),
             ]),
@@ -274,39 +282,40 @@ enum Help {
         ]),
 
         HelpTopic(id: "privacy", title: "Privacy", symbol: "hand.raised", blocks: [
-            .text("Naming and text reading run entirely on this Mac. CaptureLens only looks at the screen when you take a capture. With Captures from other tools on, it also reads new macOS screenshots and Snagit files (never the Photos library) to copy them into the library; the files themselves aren't changed. With sync on, your settings and library travel through your iCloud account, encrypted with a passphrase only you know."),
-            .text("You can remove CaptureLens's Screen Recording access at any time in System Settings › Privacy & Security; capturing then stops until you allow it again."),
+            .text("Naming and text reading run entirely on this Mac. SnagAnything only looks at the screen when you take a capture. With Captures from other tools on, it also reads new macOS screenshots and Snagit files (never the Photos library) to copy them into the library; the files themselves aren't changed. With sync on, your settings and library travel through your iCloud account, encrypted with a passphrase only you know."),
+            .text("You can remove SnagAnything's Screen Recording access at any time in System Settings › Privacy & Security; capturing then stops until you allow it again."),
         ]),
 
         HelpTopic(id: "automation", title: "Automation", symbol: "gearshape.2", blocks: [
             .keys([
-                ("capturelens://capture", "Capture a window or an area"),
-                ("capturelens://screen", "Capture the whole screen"),
-                ("capturelens://window", "Capture a window"),
-                ("capturelens://area", "Capture an area"),
-                ("capturelens://scrolling", "Capture a scrolling area"),
-                ("capturelens://steps", "Start (or stop) recording steps"),
-                ("capturelens://record", "Record a video (again to stop)"),
-                ("capturelens://recapture", "Capture the same area again"),
-                ("capturelens://library", "Open the library"),
-                ("capturelens://preset/<name>", "Run a preset by its name"),
+                ("snaganything://capture", "Capture a window or an area"),
+                ("snaganything://screen", "Capture the whole screen"),
+                ("snaganything://window", "Capture a window"),
+                ("snaganything://area", "Capture an area"),
+                ("snaganything://scrolling", "Capture a scrolling area"),
+                ("snaganything://steps", "Start (or stop) recording steps"),
+                ("snaganything://record", "Record a video (again to stop)"),
+                ("snaganything://recapture", "Capture the same area again"),
+                ("snaganything://text", "Capture Text: copy the text in an area"),
+                ("snaganything://library", "Open the library"),
+                ("snaganything://preset/<name>", "Run a preset by its name"),
             ]),
-            .text("Use these links from Shortcuts, scripts or a launcher. ToolHUD's CaptureLens buttons use them. Pictures dropped on CaptureLens's Dock icon are added to the library."),
+            .text("Use these links from Shortcuts, scripts or a launcher. Links starting capturelens://, from before SnagAnything was renamed, still work. ToolHUD's SnagAnything buttons use them. Pictures dropped on SnagAnything's Dock icon are added to the library."),
         ]),
 
         HelpTopic(id: "troubleshooting", title: "Troubleshooting", symbol: "wrench.and.screwdriver", blocks: [
             .heading("Capturing shows only the desktop, or nothing"),
-            .text("CaptureLens needs Screen Recording permission. Choose \"Allow Screen Recording…\" in the menu bar menu, switch CaptureLens on, then quit and reopen CaptureLens."),
+            .text("SnagAnything needs Screen Recording permission. Choose \"Allow Screen Recording…\" in the menu bar menu, switch SnagAnything on, then quit and reopen SnagAnything."),
             .heading("Captures keep their app name instead of a real name"),
             .text("Turn on Apple Intelligence in System Settings, and check that \"Name captures from what's in them\" is on in Settings › Capture."),
             .heading("No web page address"),
-            .text("macOS asks once per browser whether CaptureLens may control it. If you said no, allow it in System Settings › Privacy & Security › Automation."),
+            .text("macOS asks once per browser whether SnagAnything may control it. If you said no, allow it in System Settings › Privacy & Security › Automation."),
             .heading("macOS screenshots don't come into the library"),
-            .text("Check that macOS screenshots is on in Settings › Library › Captures from other tools, and allow CaptureLens to read the folder where screenshots are saved when macOS asks (or in System Settings › Privacy & Security › Files and Folders). Screenshots come in a few seconds after the floating thumbnail goes away. Spotlight finds them, so a folder Spotlight doesn't index is left out."),
+            .text("Check that macOS screenshots is on in Settings › Library › Captures from other tools, and allow SnagAnything to read the folder where screenshots are saved when macOS asks (or in System Settings › Privacy & Security › Files and Folders). Screenshots come in a few seconds after the floating thumbnail goes away. Spotlight finds them, so a folder Spotlight doesn't index is left out."),
             .heading("A shortcut does nothing"),
             .text("Another app may use the same keys. Pick a different one in Settings › Presets."),
             .heading("A shortcut can't be set"),
-            .text("If CaptureLens says nothing came through when you press the keys, another app has taken them for itself, so they never reach CaptureLens. Press different keys, or remove the shortcut from that app first, then set it again."),
+            .text("If SnagAnything says nothing came through when you press the keys, another app has taken them for itself, so they never reach SnagAnything. Press different keys, or remove the shortcut from that app first, then set it again."),
         ]),
     ] }
 }

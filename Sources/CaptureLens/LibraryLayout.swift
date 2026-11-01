@@ -170,7 +170,7 @@ enum LibraryLayout {
             let grid = gridWidth(room: width - (pendingSidebar ?? sidebarWidth) - 1, state: state)
             if grid > 0 { state.thumbnailSize = LibraryState.clampSize(share * grid) }
         }
-        NSLog("CaptureLens: took up the library layout from another Mac")
+        NSLog("SnagAnything: took up the library layout from another Mac")
     }
 
     private static var pendingSidebar: Double?

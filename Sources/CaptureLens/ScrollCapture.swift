@@ -5,7 +5,7 @@ import ScreenCaptureKit
 import SwiftUI
 
 /// Captures something longer than the screen: a web page, a long list, a document. After
-/// picking the area (or window), you scroll it, or CaptureLens scrolls it for you, and the
+/// picking the area (or window), you scroll it, or SnagAnything scrolls it for you, and the
 /// frames are stitched into one tall picture (see `ScrollStitcher`).
 @Observable
 @MainActor
@@ -100,10 +100,10 @@ final class ScrollCapture {
     func toggleAutoScroll() {
         if autoScrolling { autoScrolling = false; return }
         guard canScrollForYou else {
-            // macOS shows its prompt and lists CaptureLens in Privacy & Security.
+            // macOS shows its prompt and lists SnagAnything in Privacy & Security.
             let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(options)
-            note = "Allow CaptureLens in Privacy & Security, then press Scroll for Me again. Or scroll yourself."
+            note = "Allow SnagAnything in Privacy & Security, then press Scroll for Me again. Or scroll yourself."
             return
         }
         // Scroll events go to whatever is under the pointer, so it moves to the middle of the area.
@@ -121,7 +121,7 @@ final class ScrollCapture {
 
     /// Esc stops scrolling for you, or else cancels. The panel never takes the keyboard (the
     /// app being captured keeps it), so the key is watched everywhere; that needs the same
-    /// permission as scrolling for you, and without it Esc works only in CaptureLens.
+    /// permission as scrolling for you, and without it Esc works only in SnagAnything.
     private func watchEscape() {
         let handler: (NSEvent) -> Void = { event in
             guard event.keyCode == 53 else { return }
@@ -182,7 +182,7 @@ final class ScrollCapture {
 
     // MARK: On screen
 
-    /// A dashed frame around the area. CaptureLens's own windows are left out of every
+    /// A dashed frame around the area. SnagAnything's own windows are left out of every
     /// picture, so it never shows up in the capture.
     private func showOutline(_ frame: CGRect) {
         let window = NSWindow(contentRect: frame.insetBy(dx: -3, dy: -3), styleMask: .borderless, backing: .buffered, defer: false)
@@ -231,7 +231,7 @@ private struct ScrollPanelView: View {
             }
             HStack {
                 Button(session.autoScrolling ? "Stop Scrolling" : "Scroll for Me") { session.toggleAutoScroll() }
-                    .help(session.canScrollForYou ? "CaptureLens scrolls the area and stops at the end"
+                    .help(session.canScrollForYou ? "SnagAnything scrolls the area and stops at the end"
                           : "Needs your permission in Privacy & Security to send scroll events")
                 Spacer()
                 Button("Cancel") { session.cancel() }
@@ -258,7 +258,7 @@ actor StitchWorker {
     func image() -> CGImage? { stitcher.image() }
 }
 
-/// Repeated pictures of one area of a display, leaving out CaptureLens's own windows.
+/// Repeated pictures of one area of a display, leaving out SnagAnything's own windows.
 final class RegionCamera: @unchecked Sendable {
     let displayID: CGDirectDisplayID
     /// The area in the display's points, origin at its top left.

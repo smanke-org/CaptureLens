@@ -3,7 +3,7 @@ import AppKit
 /// Version details read from the bundle, so the number shown in the menu and in
 /// Settings always matches what was actually built rather than a hardcoded copy.
 enum AppInfo {
-    static let name = "CaptureLens"
+    static let name = "SnagAnything"
 
     static var version: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -13,7 +13,7 @@ enum AppInfo {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
     }
 
-    /// "beta" while CaptureLens is in beta (Info.plist `CaptureLensReleaseStage`). It's shown
+    /// "beta" while SnagAnything is in beta (Info.plist `CaptureLensReleaseStage`). It's shown
     /// after the version but never part of it: the updater compares plain numbers, and copies
     /// already installed would read "1.0.4-beta" as an older version and never update.
     static var stage: String? {

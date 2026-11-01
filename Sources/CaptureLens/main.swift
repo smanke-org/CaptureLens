@@ -14,7 +14,7 @@ MainActor.assumeIsolated {
     app.run()
 }
 
-/// Quits CaptureLens without asking: for quitting itself (installing an update, ending a test).
+/// Quits SnagAnything without asking: for quitting itself (installing an update, ending a test).
 @MainActor
 enum QuitConfirmation {
     private(set) static var confirmed = false
@@ -38,7 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Quitting asks first, while "Ask before quitting" is on in Settings › General. Not when
     /// the Mac is logging out, restarting or shutting down (macOS gives the quit a reason
-    /// then), and not when CaptureLens quits itself to install an update.
+    /// then), and not when SnagAnything quits itself to install an update.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let systemQuit = NSAppleEventManager.shared().currentAppleEvent?
             .attributeDescriptor(forKeyword: AEKeyword(kAEQuitReason)) != nil
@@ -70,6 +70,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Updated from CaptureLens: becomes SnagAnything.app and reopens from there first.
+        if AppRename.renameIfNeeded() { return }
         AppAppearance.start()
         let mainMenu = AppPresence.mainMenu(appName: AppInfo.name, settingsTitle: "Settings…",
                                             target: self, settings: #selector(showSettings))
@@ -84,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Help menu, with the standard ⌘? (macOS adds its search field).
         let helpItem = NSMenuItem()
         let help = NSMenu(title: "Help")
-        let helpOpen = NSMenuItem(title: "CaptureLens Help", action: #selector(showHelp), keyEquivalent: "?")
+        let helpOpen = NSMenuItem(title: "SnagAnything Help", action: #selector(showHelp), keyEquivalent: "?")
         helpOpen.target = self
         help.addItem(helpOpen)
         helpItem.submenu = help
@@ -108,6 +110,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if let out = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SNAGIT_EVAL"] {
             DebugSelfTest.snagitEval(out: URL(fileURLWithPath: out))
+            return
+        }
+        if let folder = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_TEXT_UPDATES"] {
+            DebugTextAndUpdates.run(folder: folder)
             return
         }
         if let folder = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SNAPSHOT"] {
@@ -185,7 +191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Chosen in the app switcher (⌘-Tab) with no window open: show the library, as a Dock
-    /// click does. Checked a moment later, so a window CaptureLens is opening itself
+    /// click does. Checked a moment later, so a window SnagAnything is opening itself
     /// (Settings, an alert, an Open panel, the capture overlay) means it's not that.
     func applicationDidBecomeActive(_ notification: Notification) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
@@ -201,10 +207,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
-    /// Pictures dropped on the Dock icon or opened with CaptureLens go into the library, and
-    /// `capturelens://` URLs (from ToolHUD, Shortcuts or a script) run the action they name.
+    /// Pictures dropped on the Dock icon or opened with SnagAnything go into the library, and
+    /// `snaganything://` URLs (from ToolHUD, Shortcuts or a script) run the action they name.
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls where url.scheme == "capturelens" {
+        // capturelens:// is the name before 1.1.0, still used by older ToolHUD buttons and scripts.
+        for url in urls where url.scheme == "snaganything" || url.scheme == "capturelens" {
             handle(url)
         }
         let files = urls.filter(\.isFileURL)
@@ -216,7 +223,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// The `capturelens://<host>` actions. Their names and titles are also listed under
+    /// The `snaganything://<host>` actions. Their names and titles are also listed under
     /// ToolHUDActions in Info.plist, which is how ToolHUD finds them.
     private func handle(_ url: URL) {
         let presets = Preferences.shared.presets
@@ -233,6 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case "steps": toggleSteps()
         case "record": run(mode: .recording)
         case "recapture": engine.captureAgain()
+        case "text": engine.captureText()
         case "library": showLibrary()
         case "preset":
             let name = url.pathComponents.dropFirst().joined(separator: "/")
@@ -249,6 +257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch action {
         case .preset(let id): if let preset = Preferences.shared.preset(id) { engine.run(preset) }
         case .captureAgain: engine.captureAgain()
+        case .captureText: engine.captureText()
         case .library: showLibrary()
         }
     }
@@ -301,6 +310,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let again = item("Capture Same Area Again", #selector(captureAgain), hotKey: prefs.captureAgainHotKey)
         again.isEnabled = engine.lastRegion != nil
         menu.addItem(again)
+        menu.addItem(item("Capture Text", #selector(captureText), hotKey: prefs.captureTextHotKey, symbol: "text.viewfinder"))
 
         let recorder = StepRecorder.shared
         menu.addItem(item(recorder.isRecording ? "Stop Recording Steps" : "Record Steps…", #selector(toggleSteps),
@@ -332,7 +342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(toggle("Open Captures in Library", prefs.afterCapture.opensLibrary, #selector(toggleOpenInLibrary)))
 
         menu.addItem(.separator())
-        let helpEntry = NSMenuItem(title: "CaptureLens Help", action: #selector(showHelp), keyEquivalent: "")
+        let helpEntry = NSMenuItem(title: "SnagAnything Help", action: #selector(showHelp), keyEquivalent: "")
         helpEntry.target = self
         helpEntry.image = NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: nil)
         menu.addItem(helpEntry)
@@ -405,6 +415,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.run(preset)
     }
     @objc func captureAgain() { engine.captureAgain() }
+    @objc func captureText() { engine.captureText() }
     @objc func toggleSteps() {
         if StepRecorder.shared.isRecording { StepRecorder.shared.stop(makeGuide: true) } else { StepRecorder.shared.start() }
     }

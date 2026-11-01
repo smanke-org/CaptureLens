@@ -2,7 +2,7 @@ import CaptureLensKit
 import Charts
 import SwiftUI
 
-/// Settings › Activity: how many captures CaptureLens has made, by kind, over time, plus
+/// Settings › Activity: how many captures SnagAnything has made, by kind, over time, plus
 /// recording time, the apps and websites captured most, and how often captures were marked
 /// up and shared. The graph starts at a week and widens to 30, 90 and 180 days, then a year,
 /// as days of data build up. With settings sync on, it can add up every Mac.
@@ -16,7 +16,7 @@ struct ActivitySettings: View {
     @AppStorage("activity.showAllMacs", store: AppDefaults.store) private var showAllMacs = true
 
     private static let kinds = ActivityKey.captureKinds
-    private static let colors: [Color] = [.blue, .purple, .teal, .orange, .green, .pink]
+    private static let colors: [Color] = [.blue, .purple, .teal, .orange, .green, .pink, .indigo]
 
     var body: some View {
         let now = Date()
@@ -69,7 +69,7 @@ struct ActivitySettings: View {
                 }
                 .padding(.vertical, 4)
             } footer: {
-                Text("The graph widens as you use CaptureLens: 7 days at first, then 30, 90 and 180 days, then a year. Only the numbers are kept, never what you captured. Imported pictures aren't counted as captures.")
+                Text("The graph widens as you use SnagAnything: 7 days at first, then 30, 90 and 180 days, then a year. Only the numbers are kept, never what you captured. Imported pictures aren't counted as captures.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
@@ -162,13 +162,13 @@ struct ActivitySettings: View {
         } footer: {
             Group {
                 if !settingsSync.isEnabled && remotes.isEmpty {
-                    Text("Turn on “Sync with your other Macs” in General to add up captures from every Mac that uses CaptureLens.")
+                    Text("Turn on “Sync with your other Macs” in General to add up captures from every Mac that uses SnagAnything.")
                 } else if !settingsSync.isReady && remotes.isEmpty {
                     Text("Waiting for your sync passphrase in General to add up captures from your other Macs.")
                 } else if remotes.isEmpty {
-                    Text("Captures from your other Macs are added here once CaptureLens on them has settings sync turned on.")
+                    Text("Captures from your other Macs are added here once SnagAnything on them has settings sync turned on.")
                 } else {
-                    Text("Each Mac's captures since CaptureLens started counting there. Only the numbers are shared, encrypted like your settings.")
+                    Text("Each Mac's captures since SnagAnything started counting there. Only the numbers are shared, encrypted like your settings.")
                 }
             }
             .font(.caption).foregroundStyle(.secondary)

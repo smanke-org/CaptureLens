@@ -1,6 +1,6 @@
 import Foundation
 
-/// How far back the Activity graph looks. It widens as CaptureLens collects more history:
+/// How far back the Activity graph looks. It widens as SnagAnything collects more history:
 /// a week at first, then 30, 90 and 180 days, then a year.
 public enum StatsRange: Int, CaseIterable, Sendable {
     case week = 7, month = 30, quarter = 90, halfYear = 180, year = 365
@@ -96,7 +96,7 @@ public enum CaptureStats {
     }
 }
 
-/// The per-day counts CaptureLens keeps for Settings › Activity: numbers only, never what
+/// The per-day counts SnagAnything keeps for Settings › Activity: numbers only, never what
 /// was captured. Days are stored as "yyyy-MM-dd" in the Mac's time zone. Each count has a
 /// key: a kind of capture ("area", "window", "video"…) or something done with captures
 /// ("marks", "copies", "recordingSeconds"…); see `ActivityKey`.
@@ -148,7 +148,7 @@ public struct ActivityLog: Codable, Equatable, Sendable {
     }
 
     /// Drops days older than `keepDays`, so the file stays small. `firstDay` is kept, so the
-    /// graph's range still reflects how long CaptureLens has been in use.
+    /// graph's range still reflects how long SnagAnything has been in use.
     public mutating func trim(keepDays: Int = 400, now: Date = Date(), calendar: Calendar = .current) {
         guard let cutoff = calendar.date(byAdding: .day, value: -keepDays, to: calendar.startOfDay(for: now)) else { return }
         let cutoffKey = Self.key(for: cutoff, calendar: calendar)
@@ -180,7 +180,7 @@ public struct ActivityLog: Codable, Equatable, Sendable {
 extension ActivityLog {
     /// Several Macs' logs added together, for the All Macs graph. Days are matched by
     /// their "yyyy-MM-dd" key, each counted in its own Mac's time zone, and the earliest
-    /// first day wins, so the graph's range reflects the Mac that has used CaptureLens longest.
+    /// first day wins, so the graph's range reflects the Mac that has used SnagAnything longest.
     public static func combined(_ logs: [ActivityLog]) -> ActivityLog {
         var result = ActivityLog()
         for log in logs {
@@ -230,8 +230,9 @@ public struct DeviceActivity: Codable, Equatable, Sendable {
 /// What Settings › Activity counts.
 public enum ActivityKey {
     /// Captures, by kind: the graph's bars.
-    public static let area = "area", window = "window", screen = "screen", scrolling = "scrolling", steps = "steps", video = "video"
-    public static let captureKinds = [area, window, screen, scrolling, steps, video]
+    public static let area = "area", window = "window", screen = "screen", scrolling = "scrolling", steps = "steps", video = "video",
+                         text = "text"
+    public static let captureKinds = [area, window, screen, scrolling, steps, video, text]
     /// Pictures brought in (files, or from Snagit): counted apart, so an import doesn't
     /// tower over the captures.
     public static let imported = "imported"
@@ -247,6 +248,7 @@ public enum ActivityKey {
         case scrolling: "Scrolling"
         case steps: "Steps"
         case video: "Video"
+        case text: "Text"
         default: kind
         }
     }

@@ -5,12 +5,13 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-SRC="$ROOT/.build/app/CaptureLens.app"
-DEST="/Applications/CaptureLens.app"
+SRC="$ROOT/.build/app/SnagAnything.app"
+DEST="/Applications/SnagAnything.app"
 
 [ -d "$SRC" ] || { echo "Run ./build_app.sh first." >&2; exit 1; }
 
 pkill -x CaptureLens 2>/dev/null || true
+pkill -x SnagAnything 2>/dev/null || true
 
 if [ -d "$DEST" ]; then
   # Update in place, so the Screen Recording grant keeps pointing at the same bundle.
