@@ -245,6 +245,27 @@ struct CaptureSettings: View {
                 }
             }
             Section {
+                Toggle("Show the capture bar", isOn: $prefs.showCaptureBar)
+                Picker("Layout", selection: $prefs.captureBarLayout) {
+                    ForEach(CaptureBarLayout.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .disabled(!prefs.showCaptureBar)
+                Picker("Icon size", selection: $prefs.captureBarSize) {
+                    ForEach(CaptureBarSize.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .disabled(!prefs.showCaptureBar)
+                Toggle("Color highlighting", isOn: $prefs.captureBarColors)
+                    .disabled(!prefs.showCaptureBar)
+                LabeledContent("Show or hide it with") { ShortcutRecorder(hotKey: $prefs.captureBarHotKey) }
+            } header: {
+                Text("Capture bar")
+            } footer: {
+                Text("Capture buttons that float above every window. The bar steps aside as soon as a capture starts and comes back when it's saved or cancelled. Point at a button to see its name and shortcut. Drag the grip to move the bar; right-click the grip for color highlighting, size and layout. Its settings and where it sits follow you to your other Macs while settings sync is on.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
                 Toggle("Copy each capture to the clipboard", isOn: $prefs.copyToClipboard)
                 Picker("After capturing", selection: $prefs.afterCapture) {
                     ForEach(AfterCapture.allCases, id: \.self) { Text($0.title).tag($0) }
@@ -370,6 +391,7 @@ struct PresetSettings: View {
                 LabeledContent("Open the library") { ShortcutRecorder(hotKey: $prefs.libraryHotKey) }
                 LabeledContent("Capture the same area again") { ShortcutRecorder(hotKey: $prefs.captureAgainHotKey) }
                 LabeledContent("Capture text") { ShortcutRecorder(hotKey: $prefs.captureTextHotKey) }
+                LabeledContent("Show or hide the capture bar") { ShortcutRecorder(hotKey: $prefs.captureBarHotKey) }
             }
         }
         .formStyle(.grouped)

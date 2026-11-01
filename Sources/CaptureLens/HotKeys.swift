@@ -95,6 +95,7 @@ final class HotKeyCenter {
         case captureAgain
         case captureText
         case library
+        case captureBar
     }
 
     static let shared = HotKeyCenter()
@@ -110,6 +111,7 @@ final class HotKeyCenter {
         if let key = prefs.libraryHotKey { out.append((.library, key)) }
         if let key = prefs.captureAgainHotKey { out.append((.captureAgain, key)) }
         if let key = prefs.captureTextHotKey { out.append((.captureText, key)) }
+        if let key = prefs.captureBarHotKey { out.append((.captureBar, key)) }
         for preset in prefs.presets { if let key = preset.hotKey { out.append((.preset(preset.id), key)) } }
         return out
     }

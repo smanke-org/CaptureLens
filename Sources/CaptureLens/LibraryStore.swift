@@ -215,6 +215,16 @@ final class LibraryStore {
         }
     }
 
+    /// Pins them all, or, when every one is pinned already, unpins them.
+    func togglePinned(_ ids: Set<UUID>) {
+        let pin = ids.contains { entry($0)?.pinned == false }
+        for id in ids {
+            guard var item = entry(id), item.pinned != pin else { continue }
+            item.pinned = pin
+            save(item)
+        }
+    }
+
     func delete(_ ids: Set<UUID>) {
         guard !ids.isEmpty, let db else { return }
         do {

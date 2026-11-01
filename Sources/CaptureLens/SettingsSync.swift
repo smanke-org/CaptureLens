@@ -607,6 +607,22 @@ enum DebugCommands {
             case "notes-first":
                 if var first = store.items.first { first.notes = arg; store.update(first) }
             case "favorite-first": if let first = store.items.first { store.toggleFavorite([first.id]) }
+            case "section-text":
+                // Adds a text capture (`section-text:<words>`), then shows the sidebar's Text
+                // Captures list; reports what it shows.
+                if !arg.isEmpty, let image = DebugImage.make(text: arg) {
+                    store.add(image: image, kind: .text, scale: 2, source: .init(appName: "DebugHook"), cursor: nil, text: arg)
+                }
+                LibraryWindow.shared.state.section = .text
+                try await Task.sleep(for: .milliseconds(400))
+                result = "shown \(LibraryWindow.shared.state.results.map { "\($0.name) (\($0.kind))" })"
+            case "pin-first":
+                // Pins (or unpins) the first capture; reports what the Pinned list shows.
+                if let first = store.items.first { store.togglePinned([first.id]) }
+                LibraryWindow.shared.state.section = .pinned
+                try await Task.sleep(for: .milliseconds(400))
+                let state = LibraryWindow.shared.state
+                result = "pinned \(store.items.filter(\.pinned).map(\.name)), section \(state.section), shown \(state.results.map(\.name))"
             case "delete-first": if let first = store.items.first { store.delete([first.id]) }
             case "clipboard": prefs.copyToClipboard = arg == "true"
             case "preset-name":
@@ -706,6 +722,43 @@ enum DebugCommands {
             case "sync-state":
                 let defaults = AppDefaults.store
                 result = "settings \(SettingsSync.shared.syncsSettings), localModified \((defaults.object(forKey: "sync.localModified") as? Date).map { "\($0.timeIntervalSince1970)" } ?? "nil"), synced keys include librarySync \(SettingsSync.syncedKeys.contains("librarySync")) libraryBackend \(SettingsSync.syncedKeys.contains("libraryBackend")) doubleClickOpens \(SettingsSync.syncedKeys.contains("doubleClickOpens"))"
+            case "capture-bar":
+                // `capture-bar:<on|off|vertical|horizontal|busy|idle|move:x,y|url|menu|state>`: drives
+                // the capture bar; every one reports its state after.
+                let bar = CaptureBar.shared
+                let parts = arg.split(separator: ":", maxSplits: 1).map(String.init)
+                switch parts.first ?? "" {
+                case "on": prefs.showCaptureBar = true
+                case "off": prefs.showCaptureBar = false
+                case "vertical": prefs.captureBarLayout = .vertical
+                case "horizontal": prefs.captureBarLayout = .horizontal
+                case "size": if let size = CaptureBarSize(rawValue: parts.count > 1 ? parts[1] : "") { prefs.captureBarSize = size }
+                case "colors": prefs.captureBarColors = (parts.count > 1 ? parts[1] : "") == "on"
+                case "grip-menu":
+                    result = bar.gripMenu().items.map { "\($0.state == .on ? "✓" : "")\($0.title)" }.joined(separator: ", ") + " ; "
+                case "busy": CaptureEngine.shared.debugSetBusy(true)
+                case "idle": CaptureEngine.shared.debugSetBusy(false)
+                case "move":
+                    let p = (parts.count > 1 ? parts[1] : "").split(separator: ",").compactMap { Double($0) }
+                    if p.count == 2, let panel = bar.debugPanel {
+                        panel.setFrameOrigin(CGPoint(x: p[0], y: p[1]))
+                        bar.dragEnded()
+                    }
+                case "url":
+                    NSApp.delegate?.application?(NSApp, open: [URL(string: "snaganything://capturebar")!])
+                case "menu":
+                    let menu = NSMenu()
+                    (NSApp.delegate as? AppDelegate)?.menuNeedsUpdate(menu)
+                    let item = menu.items.first { $0.title == "Show Capture Bar" }
+                    let viewItem = NSApp.mainMenu?.items.first { $0.submenu?.title == "View" }?.submenu?.items.first
+                    if let viewItem { NSApp.mainMenu?.items.first { $0.submenu?.title == "View" }?.submenu?.update() }
+                    result = "menu bar item \(item.map { "\($0.state == .on) key \($0.keyEquivalent)" } ?? "missing"), view item \(viewItem.map { "\($0.state == .on)" } ?? "missing") ; "
+                default: break
+                }
+                try await Task.sleep(for: .milliseconds(600))
+                let panel = bar.debugPanel
+                let position = prefs.captureBarPosition.map { "\($0.screen) \($0.x),\($0.y)" } ?? "nil"
+                result = (result == "ok" ? "" : result) + "show \(prefs.showCaptureBar) layout \(prefs.captureBarLayout.rawValue) visible \(panel?.isVisible ?? false) window \(panel?.windowNumber ?? 0) frame \(panel.map { NSStringFromRect($0.frame) } ?? "-") level \(panel?.level.rawValue ?? 0) position \(position) size \(prefs.captureBarSize.rawValue) colors \(prefs.captureBarColors) label \(bar.debugLabel)"
             case "record-bar":
                 // `record-bar` shows the panel before recording (no recording starts); `record-bar:close` hides it.
                 if arg == "close" { await ScreenRecorder.shared.debugReset() } else {

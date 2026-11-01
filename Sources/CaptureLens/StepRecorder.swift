@@ -11,7 +11,7 @@ import SwiftUI
 final class StepRecorder {
     static let shared = StepRecorder()
 
-    private(set) var isRecording = false
+    private(set) var isRecording = false { didSet { CaptureBar.shared.refresh() } }
     private(set) var steps: [UUID] = []
     private(set) var tag = ""
 

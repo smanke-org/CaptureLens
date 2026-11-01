@@ -39,6 +39,66 @@ enum ToolStyle: String, CaseIterable {
     }
 }
 
+/// Which way the floating capture bar runs.
+enum CaptureBarLayout: String, CaseIterable {
+    case horizontal, vertical
+
+    var title: String {
+        switch self {
+        case .horizontal: "Horizontal"
+        case .vertical: "Vertical"
+        }
+    }
+}
+
+/// How big the capture bar's buttons are.
+enum CaptureBarSize: String, CaseIterable {
+    case small, medium, large
+
+    var title: String {
+        switch self {
+        case .small: "Small"
+        case .medium: "Medium"
+        case .large: "Large"
+        }
+    }
+
+    /// A button's side, in points.
+    var button: CGFloat {
+        switch self {
+        case .small: 22
+        case .medium: 28
+        case .large: 36
+        }
+    }
+
+    var icon: CGFloat {
+        switch self {
+        case .small: 12
+        case .medium: 15
+        case .large: 19
+        }
+    }
+
+    /// The Capture button's name.
+    var text: CGFloat {
+        switch self {
+        case .small: 11
+        case .medium: 13
+        case .large: 15
+        }
+    }
+}
+
+/// Where the capture bar sits: the screen it's on (by name) and how far across and up the
+/// free space of that screen it is, 0 to 1, so it lands in the same spot on any size of
+/// screen and on another Mac.
+struct CaptureBarPosition: Codable, Equatable {
+    var screen: String
+    var x: Double
+    var y: Double
+}
+
 /// What opens the radial dial over the picture.
 enum DialTrigger: String, CaseIterable {
     case rightClick, commandOption, either
@@ -286,6 +346,16 @@ final class Preferences {
     /// Quitting asks first, so a stray ⌘Q doesn't stop the capture shortcuts.
     var confirmQuit = true { didSet { save(confirmQuit, "confirmQuit") } }
 
+    // MARK: Capture bar
+    /// A bar of capture buttons that floats above every window.
+    var showCaptureBar = false { didSet { save(showCaptureBar, "showCaptureBar") } }
+    var captureBarLayout = CaptureBarLayout.horizontal { didSet { save(captureBarLayout.rawValue, "captureBarLayout") } }
+    var captureBarSize = CaptureBarSize.medium { didSet { save(captureBarSize.rawValue, "captureBarSize") } }
+    /// Each group of buttons on a tint of its color; off, the whole bar is gray.
+    var captureBarColors = true { didSet { save(captureBarColors, "captureBarColors") } }
+    /// Nil until it's first moved: then it starts at the top middle of the main screen.
+    var captureBarPosition: CaptureBarPosition? = nil { didSet { saveCodable(captureBarPosition, "captureBarPosition") } }
+
     // MARK: Presets and shortcuts
     var presets: [CapturePreset] = CapturePreset.defaults { didSet { saveCodable(presets, "presets") } }
     var libraryHotKey: HotKey? = Defaults.libraryHotKey { didSet { saveCodable(libraryHotKey, "libraryHotKey") } }
@@ -293,6 +363,8 @@ final class Preferences {
     var captureAgainHotKey: HotKey? = nil { didSet { saveCodable(captureAgainHotKey, "captureAgainHotKey") } }
     /// Capture Text: copy the text in an area.
     var captureTextHotKey: HotKey? = Defaults.captureTextHotKey { didSet { saveCodable(captureTextHotKey, "captureTextHotKey") } }
+    /// Shows or hides the capture bar.
+    var captureBarHotKey: HotKey? = nil { didSet { saveCodable(captureBarHotKey, "captureBarHotKey") } }
 
     enum Defaults {
         static let libraryHotKey: HotKey? = HotKey(keyCode: UInt32(kVK_ANSI_L), modifiers: UInt32(optionKey | shiftKey | cmdKey),
@@ -307,6 +379,8 @@ final class Preferences {
         "autoName", "recognizeText", "recordWebAddress", "librarySync", "libraryBackend", "annotationStyle", "quickStyles", "presets", "libraryHotKey", "captureAgainHotKey",
         "captureTextHotKey", "recordMicrophone", "recordSystemAudio", "recordCamera", "showClicks", "showKeys", "recordFrameRate", "syncVideos",
         "toolStyle", "dialTrigger", "doubleClickOpens", "recordCountdown", "microphoneID", "cameraID", "confirmQuit",
+        "showCaptureBar", "captureBarLayout", "captureBarPosition", "captureBarHotKey",
+        "captureBarSize", "captureBarColors",
     ]
     /// Of those, the ones each Mac chooses for itself: whether, and how, it syncs the library,
     /// and its own microphone and camera.
@@ -383,6 +457,9 @@ final class Preferences {
             "toolStyle": toolStyle.rawValue, "dialTrigger": dialTrigger.rawValue, "doubleClickOpens": doubleClickOpens.rawValue,
             "recordCountdown": recordCountdown, "microphoneID": microphoneID, "cameraID": cameraID,
             "confirmQuit": confirmQuit,
+            "showCaptureBar": showCaptureBar, "captureBarLayout": captureBarLayout.rawValue,
+            "captureBarPosition": data(captureBarPosition), "captureBarHotKey": data(captureBarHotKey),
+            "captureBarSize": captureBarSize.rawValue, "captureBarColors": captureBarColors,
         ]
     }
 
@@ -457,6 +534,12 @@ final class Preferences {
         microphoneID = string("microphoneID")
         cameraID = string("cameraID")
         confirmQuit = bool("confirmQuit", true)
+        showCaptureBar = bool("showCaptureBar", false)
+        captureBarLayout = CaptureBarLayout(rawValue: string("captureBarLayout")) ?? .horizontal
+        captureBarPosition = codable("captureBarPosition", nil as CaptureBarPosition?)
+        captureBarHotKey = codable("captureBarHotKey", nil as HotKey?)
+        captureBarSize = CaptureBarSize(rawValue: string("captureBarSize")) ?? .medium
+        captureBarColors = bool("captureBarColors", true)
     }
 
     private func save(_ value: Any, _ key: String) {

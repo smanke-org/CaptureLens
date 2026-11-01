@@ -56,7 +56,7 @@ final class LibraryWindow: NSObject, NSWindowDelegate {
 @MainActor
 final class LibraryState {
     enum Section: Hashable {
-        case all, favorites, recent, notes
+        case all, pinned, favorites, recent, notes, text
         case tag(String)
         case app(String)
         case site(String)
@@ -142,9 +142,11 @@ final class LibraryState {
         var f = filter
         switch section {
         case .all: break
+        case .pinned: f.pinnedOnly = true
         case .favorites: f.favoritesOnly = true
         case .recent: if f.dateRange == .any { f.dateRange = .lastWeek }
         case .notes: f.withNotesOnly = true
+        case .text: f.kinds = [.text]
         case .tag(let tag): f.tags.insert(tag)
         case .app(let key): f.apps = [key]
         case .site(let site): f.websites = [site]
@@ -565,6 +567,11 @@ struct LibrarySidebar: View {
             if compact { rail } else { list }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // The last capture unpinned (here, in the picture's menu or on another Mac): the
+        // Pinned list leaves the sidebar, so go back to All Captures.
+        .onChange(of: store.items.contains(where: \.pinned)) { _, any in
+            if !any && state.section == .pinned { state.section = .all }
+        }
         .onGeometryChange(for: Bool.self) { $0.size.width < Self.compactBelow } action: { compact = $0 }
         // Noted for the layout other Macs follow.
         .onGeometryChange(for: Double.self) { Double($0.size.width.rounded()) } action: { LibraryLayout.sidebarWidth = $0 }
@@ -575,9 +582,13 @@ struct LibrarySidebar: View {
         return List(selection: Binding(get: { state.section }, set: { state.section = $0 ?? .all; state.selection = [] })) {
             Section("Library") {
                 row("All Captures", "photo.on.rectangle", items.count).tag(LibraryState.Section.all)
+                // Appears with the first pinned capture.
+                let pinned = items.filter(\.pinned).count
+                if pinned > 0 { row("Pinned", "pin", pinned).tag(LibraryState.Section.pinned) }
                 row("Favorites", "star", items.filter(\.favorite).count).tag(LibraryState.Section.favorites)
                 row("Last 7 Days", "calendar", nil).tag(LibraryState.Section.recent)
                 row("With Notes", "note.text", items.filter { !$0.notes.isEmpty }.count).tag(LibraryState.Section.notes)
+                row("Text Captures", "text.viewfinder", items.filter { $0.kind == .text }.count).tag(LibraryState.Section.text)
             }
             let tags = store.facets.tags
             if !tags.isEmpty {
@@ -676,9 +687,12 @@ struct LibrarySidebar: View {
         return ScrollView(.vertical) {
             VStack(spacing: 6) {
                 railButton("All Captures", "photo.on.rectangle", items.count, .all)
+                let pinned = items.filter(\.pinned).count
+                if pinned > 0 { railButton("Pinned", "pin", pinned, .pinned) }
                 railButton("Favorites", "star", items.filter(\.favorite).count, .favorites)
                 railButton("Last 7 Days", "calendar", nil, .recent)
                 railButton("With Notes", "note.text", items.filter { !$0.notes.isEmpty }.count, .notes)
+                railButton("Text Captures", "text.viewfinder", items.filter { $0.kind == .text }.count, .text)
                 if !tags.isEmpty || !apps.isEmpty || !sites.isEmpty { Divider().frame(width: 32).padding(.vertical, 4) }
                 if !tags.isEmpty {
                     railMenu("Tags", "tag", picked: { if case .tag = $0 { true } else { false } }) {
@@ -812,9 +826,11 @@ struct LibraryHeader: View {
     private var title: String {
         switch state.section {
         case .all: "All Captures"
+        case .pinned: "Pinned"
         case .favorites: "Favorites"
         case .recent: "Last 7 Days"
         case .notes: "With Notes"
+        case .text: "Text Captures"
         case .tag(let tag): "#\(tag)"
         case .app(let key): store.facets.apps.first { $0.key == key }?.name ?? "App"
         case .site(let site): site
@@ -1201,9 +1217,20 @@ struct CaptureCell: View {
                 if item.kind == .text { TextPreviewStrip(text: item.recognizedText, size: size) }
             }
             .overlay(alignment: .topTrailing) {
-                if item.favorite {
-                    Image(systemName: "star.fill").foregroundStyle(.yellow).shadow(radius: 1).padding(6)
+                HStack(spacing: 4) {
+                    if item.pinned {
+                        // On a dark dot, so it shows on light pictures too.
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 20, height: 20)
+                            .background(.black.opacity(0.55), in: Circle())
+                    }
+                    if item.favorite {
+                        Image(systemName: "star.fill").foregroundStyle(.yellow).shadow(radius: 1)
+                    }
                 }
+                .padding(6)
             }
             // A text capture's strip has the bottom, so its tags go to the top.
             .overlay(alignment: item.kind == .text ? .topLeading : .bottomLeading) {
@@ -1297,6 +1324,12 @@ struct CaptureMenu: View {
         }
         if targets.count > 1 {
             Button("Share \(targets.count) Captures…") { ShareButton.shareAtPointer(store.items.filter { targets.contains($0.id) }) }
+        }
+        let allPinned = targets.allSatisfy { store.entry($0)?.pinned == true }
+        Button(allPinned ? (targets.count > 1 ? "Unpin Images" : "Unpin Image") : (targets.count > 1 ? "Pin Images" : "Pin Image")) {
+            store.togglePinned(targets)
+            // Unpinning the last one empties the Pinned list, which then leaves the sidebar.
+            if state.section == .pinned && !store.items.contains(where: \.pinned) { state.section = .all }
         }
         Button(store.entry(item.id)?.favorite == true && targets.count == 1 ? "Remove from Favorites" : "Add to Favorites") {
             store.toggleFavorite(targets)

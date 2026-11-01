@@ -25,7 +25,7 @@ final class ScreenRecorder: NSObject {
         case finishing
     }
 
-    private(set) var phase = Phase.idle
+    private(set) var phase = Phase.idle { didSet { if phase != oldValue { CaptureBar.shared.refresh() } } }
     /// Seconds recorded so far, pauses left out.
     private(set) var elapsed: TimeInterval = 0
     private(set) var note: String?

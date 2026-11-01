@@ -41,6 +41,7 @@ enum Help {
         let keys: [(String, HotKey?)] = [
             ("capture", preset(0)), ("screen", preset(1)), ("window", preset(2)),
             ("library", p.libraryHotKey), ("again", p.captureAgainHotKey), ("text", p.captureTextHotKey), ("scrolling", preset(4)),
+            ("bar", p.captureBarHotKey),
             ("record", p.preset(CapturePreset.defaults[5].id)?.hotKey ?? p.presets.first { $0.mode == .recording }?.hotKey),
         ]
         var out = text
@@ -115,6 +116,24 @@ enum Help {
             .tip("Text keeps its line breaks, so tables and lists paste the way they looked. If nothing was found, try a bigger area or zoom in first."),
         ]),
 
+        HelpTopic(id: "capture-bar", title: "The Capture Bar", symbol: "menubar.rectangle", blocks: [
+            .text("The capture bar keeps SnagAnything's capture buttons above every window, on every Space and over full-screen apps. Turn it on with Show Capture Bar in the menu bar menu or the View menu, in Settings › Capture, or with its shortcut ({hotkey:bar})."),
+            .keys([
+                ("Capture", "Your first preset in Settings › Presets"),
+                ("Arrow beside Capture", "Every preset, Capture Text, Capture Same Area Again and Record Steps"),
+                ("Red buttons", "Record a video, or record steps"),
+                ("Teal button", "Capture Text"),
+                ("Gray buttons", "Capture the same area again, or open the library"),
+                ("Point at a button", "See its name and shortcut, just outside the bar"),
+                ("Drag the grip", "Move the bar"),
+                ("Right-click the grip", "Color highlighting on or off, small, medium or large icons, horizontal or vertical, its settings, or hide it"),
+            ]),
+            .text("As soon as a capture starts, from the bar, a shortcut, a menu or ToolHUD, the bar steps aside. It comes back when the capture is saved or cancelled, and after a recording or step recording stops."),
+            .tip("SnagAnything never captures its own windows, so the bar can't end up in a picture."),
+            .tip("With color highlighting off, every group is gray and the bar blends in with other windows."),
+            .tip("Whether the bar is showing, its size, colors, which way it runs and where it sits follow you to your other Macs while settings sync is on. On a Mac without that screen, it goes to the same spot on the main screen."),
+        ]),
+
         HelpTopic(id: "presets", title: "Presets and Shortcuts", symbol: "keyboard", blocks: [
             .text("A preset is a saved way to capture: what to capture, a countdown, an exact size, whether to copy, whether to open the capture in the library, and its own keyboard shortcut. Edit them in Settings › Presets."),
             .keys(presetRows),
@@ -122,6 +141,7 @@ enum Help {
                 ("{hotkey:library}", "Open the library"),
                 ("{hotkey:again}", "Capture the same area again"),
                 ("{hotkey:text}", "Capture Text: copy the text in an area"),
+                ("{hotkey:bar}", "Show or hide the capture bar"),
                 ("⌘?", "This Help, from SnagAnything's menus"),
             ]),
             .text("Click a shortcut, then press the new keys. Delete clears it; shortcuts need ⌘, ⌥ or ⌃. Right-click a preset to duplicate, delete or try it."),
@@ -220,7 +240,7 @@ enum Help {
                 ("yesterday, March 3, 2026-10-01", "Captures from that day"),
             ]),
             .heading("Filters"),
-            .text("The buttons above the captures narrow the list by date, type, tags, app and website, and to favorites or captures with notes; click × on one to clear it, or Clear All. The sidebar has quick lists for favorites, the last 7 days, captures with notes, and each tag, app and website. Drag its edge all the way in for just icons (tags, apps and websites become menus); drag it out again for the lists."),
+            .text("The buttons above the captures narrow the list by date, type, tags, app and website, and to favorites or captures with notes; click × on one to clear it, or Clear All. The sidebar has quick lists for favorites, the last 7 days, captures with notes, Capture Text clips (Text Captures), and each tag, app and website. Right-click a thumbnail and choose Pin Image to keep it in the Pinned list at the top of the sidebar, which appears with your first pinned capture; Unpin Image takes it out again. Drag its edge all the way in for just icons (tags, apps and websites become menus); drag it out again for the lists."),
             .heading("Tags and notes"),
             .text("Type a tag and press Return to add it, or click one of your existing tags listed below the field; typing narrows the list (commas add several at once). Tags show as chips in the sidebar: click one to see its captures; right-click it to rename it everywhere. \"This week\" at the foot of the sidebar counts this week's captures (more in Settings › Activity). More Info holds notes of any length; they're searchable too."),
             .heading("Text in a capture"),
@@ -298,6 +318,7 @@ enum Help {
                 ("snaganything://recapture", "Capture the same area again"),
                 ("snaganything://text", "Capture Text: copy the text in an area"),
                 ("snaganything://library", "Open the library"),
+                ("snaganything://capturebar", "Show or hide the capture bar"),
                 ("snaganything://preset/<name>", "Run a preset by its name"),
             ]),
             .text("Use these links from Shortcuts, scripts or a launcher. Links starting capturelens://, from before SnagAnything was renamed, still work. ToolHUD's SnagAnything buttons use them. Pictures dropped on SnagAnything's Dock icon are added to the library."),

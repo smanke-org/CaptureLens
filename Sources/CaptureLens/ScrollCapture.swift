@@ -12,7 +12,7 @@ import SwiftUI
 final class ScrollCapture {
     static let shared = ScrollCapture()
 
-    private(set) var isRunning = false
+    private(set) var isRunning = false { didSet { CaptureBar.shared.refresh() } }
     private(set) var height = 0
     private(set) var frames = 0
     private(set) var autoScrolling = false

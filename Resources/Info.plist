@@ -166,6 +166,18 @@
 			<key>title</key>
 			<string>Open the capture library</string>
 		</dict>
+		<dict>
+			<key>activates</key>
+			<false/>
+			<key>id</key>
+			<string>capturebar</string>
+			<key>shortTitle</key>
+			<string>Capture bar</string>
+			<key>symbol</key>
+			<string>menubar.rectangle</string>
+			<key>title</key>
+			<string>Show or hide the capture bar</string>
+		</dict>
 	</array>
 </dict>
 </plist>

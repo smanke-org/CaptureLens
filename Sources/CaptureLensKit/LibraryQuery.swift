@@ -53,6 +53,8 @@ public struct LibraryFilter: Equatable, Sendable {
     /// Items must carry every one of these tags.
     public var tags: Set<String> = []
     public var favoritesOnly = false
+    /// The sidebar's Pinned list (no chip of its own, so it isn't one of `hasChips`).
+    public var pinnedOnly = false
     public var withNotesOnly = false
 
     public init() {}
@@ -146,6 +148,7 @@ public enum LibraryQuery {
         let wantedTags = Set(filter.tags.map(fold)) .union(search.tags)
         let result = items.filter { item in
             if filter.favoritesOnly && !item.favorite { return false }
+            if filter.pinnedOnly && !item.pinned { return false }
             if filter.withNotesOnly && item.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return false }
             if !filter.kinds.isEmpty && !filter.kinds.contains(item.kind) { return false }
             if !filter.apps.isEmpty && !filter.apps.contains(appKey(item)) { return false }

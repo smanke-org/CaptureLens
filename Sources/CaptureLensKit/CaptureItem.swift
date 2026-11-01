@@ -51,6 +51,8 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
     /// Text read from the picture, for searching.
     public var recognizedText: String
     public var favorite: Bool
+    /// Kept in the library's Pinned list.
+    public var pinned: Bool
     public var source: Source
     /// Size of the picture in pixels, and how many pixels per point it was captured at.
     public var pixelWidth: Int
@@ -100,7 +102,7 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
                 nameIsAutomatic: Bool = true, tags: [String] = [], notes: String = "", recognizedText: String = "",
                 favorite: Bool = false, source: Source = Source(), pixelWidth: Int, pixelHeight: Int, scale: Double = 2,
                 cursor: CursorLayer? = nil, annotations: [Annotation] = [], edits: ImageEdits = .none, video: VideoInfo? = nil,
-                origin: String? = nil) {
+                origin: String? = nil, pinned: Bool = false) {
         self.id = id
         self.created = created
         self.modified = modified ?? created
@@ -111,6 +113,7 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
         self.notes = notes
         self.recognizedText = recognizedText
         self.favorite = favorite
+        self.pinned = pinned
         self.source = source
         self.pixelWidth = pixelWidth
         self.pixelHeight = pixelHeight
@@ -135,6 +138,7 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
         notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
         recognizedText = try c.decodeIfPresent(String.self, forKey: .recognizedText) ?? ""
         favorite = try c.decodeIfPresent(Bool.self, forKey: .favorite) ?? false
+        pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
         source = try c.decodeIfPresent(Source.self, forKey: .source) ?? Source()
         pixelWidth = try c.decodeIfPresent(Int.self, forKey: .pixelWidth) ?? 0
         pixelHeight = try c.decodeIfPresent(Int.self, forKey: .pixelHeight) ?? 0

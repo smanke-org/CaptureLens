@@ -8,11 +8,17 @@ final class CaptureEngine {
     static let shared = CaptureEngine()
 
     private(set) var isCounting = false
-    private var busy = false
+    /// The capture bar steps aside while this is set.
+    private var busy = false { didSet { CaptureBar.shared.refresh() } }
     /// A capture is under way, from the countdown until it's saved.
     var isBusy: Bool { busy }
     /// ⌥ was down when the area or window was picked (it may be up by the time it's saved).
     var optionHeld = false
+
+    #if DEBUG
+    /// Stands in for a capture under way, for testing the capture bar.
+    func debugSetBusy(_ on: Bool) { busy = on }
+    #endif
 
     /// The area last captured, for "Capture Same Area Again".
     private(set) var lastRegion: ScreenRegion? {

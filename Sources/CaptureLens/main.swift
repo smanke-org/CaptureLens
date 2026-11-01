@@ -27,7 +27,7 @@ enum QuitConfirmation {
 
 /// Launch, the menu bar item, the Dock menu, and reopening.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemValidation {
     private var statusItem: NSStatusItem?
     private let engine = CaptureEngine.shared
 
@@ -83,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         mainMenu.items.first?.submenu?.insertItem(item("Our other apps…", #selector(showOtherApps)), at: 2)
         #endif
         mainMenu.addItem(editMenu())
+        mainMenu.addItem(viewMenu())
         // Help menu, with the standard ⌘? (macOS adds its search field).
         let helpItem = NSMenuItem()
         let help = NSMenu(title: "Help")
@@ -154,6 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }, icon: { [weak self] in self?.statusItem?.button?.image })
         #endif
 
+        CaptureBar.shared.start()
         AutoUpdater.shared.start()
         // Sync is on but waiting for a passphrase (joining another Mac): say so where it
         // can be entered, once per version.
@@ -242,6 +244,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case "recapture": engine.captureAgain()
         case "text": engine.captureText()
         case "library": showLibrary()
+        case "capturebar": toggleCaptureBar()
         case "preset":
             let name = url.pathComponents.dropFirst().joined(separator: "/")
             if let preset = presets.first(where: { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }) {
@@ -259,6 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .captureAgain: engine.captureAgain()
         case .captureText: engine.captureText()
         case .library: showLibrary()
+        case .captureBar: toggleCaptureBar()
         }
     }
 
@@ -315,6 +319,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let recorder = StepRecorder.shared
         menu.addItem(item(recorder.isRecording ? "Stop Recording Steps" : "Record Steps…", #selector(toggleSteps),
                           symbol: recorder.isRecording ? "stop.circle" : "record.circle"))
+        let bar = toggle("Show Capture Bar", prefs.showCaptureBar, #selector(toggleCaptureBar))
+        if let shortcut = prefs.captureBarHotKey?.menuKeyEquivalent {
+            bar.keyEquivalent = shortcut.key
+            bar.keyEquivalentModifierMask = shortcut.mask
+        }
+        menu.addItem(bar)
 
         menu.addItem(.separator())
         menu.addItem(item("Open Library…", #selector(showLibrary), hotKey: prefs.libraryHotKey, symbol: "photo.on.rectangle"))
@@ -393,6 +403,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return item
     }
 
+    /// View › Show Capture Bar, where Mac apps keep show-and-hide switches.
+    private func viewMenu() -> NSMenuItem {
+        let view = NSMenu(title: "View")
+        view.addItem(item("Show Capture Bar", #selector(toggleCaptureBar)))
+        let item = NSMenuItem()
+        item.submenu = view
+        return item
+    }
+
+    /// Ticks Show Capture Bar in the View menu; every other item stays enabled, as before.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleCaptureBar) {
+            menuItem.state = Preferences.shared.showCaptureBar ? .on : .off
+        }
+        return true
+    }
+
     /// Cut, Copy, Paste and Select All, so text fields in the library and Settings take them.
     private func editMenu() -> NSMenuItem {
         let edit = NSMenu(title: "Edit")
@@ -420,6 +447,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if StepRecorder.shared.isRecording { StepRecorder.shared.stop(makeGuide: true) } else { StepRecorder.shared.start() }
     }
     @objc func showLibrary() { LibraryWindow.shared.show() }
+    @objc func toggleCaptureBar() { CaptureBar.shared.toggle() }
     @objc func copyRecent(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID, let entry = LibraryStore.shared.entry(id),
               let png = Flattener.png(entry) else { return }
