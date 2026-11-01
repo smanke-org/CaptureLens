@@ -433,6 +433,11 @@ struct LibraryToolbar: ToolbarContent {
                 Label("Capture Text", systemImage: "text.viewfinder")
             }
             .help("Capture Text\(Preferences.shared.captureTextHotKey.map { " (\($0.display))" } ?? "") — drag over text on screen to copy it")
+            // Lit while the capture bar is showing.
+            Toggle(isOn: Binding(get: { Preferences.shared.showCaptureBar }, set: { Preferences.shared.showCaptureBar = $0 })) {
+                Label("Capture Bar", systemImage: "menubar.rectangle")
+            }
+            .help("\(Preferences.shared.showCaptureBar ? "Hide" : "Show") the capture bar\(Preferences.shared.captureBarHotKey.map { " (\($0.display))" } ?? "") — capture buttons above every window")
         }
         ToolbarItemGroup(placement: .primaryAction) {
             // A toolbar button like its neighbors (an AppKit one sits smaller and off-center

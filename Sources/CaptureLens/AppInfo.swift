@@ -31,10 +31,9 @@ enum AppInfo {
         version == build ? "v\(labeledVersion)" : "v\(labeledVersion) (\(build))"
     }
 
-    /// The About panel, with the beta label.
+    /// The About window: the version (with the beta label) and the last 10 releases' notes.
     @MainActor
     static func showAbout() {
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.orderFrontStandardAboutPanel(options: [.applicationVersion: labeledVersion, .version: ""])
+        AboutWindow.shared.show()
     }
 }

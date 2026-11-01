@@ -607,6 +607,12 @@ enum DebugCommands {
             case "notes-first":
                 if var first = store.items.first { first.notes = arg; store.update(first) }
             case "favorite-first": if let first = store.items.first { store.toggleFavorite([first.id]) }
+            case "about":
+                // Opens About; reports the versions whose notes it lists once they've loaded.
+                AppInfo.showAbout()
+                try await Task.sleep(for: .seconds(4))
+                let entries = await ReleaseNotes.fetch(newAfter: AppInfo.version, through: AppInfo.version, count: AboutWindow.releaseCount)
+                result = "window \(AboutWindow.shared.debugWindow?.windowNumber ?? 0) visible \(AboutWindow.shared.debugWindow?.isVisible ?? false) versions \(entries.map(\.version))"
             case "section-text":
                 // Adds a text capture (`section-text:<words>`), then shows the sidebar's Text
                 // Captures list; reports what it shows.

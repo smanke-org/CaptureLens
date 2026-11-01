@@ -19,9 +19,9 @@ enum ReleaseNotes {
     static var allReleasesURL: URL { URL(string: "https://github.com/\(UpdateController.repository)/releases")! }
 
     /// The notes of the most recent published releases up to `through`, newest first: the last
-    /// `recentCount`, or more when the user skipped more than that, so every new one shows.
+    /// `count`, or more when the user skipped more than that, so every new one shows.
     /// Releases newer than `newAfter` are marked New. Empty if GitHub can't be reached.
-    static func fetch(newAfter: String?, through: String) async -> [Entry] {
+    static func fetch(newAfter: String?, through: String, count: Int = recentCount) async -> [Entry] {
         var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(UpdateController.repository)/releases?per_page=50")!)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("\(AppInfo.name)/\(AppInfo.version)", forHTTPHeaderField: "User-Agent")
@@ -38,7 +38,7 @@ enum ReleaseNotes {
                          isNew: isNew)
         }
         let sorted = entries.sorted { UpdateController.isNewer($0.version, than: $1.version) }
-        return Array(sorted.prefix(max(recentCount, sorted.count { $0.isNew })))
+        return Array(sorted.prefix(max(count, sorted.count { $0.isNew })))
     }
 
     /// A release body as styled text: **bold**, *italic*, `code` and links work, and list

@@ -42,8 +42,8 @@ final class CaptureBar: NSObject, NSWindowDelegate {
     /// A capture of any kind is under way, from its countdown or overlay until it's saved,
     /// cancelled or the recording stops.
     private var captureUnderway: Bool {
-        CaptureEngine.shared.isBusy || ScreenRecorder.shared.isActive || StepRecorder.shared.isRecording
-            || ScrollCapture.shared.isRunning
+        CaptureEngine.shared.isBusy || CaptureOverlay.shared.isSelecting || ScreenRecorder.shared.isActive
+            || StepRecorder.shared.isRecording || ScrollCapture.shared.isRunning
     }
 
     /// Hides the bar the moment a capture starts; shows it again a moment after the last one

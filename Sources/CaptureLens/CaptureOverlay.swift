@@ -17,7 +17,8 @@ final class CaptureOverlay {
     }
 
     static let shared = CaptureOverlay()
-    private(set) var isSelecting = false
+    /// The capture bar steps aside while this is set (a recording's pick doesn't set CaptureEngine busy).
+    private(set) var isSelecting = false { didSet { CaptureBar.shared.refresh() } }
 
     private var views: [OverlayView] = []
     private var windows: [NSWindow] = []

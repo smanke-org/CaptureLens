@@ -117,7 +117,7 @@ enum Help {
         ]),
 
         HelpTopic(id: "capture-bar", title: "The Capture Bar", symbol: "menubar.rectangle", blocks: [
-            .text("The capture bar keeps SnagAnything's capture buttons above every window, on every Space and over full-screen apps. Turn it on with Show Capture Bar in the menu bar menu or the View menu, in Settings › Capture, or with its shortcut ({hotkey:bar})."),
+            .text("The capture bar keeps SnagAnything's capture buttons above every window, on every Space and over full-screen apps. Turn it on with the Capture Bar button in the library\'s toolbar, Show Capture Bar in the menu bar menu or the View menu, Settings › Capture, or its shortcut ({hotkey:bar})."),
             .keys([
                 ("Capture", "Your first preset in Settings › Presets"),
                 ("Arrow beside Capture", "Every preset, Capture Text, Capture Same Area Again and Record Steps"),
