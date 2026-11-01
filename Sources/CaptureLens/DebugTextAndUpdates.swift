@@ -76,6 +76,11 @@ enum DebugTextAndUpdates {
             SettingsWindow.shared.show(tab: "Activity")
             try? await Task.sleep(for: .seconds(2))
             render(SettingsWindow.shared.debugWindow, to: out.appending(path: "activity.png"))
+            note("settings resizable: \(SettingsWindow.shared.debugWindow?.styleMask.contains(.resizable) == true) content \(SettingsWindow.shared.debugWindow.map { $0.contentRect(forFrameRect: $0.frame).size } ?? .zero)")
+            SettingsWindow.shared.show(tab: "General")
+            try? await Task.sleep(for: .seconds(2))
+            render(SettingsWindow.shared.debugWindow, to: out.appending(path: "general.png"))
+            note("general content \(SettingsWindow.shared.debugWindow.map { $0.contentRect(forFrameRect: $0.frame).size } ?? .zero)")
             note("done")
             exit(0)
         }

@@ -16,7 +16,9 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         if window == nil {
             let tabs = SettingsTabs()
             let window = NSWindow(contentViewController: tabs)
-            window.styleMask = [.titled, .closable]
+            // Resizable as well as scrolling: drag it bigger to see more of a pane at once.
+            window.styleMask = [.titled, .closable, .resizable]
+            window.contentMinSize = SettingsTabs.minimumSize
             window.toolbarStyle = .preference
             window.isReleasedWhenClosed = false
             window.delegate = self
@@ -46,6 +48,12 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     #endif
 
     func windowWillClose(_ notification: Notification) {}
+
+    /// A size the user dragged to is kept for every pane, and next time.
+    func windowDidEndLiveResize(_ notification: Notification) {
+        guard let window else { return }
+        SettingsTabs.chosenSize = window.contentRect(forFrameRect: window.frame).size
+    }
 
     /// Moved to another screen (a laptop's, an iPad's): the pane fits that one.
     func windowDidChangeScreen(_ notification: Notification) {
@@ -89,19 +97,20 @@ final class SettingsTabs: NSTabViewController {
             .padding(.horizontal, 20)
             .padding(.bottom, 12)
         }
-        .frame(width: 520)
         // Each pane gets its natural height, capped to the screen, with the Form scrolling
         // inside. Letting SwiftUI size the window to the Form's full height crashed once
         // a pane grew taller than the screen: AppKit clamped the window, SwiftUI asked to
-        // grow again, and AppKit aborted the update-constraints loop.
-        let hosting = NSHostingController(rootView: pane.frame(maxHeight: .infinity))
+        // grow again, and AppKit aborted the update-constraints loop. It fills whatever
+        // size the user drags the window to.
+        let hosting = NSHostingController(rootView: pane.frame(minWidth: Self.minimumSize.width, maxWidth: .infinity,
+                                                               maxHeight: .infinity))
         hosting.sizingOptions = []
         hosting.title = title
         let item = NSTabViewItem(viewController: hosting)
         item.label = title
         item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
         addTabViewItem(item)
-        naturalHeight[item] = { NSHostingView(rootView: pane).fittingSize.height }
+        naturalHeight[item] = { NSHostingView(rootView: pane.frame(width: Self.width)).fittingSize.height }
         fit(item)
     }
 
@@ -111,11 +120,22 @@ final class SettingsTabs: NSTabViewController {
     /// The tallest a pane gets on any screen: it fits a 13-inch MacBook Air's with room to
     /// spare, and the rest scrolls, so Settings looks the same on every Mac.
     static let tallest: CGFloat = 660
+    /// The width panes are laid out for, and the smallest the window can be dragged to.
+    static let width: CGFloat = 520
+    static let minimumSize = NSSize(width: width, height: 280)
+
+    /// The content size the user last dragged the window to (per Mac, not synced), or nil
+    /// while they haven't: then each pane opens at its own height.
+    static var chosenSize: NSSize? {
+        get { (AppDefaults.store.string(forKey: "settings.contentSize")).map(NSSizeFromString) }
+        set { AppDefaults.store.set(newValue.map(NSStringFromSize), forKey: "settings.contentSize") }
+    }
 
     /// Sizes a pane before it's shown (re-measured each time, as panes change), no taller
-    /// than the screen or `tallest`.
+    /// than the screen or `tallest`; once the user has dragged the window to a size, every
+    /// pane opens at that size instead, and scrolls when it holds more.
     @discardableResult
-    private func fit(_ item: NSTabViewItem) -> CGFloat? {
+    private func fit(_ item: NSTabViewItem) -> NSSize? {
         guard let height = naturalHeight[item]?() else { return nil }
         let screen = (isViewLoaded ? view.window?.screen : nil) ?? NSScreen.main
         var available = (screen?.visibleFrame.height ?? 800) - 120
@@ -128,17 +148,21 @@ final class SettingsTabs: NSTabViewController {
         // The website's pictures show each pane whole.
         if ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SHOTS"] != nil { tallest = .greatestFiniteMagnitude }
         #endif
-        let fitted = min(height, available, tallest)
-        item.viewController?.preferredContentSize = NSSize(width: 520, height: fitted)
-        return fitted
+        var size = NSSize(width: Self.width, height: min(height, available, tallest))
+        if let chosen = Self.chosenSize {
+            size = NSSize(width: max(chosen.width, Self.minimumSize.width),
+                          height: min(max(chosen.height, Self.minimumSize.height), available))
+        }
+        item.viewController?.preferredContentSize = size
+        return size
     }
 
     /// The shown pane fitted again (another screen, or the screen changed), keeping the
     /// window's top where it is and all of it on screen.
     func refit() {
         guard isViewLoaded, let window = view.window, selectedTabViewItemIndex >= 0,
-              let height = fit(tabViewItems[selectedTabViewItemIndex]) else { return }
-        var frame = window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: 520, height: height))
+              let size = fit(tabViewItems[selectedTabViewItemIndex]) else { return }
+        var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
         frame.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
         if let visible = window.screen?.visibleFrame {
             frame.origin.y = max(min(frame.origin.y, visible.maxY - frame.height), visible.minY)
