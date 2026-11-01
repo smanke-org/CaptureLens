@@ -305,6 +305,8 @@ enum Help {
             .text("Check that macOS screenshots is on in Settings › Library › Captures from other tools, and allow CaptureLens to read the folder where screenshots are saved when macOS asks (or in System Settings › Privacy & Security › Files and Folders). Screenshots come in a few seconds after the floating thumbnail goes away. Spotlight finds them, so a folder Spotlight doesn't index is left out."),
             .heading("A shortcut does nothing"),
             .text("Another app may use the same keys. Pick a different one in Settings › Presets."),
+            .heading("A shortcut can't be set"),
+            .text("If CaptureLens says nothing came through when you press the keys, another app has taken them for itself, so they never reach CaptureLens. Press different keys, or remove the shortcut from that app first, then set it again."),
         ]),
     ] }
 }

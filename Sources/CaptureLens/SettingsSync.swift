@@ -637,6 +637,11 @@ enum DebugCommands {
                 // 40 pt right, lets go of ⌘; reports the tool and the box at each step.
                 result = await PanTest.holdCommand(typing: arg == "typing")
             case "samples": _ = await DebugShots.addSamples() // the made-up library from the screenshots
+            case "shortcut-hint":
+                // `shortcut-hint[:key]`: starts the first shortcut recorder in Settings, then ⌃ goes
+                // down and up (with C between when `key`, as when the keys reach CaptureLens);
+                // reports whether the "nothing came through" hint shows and the button's title.
+                result = await shortcutHintTest(withKey: arg == "key")
             case "drag-sidebar":
                 // `drag-sidebar:<x>`: drags the sidebar's edge to x points from the window's left;
                 // reports the sidebar's width after.
@@ -1006,6 +1011,33 @@ enum DebugCommands {
             result = "error: \(error.localizedDescription)"
         }
         AppDefaults.store.set("\(line) -> \(result)", forKey: "debug.lastCommand")
+    }
+
+    private static func shortcutHintTest(withKey: Bool) async -> String {
+        func recorders(in view: NSView) -> [ShortcutRecorder.RecorderButton] {
+            ((view as? ShortcutRecorder.RecorderButton).map { [$0] } ?? []) + view.subviews.flatMap(recorders)
+        }
+        guard let window = SettingsWindow.shared.debugWindow, let content = window.contentView,
+              let button = recorders(in: content).first else { return "no shortcut recorder in Settings" }
+        button.performClick(nil)
+        try? await Task.sleep(for: .milliseconds(200))
+        let started = button.debugTitle
+        var posted = 0
+        func post(_ type: NSEvent.EventType, _ flags: NSEvent.ModifierFlags, keyCode: UInt16, chars: String = "") {
+            let event = type == .flagsChanged
+                ? NSEvent.keyEvent(with: .flagsChanged, location: .zero, modifierFlags: flags, timestamp: 0,
+                                   windowNumber: window.windowNumber, context: nil, characters: "",
+                                   charactersIgnoringModifiers: "", isARepeat: false, keyCode: keyCode)
+                : NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags, timestamp: 0,
+                                   windowNumber: window.windowNumber, context: nil, characters: chars,
+                                   charactersIgnoringModifiers: chars, isARepeat: false, keyCode: keyCode)
+            if let event { NSApp.postEvent(event, atStart: false); posted += 1 }
+        }
+        post(.flagsChanged, [.control], keyCode: 59) // left ⌃
+        if withKey { post(.keyDown, [.control], keyCode: 8, chars: "c") } // C
+        post(.flagsChanged, [], keyCode: 59) // left ⌃
+        try? await Task.sleep(for: .milliseconds(500))
+        return "after click \(started), posted \(posted), button on screen \(NSStringFromRect(button.debugScreenFrame)), hint on screen \(NSStringFromRect(button.debugHintFrame)); hint \(button.debugHintShowing), title \(button.debugTitle)"
     }
 
     private static func writeStatus(_ path: String) {

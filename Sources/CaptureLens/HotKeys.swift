@@ -189,6 +189,10 @@ struct ShortcutRecorder: NSViewRepresentable {
         var hotKey: HotKey? { didSet { refresh() } }
         private var recording = false { didSet { refresh() } }
         private var monitor: Any?
+        /// ⌘ ⌥ or ⌃ is held, and whether a key came while it was.
+        private var modifiersDown = false
+        private var sawKey = false
+        private var hint: NSPopover?
 
         override init(frame: NSRect) {
             super.init(frame: frame)
@@ -213,8 +217,23 @@ struct ShortcutRecorder: NSViewRepresentable {
         private func start() {
             recording = true
             HotKeyCenter.shared.unregisterAll()
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            modifiersDown = false
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
                 guard let self else { return event }
+                if event.type == .flagsChanged {
+                    // A shortcut another app has taken never arrives here: the modifiers go
+                    // down and up with no key between them.
+                    let held = !event.modifierFlags.intersection([.command, .option, .control]).isEmpty
+                    if held && !modifiersDown {
+                        modifiersDown = true
+                        sawKey = false
+                    } else if !held && modifiersDown {
+                        modifiersDown = false
+                        if !sawKey { showHint() }
+                    }
+                    return event
+                }
+                sawKey = true
                 switch Int(event.keyCode) {
                 case kVK_Escape:
                     self.stop()
@@ -236,8 +255,35 @@ struct ShortcutRecorder: NSViewRepresentable {
             recording = false
             if let monitor { NSEvent.removeMonitor(monitor) }
             monitor = nil
+            hint?.close()
+            hint = nil
             // The binding writes Preferences synchronously, so this sees the new key.
             HotKeyCenter.shared.apply()
+        }
+
+        #if DEBUG
+        var debugHintShowing: Bool { hint?.isShown ?? false }
+        var debugHintFrame: NSRect { hint?.contentViewController?.view.window?.frame ?? .zero }
+        var debugScreenFrame: NSRect { window?.convertToScreen(convert(bounds, to: nil)) ?? .zero }
+        var debugTitle: String { title }
+        #endif
+
+        private func showHint() {
+            guard hint == nil, window != nil else { return }
+            let host = NSHostingController(rootView:
+                Text("Nothing came through. If you pressed a shortcut, another app is using those keys. Press different keys, or remove the shortcut from that app first.")
+                    .font(.callout)
+                    .frame(width: 260, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(12))
+            let popover = NSPopover()
+            popover.behavior = .transient
+            popover.contentViewController = host
+            // Sized before it's shown: otherwise it's placed for a taller first guess, then
+            // shrinks away from the button.
+            popover.contentSize = host.view.fittingSize
+            popover.show(relativeTo: bounds, of: self, preferredEdge: .maxY)
+            hint = popover
         }
     }
 }
