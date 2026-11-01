@@ -81,7 +81,9 @@ public enum CaptureStats {
         case .month:
             let thisMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: todayStart))!
             edges = (0...11).reversed().map { calendar.date(byAdding: .month, value: -$0, to: thisMonth)! }
-            edges.append(tomorrow)
+            // The whole of this month, not just the days so far: ending it at tomorrow drew
+            // the current month as a sliver early on (one day wide on the 1st).
+            edges.append(calendar.date(byAdding: .month, value: 1, to: thisMonth)!)
         }
 
         var bars = zip(edges, edges.dropFirst()).map { StatsBar(start: $0, end: $1, count: 0) }

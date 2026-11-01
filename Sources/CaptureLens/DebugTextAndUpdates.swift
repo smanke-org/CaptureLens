@@ -71,6 +71,11 @@ enum DebugTextAndUpdates {
             try? await Task.sleep(for: .seconds(4))
             render(SettingsWindow.shared.debugWindow?.attachedSheet, to: out.appending(path: "whats-new.png"))
             note("sheet shown: \(SettingsWindow.shared.debugWindow?.attachedSheet != nil)")
+            if let window = SettingsWindow.shared.debugWindow, let sheet = window.attachedSheet { window.endSheet(sheet) }
+            // The Activity graph, with whatever activity.json the library folder holds.
+            SettingsWindow.shared.show(tab: "Activity")
+            try? await Task.sleep(for: .seconds(2))
+            render(SettingsWindow.shared.debugWindow, to: out.appending(path: "activity.png"))
             note("done")
             exit(0)
         }

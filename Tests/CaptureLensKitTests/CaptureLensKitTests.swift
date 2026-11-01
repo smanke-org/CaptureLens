@@ -1081,6 +1081,19 @@ extension CGImage {
         #expect(range == .week && total.map(\.count).reduce(0, +) == 6)
     }
 
+    @Test func yearViewShowsTheWholeCurrentMonth() {
+        // On the 1st, this month's bar used to end at tomorrow: one day wide, so it looked missing.
+        let today = calendar.date(from: DateComponents(year: 2026, month: 11, day: 1, hour: 10))!
+        let october = calendar.date(from: DateComponents(year: 2026, month: 10, day: 24))!
+        let counts = [october: 18, calendar.startOfDay(for: today): 2]
+        let bars = CaptureStats.bars(counts: counts, range: .year, today: today, calendar: calendar)
+        #expect(bars.count == 12)
+        let last = bars[bars.count - 1]
+        #expect(last.start == calendar.date(from: DateComponents(year: 2026, month: 11, day: 1)))
+        #expect(last.end == calendar.date(from: DateComponents(year: 2026, month: 12, day: 1)))
+        #expect(last.count == 2 && bars[bars.count - 2].count == 18)
+    }
+
     @Test func macsAddUp() {
         var a = ActivityLog(), b = ActivityLog()
         a.record(ActivityKey.area, at: day(3), calendar: calendar)
