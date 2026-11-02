@@ -132,6 +132,26 @@ final class HotKeyCenter {
                 NSLog("SnagAnything: shortcut \(key.display) not registered (\(status)), probably taken by another app")
             }
         }
+        ShortcutsLensReport.publish()
+    }
+
+    /// For ShortcutsLens: the shortcuts that registered, named as Settings names them.
+    var reportedShortcuts: [ShortcutsLensReport.Shortcut] {
+        let registered = Set(actions.values)
+        let prefs = Preferences.shared
+        return bindings.compactMap { action, key in
+            guard registered.contains(action) else { return nil }
+            let id: String, title: String, category: String?
+            switch action {
+            case .library: (id, title, category) = ("library", "Open the library", nil)
+            case .captureAgain: (id, title, category) = ("captureAgain", "Capture the same area again", nil)
+            case .captureText: (id, title, category) = ("captureText", "Capture text", nil)
+            case .captureBar: (id, title, category) = ("captureBar", "Show or hide the capture bar", nil)
+            case .preset(let uuid):
+                (id, title, category) = ("preset-\(uuid.uuidString)", prefs.preset(uuid)?.name ?? "Preset", "Presets")
+            }
+            return .init(id: id, title: title, keyCode: Int(key.keyCode), carbonModifiers: Int(key.modifiers), category: category)
+        }
     }
 
     /// Whether a key press is one of SnagAnything's own shortcuts.

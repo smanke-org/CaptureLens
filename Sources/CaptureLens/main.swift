@@ -139,6 +139,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
         HotKeyCenter.shared.perform = { [weak self] action in self?.perform(action) }
         HotKeyCenter.shared.apply()
+        #if !APPSTORE
+        // A sandboxed app can't send a distributed notification's userInfo.
+        ShortcutsLensReport.start { HotKeyCenter.shared.reportedShortcuts }
+        #endif
 
         setUpStatusItem()
         // ToolHUD can take the menu into its own while it runs.
