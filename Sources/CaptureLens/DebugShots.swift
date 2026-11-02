@@ -92,13 +92,24 @@ enum DebugShots {
             await shoot(window, "editor-full", out: out, note: note)
             AppDefaults.store.set("left", forKey: "editor.palettePlacement")
             prefs.toolStyle = .dial
-            try? await Task.sleep(for: .seconds(1))
+            // Full width, so the whole dial fits over the picture.
+            library.state.showFullWidth()
+            try? await Task.sleep(for: .seconds(1.5))
+            CanvasZoom.shared.fitRequested += 1
+            try? await Task.sleep(for: .seconds(0.5))
             if let scroll = findScroll(window.contentView) {
                 scroll.openDial(at: CGPoint(x: scroll.bounds.midX + 120, y: scroll.bounds.midY), held: false)
                 try? await Task.sleep(for: .seconds(1))
                 await shoot(window, "dial", out: out, note: note)
+                // One button per group, with the shapes fanned out as pointing at them would.
+                prefs.dialLayout = .groups
+                scroll.debugDialState.openGroup = .shapes
+                try? await Task.sleep(for: .seconds(1))
+                await shoot(window, "dial-groups", out: out, note: note)
+                prefs.dialLayout = .slices
                 scroll.closeDial()
             }
+            library.state.leaveFullWidth()
             // A real right-click on the picture, through the event queue, with the details
             // showing as they do by default.
             library.state.showInfo = true

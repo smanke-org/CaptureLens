@@ -69,7 +69,7 @@ Requires macOS 26 or later. Automatic names need Apple Intelligence turned on.
 <table>
 <tr>
 <td width="50%"><img src="docs/images/capturelens-annotate.webp" alt="A sample sales chart marked up with a numbered box, a callout and an arrow, with the markup tools in a strip beside it"><br><sub><b>Markup.</b> Boxes, arrows, callouts and steps that stay editable.</sub></td>
-<td width="50%"><img src="docs/images/capturelens-dial.webp" alt="The markup tools as a radial dial on a glass disc over a capture, with colors and line widths in a bar underneath"><br><sub><b>Strip or dial.</b> The tools as a radial dial, pinned open.</sub></td>
+<td width="50%"><img src="docs/images/capturelens-dial.webp" alt="The markup tools as a radial dial on a glass disc over a capture, each group of tools in its own slice, with colors and line widths in a bar underneath"><br><sub><b>Strip or dial.</b> The tools as a dial, grouped by kind, pinned open.</sub></td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/images/capturelens-smart-move.webp" alt="Smart Move outlining the fields, buttons and lines of text in a sample Account Settings capture"><br><sub><b>Smart Move.</b> Pick up parts of the picture and move them.</sub></td>
