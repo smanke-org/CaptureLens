@@ -29,210 +29,41 @@ struct CaptureDetail: View {
 struct SingleCaptureView: View {
     @Bindable var state: LibraryState
     let item: CaptureItem
-    /// Just the picture and its tools, for the pop-out editor window.
+    /// The pop-out editor window: just the picture and its tools.
     var pictureOnly = false
     @State private var editorWindow = EditorWindow.shared
-    @State private var store = LibraryStore.shared
     @State private var zoomToFit = 0
     @State private var editor = AnnotationEditor.shared
     @State private var prefs = Preferences.shared
-    /// A pane folded away to give the other all the room; remembered between captures.
-    @AppStorage("library.collapsedPane", store: AppDefaults.store) private var collapsedRaw = ""
-    private var collapsed: Pane? {
-        get { Pane(rawValue: collapsedRaw) }
-        nonmutating set { withAnimation(.easeInOut(duration: 0.2)) { collapsedRaw = newValue?.rawValue ?? "" } }
-    }
-
-    enum Pane: String { case picture, details }
-
-    /// The picture's share of the column's height, above its details.
-    @AppStorage(LibraryLayout.pictureKey, store: AppDefaults.store) private var pictureShare = LibraryLayout.defaultPicture
-
-    static func pictureRange(_ room: CGFloat) -> ClosedRange<Double> {
-        200...max(200, Double(room) - 180 - 1)
-    }
-
-    private func pictureHeight(_ room: CGFloat) -> Binding<Double> {
-        Binding(get: { Self.pictureRange(room).clamp(pictureShare * Double(room)) },
-                set: { pictureShare = room > 0 ? $0 / Double(room) : LibraryLayout.defaultPicture })
-    }
-
-    /// Info (name, tags, notes, where it came from) or Markup (how marks look), in tabs.
-    @AppStorage("library.detailsTab", store: AppDefaults.store) private var detailsTab = "info"
-
-    private var details: some View {
-        VStack(spacing: 0) {
-            if item.kind != .video {
-                Picker("Details", selection: $detailsTab) {
-                    Text("Info").tag("info")
-                    Text("Markup").tag("markup")
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(maxWidth: 260)
-                .padding(.top, 8)
-                .padding(.bottom, 2)
-            }
-            if detailsTab == "markup" && item.kind != .video {
-                MarkupPanel()
-            } else {
-                CaptureInspector(state: state, item: item)
-            }
-        }
-        .frame(minHeight: 180, idealHeight: 300)
-    }
 
     private func fit() { zoomToFit += 1 }
 
+    /// The size of the chevrons on the folded sides' slim bars.
     static let barFontSize: CGFloat = 16
 
-    /// Edit/Result, then whatever fits.
-    private func barRow<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        HStack(spacing: 10) {
-            // On: mark up the original. Off: the finished picture, as it's copied and saved.
-            Toggle("Edit", isOn: Binding(get: { !editor.showResult }, set: { editor.showResult = !$0 }))
-                .toggleStyle(.switch)
-                .fixedSize()
-                .help(editor.showResult ? "Turn on to annotate and adjust the picture"
-                                        : "Turn off to see the finished picture, as it's copied and saved")
-            content()
-        }
-        // A quarter bigger than standard, so the buttons are easy to hit.
-        .font(.system(size: Self.barFontSize))
-        .labelStyle(.iconOnly)
-        .buttonStyle(.borderless)
-        .fixedSize(horizontal: true, vertical: false)
-    }
-
-    @ViewBuilder private var actionButtons: some View {
-        Button { copy() } label: { Label("Copy", systemImage: "doc.on.doc") }
-            .help("Copy")
-        Button { Exporter.save(item) } label: { Label("Save As…", systemImage: "square.and.arrow.down") }
-            .help("Save As…")
-        ShareButton(items: { [item] }, pointSize: Self.barFontSize).fixedSize().help("Share")
-        Button { store.toggleFavorite([item.id]) } label: {
-            Label("Favorite", systemImage: item.favorite ? "star.fill" : "star")
-        }
-        .help(item.favorite ? "Remove from Favorites" : "Add to Favorites")
-    }
-
-    @ViewBuilder private var deleteAndPanes: some View {
-        Button(role: .destructive) { state.confirmDelete = [item.id] } label: { Label("Delete", systemImage: "trash") }
-            .help("Delete…")
-        Divider().frame(height: 16)
-        if pictureOnly {
-            Button { editorWindow.close() } label: { Label("Bring Back", systemImage: "arrow.down.right.and.arrow.up.left") }
-                .help("Put the picture back in the library window")
-        } else {
-            Button { collapsed = .details } label: { Label("Hide Details", systemImage: "chevron.down.circle") }
-                .help("Hide the details, for more room to annotate")
-            Button { collapsed = .picture } label: { Label("Hide Picture", systemImage: "chevron.up.circle") }
-                .help("Hide the picture, for more room for the details")
-            Button { editorWindow.open() } label: { Label("Open in Its Own Window", systemImage: "macwindow.badge.plus") }
-                .help("Open the picture and its tools in a window of their own, as big as you like")
-        }
-    }
-
-    /// ‹ and ›, at the edge between the captures and the picture: fold either side away so
-    /// the other fills the window.
-    @ViewBuilder private var sideFolds: some View {
-        if !pictureOnly {
-            HStack(spacing: 6) {
-                Button { state.fold(.captures) } label: { Label("Hide Captures", systemImage: "chevron.left.circle") }
-                    .help("Hide the captures, so the picture and details fill the window")
-                    .disabled(state.foldedSide == .captures)
-                Button { state.fold(.editor) } label: { Label("Hide Picture and Details", systemImage: "chevron.right.circle") }
-                    .help("Hide the picture and details, so the captures fill the window")
-                Divider().frame(height: 16)
-            }
-            .labelStyle(.iconOnly)
-            .buttonStyle(.borderless)
-            .font(.system(size: 16))
-            .imageScale(.large)
-            .padding(.leading, 10)
-        }
-    }
-
-    /// Everything the narrow bar has no room for.
-    private func moreMenu(includeZoom: Bool) -> some View {
-        Menu {
-            Button("Copy") { copy() }
-            Button("Save As…") { Exporter.save(item) }
-            Button("Share…") { ShareButton.shareAtPointer([item]) }
-            Button(item.favorite ? "Remove from Favorites" : "Add to Favorites") { store.toggleFavorite([item.id]) }
-            Divider()
-            if includeZoom {
-                Button("Zoom In") { CanvasZoom.shared.step(in: true) }
-                Button("Zoom Out") { CanvasZoom.shared.step(in: false) }
-            }
-            Button("Zoom to Fit") { fit() }
-            Divider()
-            if pictureOnly {
-                Button("Bring Back to the Library") { editorWindow.close() }
-            } else {
-                Button("Hide Details") { collapsed = .details }
-                Button("Hide Picture") { collapsed = .picture }
-                Button(state.foldedSide == .captures ? "Show Captures" : "Hide Captures") {
-                    state.fold(state.foldedSide == .captures ? nil : .captures)
-                }
-                Button("Hide Picture and Details") { state.fold(.editor) }
-                Button("Open in Its Own Window") { editorWindow.open() }
-            }
-            Divider()
-            Button("Delete…", role: .destructive) { state.confirmDelete = [item.id] }
-        } label: {
-            Label("More", systemImage: "ellipsis.circle")
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Copy, save, share, zoom and more")
-    }
-
-    private func copy() {
-        if item.kind == .video { return VideoExport.copy(item) }
-        if let png = Flattener.png(item) { Clipboard.copy(png: png); Notice.shared.show("Copied"); ActivityStore.shared.record(ActivityKey.copies) }
-    }
-
+    /// The picture fills the column. What's done to it is in the toolbar (Markup, Favorite,
+    /// Share), the menus and its right-click menu; its details are in the inspector.
     private var pictureArea: some View {
         VStack(spacing: 0) {
             if item.kind == .video {
-                if !pictureOnly {
-                    HStack(spacing: 0) { sideFolds; Spacer() }.padding(.vertical, 6)
-                    Divider()
-                }
                 VideoPane(item: item).frame(minHeight: 200)
             } else if editor.showResult {
-                HStack(spacing: 0) { sideFolds; ResultBar(item: item) }
+                ResultBar(item: item)
                 Divider()
                 ResultCanvas(item: item, fitRequest: zoomToFit + CanvasZoom.shared.fitRequested)
+                    .overlay(alignment: .topTrailing) { FloatingZoom(fit: fit) }
                     .frame(minHeight: 200)
             } else {
-                HStack(spacing: 0) { sideFolds; AnnotationToolbar() }
+                AnnotationToolbar()
                 Divider()
-                // The tools float over the picture as a toolbar, or wait in a dial.
-                CaptureCanvas(item: item, fitRequest: zoomToFit + CanvasZoom.shared.fitRequested, editor: editorState)
-                    .overlay {
-                        if prefs.toolStyle == .toolbar { FloatingToolPalette() } else { DialHint() }
-                    }
-                    .frame(minHeight: 200)
-            }
-            // The whole bar when there's room; in a narrow window the less used buttons move into
-            // a ⋯ menu, then zooming too, so the bar never pushes the column past the window.
-            ViewThatFits(in: .horizontal) {
-                if item.kind == .video {
-                    // A video has no zooming; its player fits the space.
-                    barRow { actionButtons; Spacer(minLength: 4); deleteAndPanes }
-                    barRow { Spacer(minLength: 4); moreMenu(includeZoom: false) }
-                } else {
-                    barRow { actionButtons; Spacer(minLength: 4); ZoomControls(fit: fit); deleteAndPanes }
-                    barRow { actionButtons; Spacer(minLength: 4); ZoomControls(fit: fit, compact: true); deleteAndPanes }
-                    barRow { Spacer(minLength: 4); ZoomControls(fit: fit, compact: true); moreMenu(includeZoom: false) }
-                    barRow { Spacer(minLength: 4); moreMenu(includeZoom: true) }
+                // The tools sit in a strip beside the picture, never over it, or wait in a dial.
+                ToolPaletteDock(enabled: prefs.toolStyle == .toolbar) {
+                    CaptureCanvas(item: item, fitRequest: zoomToFit + CanvasZoom.shared.fitRequested, editor: editorState)
+                        .overlay { if prefs.toolStyle == .dial { DialHint() } }
+                        .overlay(alignment: .topTrailing) { FloatingZoom(fit: fit) }
                 }
+                .frame(minHeight: 200)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
         }
     }
 
@@ -243,76 +74,79 @@ struct SingleCaptureView: View {
 
     var body: some View {
         Group {
-            if pictureOnly {
-                pictureArea
-            } else if editorWindow.isOpen {
-                // The picture is in its own window; the details get all the room here.
-                VStack(spacing: 0) {
-                    CollapsedPaneBar(title: "Picture", symbol: "macwindow", edge: .top, note: "In its own window",
-                                     actionTitle: "Bring Back") { editorWindow.close() }
-                    Divider()
-                    details
+            if !pictureOnly && editorWindow.isOpen {
+                // The picture is in its own window; closing that brings it back.
+                ContentUnavailableView {
+                    Label("In Its Own Window", systemImage: "macwindow")
+                } description: {
+                    Text("The picture is open in a window of its own.")
+                } actions: {
+                    Button("Bring Back") { editorWindow.close() }
                 }
             } else {
-            switch collapsed {
-            case .picture:
-                VStack(spacing: 0) {
-                    CollapsedPaneBar(title: "Picture", symbol: "photo", edge: .top) { collapsed = nil }
-                    Divider()
-                    details
-                }
-            case .details:
-                VStack(spacing: 0) {
-                    pictureArea
-                    Divider()
-                    CollapsedPaneBar(title: "Details", symbol: "info.circle", edge: .bottom) { collapsed = nil }
-                }
-            case nil:
-                // The line between them drags; where it sits is kept as a share of the height.
-                GeometryReader { room in
-                    let height = pictureHeight(room.size.height)
-                    VStack(spacing: 0) {
-                        pictureArea.frame(height: height.wrappedValue)
-                        PaneDivider(axis: .rows, length: height, range: Self.pictureRange(room.size.height),
-                                    reset: { pictureShare = LibraryLayout.defaultPicture })
-                        details
-                    }
-                }
-            }
+                pictureArea
             }
         }
         .sheet(isPresented: $editor.showResize) { ResizeSheet() }
     }
 }
 
-/// A folded-away pane: its name and a button (or a click anywhere on it) to bring it back.
-private struct CollapsedPaneBar: View {
-    let title: String
-    let symbol: String
-    let edge: VerticalEdge
-    var note: String? = nil
-    var actionTitle: String? = nil
-    let restore: () -> Void
+/// Zoom out, the zoom level (a menu, with Zoom to Fit) and zoom in, floating in the
+/// picture's corner. Pinching and ⌃-scrolling zoom too.
+private struct FloatingZoom: View {
+    let fit: () -> Void
+    @State private var zoom = CanvasZoom.shared
 
     var body: some View {
-        Button(action: restore) {
-            HStack(spacing: 6) {
-                Image(systemName: symbol).foregroundStyle(.secondary)
-                Text(title).font(.callout.weight(.medium))
-                if let note { Text(note).font(.callout).foregroundStyle(.secondary) }
-                Spacer()
-                Label(actionTitle ?? "Show \(title)", systemImage: edge == .bottom ? "chevron.up.circle" : "chevron.down.circle")
-                    .labelStyle(.titleAndIcon)
-                    .font(.callout)
-                    .foregroundStyle(Color.accentColor)
+        HStack(spacing: 2) {
+            Button { zoom.step(in: false) } label: { Label("Zoom Out", systemImage: "minus") }
+                .disabled(zoom.magnification <= CanvasZoom.range.lowerBound + 0.001)
+                .help("Zoom out")
+            Menu {
+                ForEach([0.25, 0.5, 1, 2, 4], id: \.self) { level in
+                    Button("\(Int(level * 100))%") { zoom.set(level) }
+                }
+                Divider()
+                Button("Zoom to Fit", action: fit)
+            } label: {
+                Text("\(Int((zoom.magnification * 100).rounded()))%").monospacedDigit().frame(minWidth: 40)
             }
-            .padding(.horizontal, 12)
-            .frame(height: 30)
-            .contentShape(Rectangle())
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Pick a zoom level, or zoom to fit. Pinch or ⌃-scroll to zoom too.")
+            Button { zoom.step(in: true) } label: { Label("Zoom In", systemImage: "plus") }
+                .disabled(zoom.magnification >= CanvasZoom.range.upperBound - 0.001)
+                .help("Zoom in")
         }
-        .buttonStyle(.plain)
-        .background(.bar)
-        .help("Show the \(title.lowercased()) again")
+        .labelStyle(.iconOnly)
+        .buttonStyle(.borderless)
+        .controlSize(.small)
+        .padding(.horizontal, 8)
+        .frame(height: 28)
+        .glassEffect(.regular, in: .capsule)
+        .padding(10)
+    }
+}
+
+/// The selected capture's details, in the inspector at the window's right edge.
+struct InfoInspector: View {
+    @Bindable var state: LibraryState
+
+    var body: some View {
+        let selected = state.selectedItems
+        Group {
+            if selected.count == 1, let item = selected.first {
+                CaptureInspector(state: state, item: item).id(item.id)
+            } else if selected.count > 1 {
+                ContentUnavailableView("\(selected.count) Captures Selected", systemImage: "square.stack",
+                                       description: Text("Pick one capture to see its name, tags and notes."))
+            } else {
+                ContentUnavailableView("No Capture Selected", systemImage: "info.circle",
+                                       description: Text("Click a capture to see its name, tags and notes."))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -696,48 +530,6 @@ final class CanvasZoom {
     }
 }
 
-/// Zoom out, a zoom slider, zoom in, the zoom level, and Fit.
-struct ZoomControls: View {
-    let fit: () -> Void
-    /// Without the slider and Fit, for a narrow bar.
-    var compact = false
-    @State private var zoom = CanvasZoom.shared
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Button { zoom.step(in: false) } label: { Label("Zoom Out", systemImage: "minus.magnifyingglass") }
-                .disabled(zoom.magnification <= CanvasZoom.range.lowerBound + 0.001)
-                .help("Zoom out")
-            if !compact {
-            Slider(value: Binding(get: { log2(zoom.magnification) }, set: { zoom.set(pow(2, $0)) }),
-                   in: log2(CanvasZoom.range.lowerBound)...log2(CanvasZoom.range.upperBound))
-                .frame(width: 100)
-                .help("Zoom. Pinch or ⌃-scroll also zoom.")
-            }
-            Button { zoom.step(in: true) } label: { Label("Zoom In", systemImage: "plus.magnifyingglass") }
-                .disabled(zoom.magnification >= CanvasZoom.range.upperBound - 0.001)
-                .help("Zoom in")
-            Menu {
-                ForEach([0.25, 0.5, 1, 2, 4], id: \.self) { level in
-                    Button("\(Int(level * 100))%") { zoom.set(level) }
-                }
-                Divider()
-                Button("Zoom to Fit", action: fit)
-            } label: {
-                Text("\(Int((zoom.magnification * 100).rounded()))%").monospacedDigit().frame(minWidth: 38)
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("Pick a zoom level")
-            if !compact {
-                Button(action: fit) { Label("Fit", systemImage: "arrow.up.left.and.down.right.magnifyingglass") }
-                    .help("Zoom to fit")
-            }
-        }
-    }
-}
-
 /// The Edit view's scroll view: scrolling moves around the picture as usual, and with ⌃ held
 /// (mouse wheel or trackpad) it zooms around the pointer instead. Pinching zooms too.
 ///
@@ -1057,9 +849,10 @@ struct CaptureInspector: View {
 
     var body: some View {
         Form {
-            Section {
+            Section("Name") {
                 HStack {
                     TextField("Name", text: $name)
+                        .labelsHidden()
                         .focused($nameFocused)
                         .onSubmit { store.rename(item.id, to: name) }
                     if store.analyzing.contains(item.id) {
@@ -1070,24 +863,27 @@ struct CaptureInspector: View {
                             .help(AutoNamer.unavailableReason ?? "Suggest a name from what's in the capture")
                     }
                 }
+            }
+            Section("Tags") {
                 TagEditor(item: item)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("More Info").font(.caption).foregroundStyle(.secondary)
-                    TextEditor(text: $notes)
-                        // macOS hangs a Writing Tools button beside an empty box even when it isn't
-                        // being typed in, and here it lands loose over the box's edge.
-                        .writingToolsBehavior(.disabled)
-                        .font(.body)
-                        .frame(minHeight: 60)
-                        .scrollContentBackground(.hidden)
-                        .padding(4)
-                        .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
-                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.secondary.opacity(0.25)))
-                }
+            }
+            Section("Notes") {
+                TextEditor(text: $notes)
+                    // macOS hangs a Writing Tools button beside an empty box even when it isn't
+                    // being typed in, and here it lands loose over the box's edge.
+                    .writingToolsBehavior(.disabled)
+                    .font(.body)
+                    .frame(minHeight: 60)
+                    .scrollContentBackground(.hidden)
+                    .padding(4)
+                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
+                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.secondary.opacity(0.25)))
+                    .accessibilityLabel("Notes")
             }
             Section {
                 DisclosureGroup(isExpanded: $showSource) {
-                LabeledContent("Captured", value: item.created.formatted(date: .long, time: .standard))
+                // Short values, so each fits on its row in the inspector.
+                LabeledContent("Captured", value: item.created.formatted(date: .abbreviated, time: .shortened))
                 LabeledContent("Type", value: item.kind.title)
                 if let tool = item.source.tool { LabeledContent("Taken with", value: tool) }
                 if let app = item.source.appName {
@@ -1104,7 +900,8 @@ struct CaptureInspector: View {
                         Link(item.source.pageTitle ?? url, destination: link).lineLimit(1).truncationMode(.middle)
                     }
                 }
-                LabeledContent("Size", value: "\(Int(item.pointSize.width)) × \(Int(item.pointSize.height)) points (\(item.pixelWidth) × \(item.pixelHeight) pixels)")
+                LabeledContent("Size", value: "\(Int(item.pointSize.width)) × \(Int(item.pointSize.height)) points")
+                LabeledContent("Pixels", value: "\(item.pixelWidth) × \(item.pixelHeight)")
                 if let display = item.source.displayName { LabeledContent("Display", value: display) }
                 } label: {
                     // Folded, the app and date say where it came from at a glance.
@@ -1438,6 +1235,8 @@ final class EditorWindow: NSObject, NSWindowDelegate {
         window?.close()
     }
 
+    var isKey: Bool { window?.isKeyWindow == true }
+
     func setTitle(_ title: String) { window?.title = title }
 
     #if DEBUG
@@ -1474,5 +1273,12 @@ private struct PoppedEditor: View {
         }
         .frame(minWidth: 520, minHeight: 420)
         .overlay { DialOverlay() }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                SelectionActions.MarkupToggle(state: state)
+                SelectionActions.FavoriteButton(state: state)
+                SelectionActions.ShareToolbarButton(state: state)
+            }
+        }
     }
 }

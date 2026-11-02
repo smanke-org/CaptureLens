@@ -19,10 +19,12 @@ enum LibraryLayout {
     static let pictureKey = "library.pictureShare"
     static let defaultDetail = 0.45
     static let defaultPicture = 0.55
+    /// The details inspector's usual width.
+    static let infoWidth: CGFloat = 280
 
     /// Settings kept as they are (no conversion between screens).
     private static let plainKeys = [
-        "library.foldedSide", "library.collapsedPane", "library.inspector", "library.sort", "library.detailsTab",
+        "library.foldedSide", "library.collapsedPane", "library.inspector", "library.info", "library.sort", "library.detailsTab",
         "library.details.sourceOpen", "library.sidebar.tagsOpen", "library.sidebar.appsOpen", "library.sidebar.sitesOpen",
         detailKey, pictureKey,
     ]
@@ -119,6 +121,8 @@ enum LibraryLayout {
 
     /// How wide the captures are with this much room beside the sidebar (0 when folded away).
     private static func gridWidth(room: Double, state: LibraryState) -> Double {
+        // The details inspector takes its share first.
+        let room = state.showInfo ? room - Double(infoWidth) - 1 : room
         guard state.showInspector else { return room }
         switch state.foldedSide {
         case .captures: return 0
@@ -157,6 +161,7 @@ enum LibraryLayout {
         // The library's own copies of these.
         // Details first: showing them unfolds the right side, which the fold then sets again.
         if let shown = layout["library.inspector"] as? Bool { state.showInspector = shown }
+        if let shown = layout["library.info"] as? Bool { state.showInfo = shown }
         state.foldedSide = (layout["library.foldedSide"] as? String).flatMap(LibraryState.Side.init)
         if let sort = (layout["library.sort"] as? String).flatMap(LibrarySort.init) { state.sort = sort }
         // Shares become points on this Mac's window.

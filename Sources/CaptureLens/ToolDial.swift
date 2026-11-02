@@ -18,45 +18,54 @@ enum PalettePlacement: String, CaseIterable {
     }
 }
 
-/// The markup tools floating over the picture, on its left, right or bottom edge. Drag the
-/// grip to move it; it stays where it's put.
-struct FloatingToolPalette: View {
+/// The markup tools in a strip of their own on the picture's left, right or bottom edge,
+/// so they never cover it. Drag the grip toward another edge to move them; they stay there.
+struct ToolPaletteDock<Content: View>: View {
+    /// Off with the tools in a dial: the picture alone.
+    let enabled: Bool
+    @ViewBuilder let content: () -> Content
     @AppStorage("editor.palettePlacement", store: AppDefaults.store) private var placementRaw = PalettePlacement.left.rawValue
     @State private var drag: CGSize = .zero
+    @State private var area: CGSize = .zero
 
     private var placement: PalettePlacement { PalettePlacement(rawValue: placementRaw) ?? .left }
 
     var body: some View {
-        GeometryReader { geo in
-            let horizontal = placement == .bottom
-            Group {
-                if horizontal {
-                    HStack(spacing: 0) { grip(geo.size, horizontal: true); ToolPalette(horizontal: true) }
-                } else {
-                    VStack(spacing: 0) { grip(geo.size, horizontal: false); ToolPalette() }
+        Group {
+            if !enabled {
+                content()
+            } else {
+                switch placement {
+                case .left: HStack(spacing: 0) { palette; content() }
+                case .right: HStack(spacing: 0) { content(); palette }
+                case .bottom: VStack(spacing: 0) { content(); palette }
                 }
             }
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.primary.opacity(0.08)))
-            .shadow(color: .black.opacity(0.16), radius: 10, y: 4)
-            .offset(drag)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
-            .padding(10)
         }
         .coordinateSpace(name: "palette-area")
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { area = $0 }
     }
 
-    private var alignment: Alignment {
-        switch placement {
-        case .left: .leading
-        case .right: .trailing
-        case .bottom: .bottom
+    private var palette: some View {
+        let horizontal = placement == .bottom
+        return Group {
+            if horizontal {
+                HStack(spacing: 0) { grip(horizontal: true); ToolPalette(horizontal: true) }
+            } else {
+                VStack(spacing: 0) { grip(horizontal: false); ToolPalette() }
+            }
         }
+        .glassEffect(.regular, in: .rect(cornerRadius: 14))
+        .offset(drag)
+        .zIndex(1)
+        .padding(8)
+        .frame(maxHeight: horizontal ? nil : .infinity, alignment: .top)
+        .background(Color(nsColor: .underPageBackgroundColor))
     }
 
-    /// The handle: drag it toward an edge to move the toolbar there.
-    private func grip(_ area: CGSize, horizontal: Bool) -> some View {
-        Image(systemName: horizontal ? "line.3.horizontal" : "line.3.horizontal")
+    /// The handle: drag it toward an edge to move the tools there.
+    private func grip(horizontal: Bool) -> some View {
+        Image(systemName: "line.3.horizontal")
             .rotationEffect(.degrees(horizontal ? 90 : 0))
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(.secondary)
@@ -79,7 +88,7 @@ struct FloatingToolPalette: View {
                     Button("Move to the \(edge.title)") { placementRaw = edge.rawValue }
                 }
             }
-            .help("Drag to move the toolbar to the left, right or bottom of the picture")
+            .help("Drag to move the tools to the left, right or bottom of the picture")
             .onHover { inside in if inside { NSCursor.openHand.push() } else { NSCursor.pop() } }
     }
 }
@@ -227,7 +236,7 @@ struct ToolDialView: View {
         Button { state.close() } label: {
             VStack(spacing: 2) {
                 Image(systemName: editor.tool.symbol).font(.system(size: 20))
-                Text(editor.tool.title).font(.system(size: 9, weight: .semibold)).lineLimit(1)
+                Text(editor.tool.title).font(.system(size: 10, weight: .semibold)).lineLimit(1)
             }
             .frame(width: 70, height: 70)
             .background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
@@ -253,7 +262,7 @@ struct ToolDialView: View {
                 .overlay(alignment: .bottomTrailing) {
                     if let key = tool.shortcut {
                         Text(key)
-                            .font(.system(size: 8, weight: .bold))
+                            .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(on ? Color.white.opacity(0.85) : Color.secondary)
                             .offset(x: -size * 0.12, y: -size * 0.08)
                     }

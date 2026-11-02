@@ -2,9 +2,9 @@ import AppKit
 import CaptureLensKit
 import SwiftUI
 
-/// The Markup tab under the picture: everything about how marks look, laid out in full
-/// (the menus above the picture hold the same, for when the details are folded away), and
-/// how the tools are offered.
+/// Markup settings, in a popover from the bar above the picture: everything about how marks
+/// look, laid out in full (the menus beside it hold the same, one at a time), and how the
+/// tools are offered.
 struct MarkupPanel: View {
     @State private var editor = AnnotationEditor.shared
     @State private var prefs = Preferences.shared

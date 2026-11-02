@@ -16,7 +16,6 @@ enum DebugShots {
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         AppDefaults.store.set("dark", forKey: AppAppearance.key)
         AppDefaults.store.set("left", forKey: "editor.palettePlacement")
-        AppDefaults.store.set("info", forKey: "library.detailsTab")
         let prefs = Preferences.shared
         prefs.toolStyle = .toolbar
         prefs.autoName = false
@@ -41,9 +40,42 @@ enum DebugShots {
             CanvasZoom.shared.fitRequested += 1
             try? await Task.sleep(for: .seconds(1))
             await shoot(window, "library-editor", out: out, note: note)
+            let toolbar = window.toolbar
+            note("title \(window.title) | \(window.subtitle) | toolbar \(toolbar?.items.map(\.itemIdentifier.rawValue) ?? [])")
 
-            // The details folded away, for a big picture: the toolbar, then the dial.
-            AppDefaults.store.set("details", forKey: "library.collapsedPane")
+            // The menu bar's menus, with what's on and off with one capture selected.
+            for top in NSApp.mainMenu?.items ?? [] {
+                guard let menu = top.submenu else { continue }
+                menu.update()
+                let entries = menu.items.filter { !$0.isSeparatorItem }.map { item in
+                    let keys = item.keyEquivalent.isEmpty ? "" : " [\(item.keyEquivalentModifierMask.contains(.shift) ? "⇧" : "")\(item.keyEquivalentModifierMask.contains(.option) ? "⌥" : "")\(item.keyEquivalentModifierMask.contains(.control) ? "⌃" : "")⌘\(item.keyEquivalent)]"
+                    return "\(item.title)\(keys)\(item.isEnabled ? "" : " (off)")"
+                }
+                note("menu \(menu.title): \(entries.joined(separator: ", "))")
+            }
+            // A button for each preset beside Capture.
+            library.state.showPresetButtons = true
+            try? await Task.sleep(for: .seconds(1))
+            await shoot(window, "preset-buttons", out: out, note: note)
+            library.state.showPresetButtons = false
+            try? await Task.sleep(for: .seconds(0.5))
+
+            // The same in Light, then the finished picture (Markup off), then without details.
+            AppDefaults.store.set("light", forKey: AppAppearance.key)
+            try? await Task.sleep(for: .seconds(1.5))
+            await shoot(window, "library-editor-light", out: out, note: note)
+            AnnotationEditor.shared.showResult = true
+            try? await Task.sleep(for: .seconds(1))
+            await shoot(window, "library-result-light", out: out, note: note)
+            AnnotationEditor.shared.showResult = false
+            AppDefaults.store.set("dark", forKey: AppAppearance.key)
+            library.state.showInfo = false
+            try? await Task.sleep(for: .seconds(1.5))
+            CanvasZoom.shared.fitRequested += 1
+            try? await Task.sleep(for: .seconds(0.5))
+            await shoot(window, "library-no-details", out: out, note: note)
+
+            // The tools at the bottom, then the dial.
             AppDefaults.store.set("bottom", forKey: "editor.palettePlacement")
             try? await Task.sleep(for: .seconds(1))
             CanvasZoom.shared.fitRequested += 1
@@ -59,15 +91,8 @@ enum DebugShots {
                 scroll.closeDial()
             }
             prefs.toolStyle = .toolbar
-            AppDefaults.store.set("", forKey: "library.collapsedPane")
+            library.state.showInfo = true
             try? await Task.sleep(for: .seconds(1))
-
-            // The Markup tab under the picture.
-            AppDefaults.store.set("markup", forKey: "library.detailsTab")
-            try? await Task.sleep(for: .seconds(1))
-            await shoot(window, "markup-tab", out: out, note: note)
-            AppDefaults.store.set("info", forKey: "library.detailsTab")
-            try? await Task.sleep(for: .seconds(0.5))
 
             // The sidebar with Apps folded away.
             AppDefaults.store.set(false, forKey: "library.sidebar.appsOpen")

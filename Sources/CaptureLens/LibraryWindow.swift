@@ -31,6 +31,8 @@ final class LibraryWindow: NSObject, NSWindowDelegate {
             if window.frame.origin == .zero { window.center() }
             self.window = window
         }
+        window?.title = state.title
+        window?.subtitle = state.subtitle
         if let id {
             state.reveal(id)
         }
@@ -84,12 +86,59 @@ final class LibraryState {
     func stepThumbnails(bigger: Bool) {
         thumbnailSize = Self.clampSize(thumbnailSize + (bigger ? 40 : -40))
     }
+    /// The selected capture's picture, beside the captures.
     var showInspector = AppDefaults.store.object(forKey: "library.inspector") as? Bool ?? true {
         didSet {
             AppDefaults.store.set(showInspector, forKey: "library.inspector")
             // Asking for the selected capture brings it back from a slim bar too.
             if showInspector && foldedSide == .editor { foldedSide = nil }
         }
+    }
+
+    /// A toolbar button for each preset, after Capture (View › Show Preset Buttons).
+    var showPresetButtons = AppDefaults.store.bool(forKey: "library.presetButtons") {
+        didSet { AppDefaults.store.set(showPresetButtons, forKey: "library.presetButtons") }
+    }
+
+    /// The details (name, tags, notes, where it came from) in the inspector at the window's
+    /// right edge.
+    var showInfo = AppDefaults.store.object(forKey: "library.info") as? Bool ?? true {
+        didSet { AppDefaults.store.set(showInfo, forKey: "library.info") }
+    }
+
+    /// The picture is out of sight: hidden, or folded to a slim bar.
+    var pictureHidden: Bool { !showInspector || foldedSide == .editor }
+
+    /// View › Hide Picture and Show Picture.
+    func setPictureHidden(_ hidden: Bool) {
+        if hidden {
+            fold(.editor)
+        } else {
+            showInspector = true
+            fold(nil)
+        }
+    }
+
+    /// The window's title: the place picked in the sidebar.
+    var title: String {
+        switch section {
+        case .all: "All Captures"
+        case .pinned: "Pinned"
+        case .favorites: "Favorites"
+        case .recent: "Last 7 Days"
+        case .notes: "With Notes"
+        case .text: "Text Captures"
+        case .tag(let tag): tag
+        case .app(let key): LibraryStore.shared.facets.apps.first { $0.key == key }?.name ?? "App"
+        case .site(let site): site
+        }
+    }
+
+    /// Under the title: how many captures are showing, and how many of them are selected.
+    var subtitle: String {
+        let shown = results.count
+        if selection.count > 1 { return "\(selection.count) of \(shown) selected" }
+        return "\(shown) capture\(shown == 1 ? "" : "s")"
     }
 
     /// The side folded down to a slim bar, so the other fills the window: the captures, or
@@ -264,13 +313,11 @@ struct LibraryView: View {
                     if state.showInspector && state.foldedSide == .captures {
                         CollapsedSideBar(title: "Captures", symbol: "square.grid.2x2", edge: .leading) { state.fold(nil) }
                     } else {
+                        // The title and count are the window's; the thumbnail size is in View.
                         VStack(spacing: 0) {
-                            LibraryHeader(state: state)
                             FilterBar(state: state)
                             Divider()
                             CaptureGrid(state: state)
-                            Divider()
-                            GridStatusBar(state: state)
                         }
                         .frame(minWidth: 360)
                     }
@@ -298,6 +345,26 @@ struct LibraryView: View {
                 .overlay { DialOverlay() }
             }
             .background(SidebarStaysOpen())
+            // The details get a full-height column of their own at the right edge, with the
+            // button that shows and hides them over it.
+            .inspector(isPresented: $state.showInfo) {
+                InfoInspector(state: state)
+                    .inspectorColumnWidth(min: 240, ideal: LibraryLayout.infoWidth, max: 420)
+                    .toolbar {
+                        ToolbarSpacer(.flexible)
+                        ToolbarItem(placement: .primaryAction) {
+                            Button { state.showInfo.toggle() } label: {
+                                Label(state.showInfo ? "Hide Details" : "Show Details", systemImage: "sidebar.trailing")
+                            }
+                            .help("\(state.showInfo ? "Hide" : "Show") the details: name, tags, notes and where it came from (⌃⌘I)")
+                        }
+                    }
+            }
+            .navigationTitle(state.title)
+            .navigationSubtitle(state.subtitle)
+            .onAppear { DispatchQueue.main.async { showTitle() } }
+            .onChange(of: state.title) { showTitle() }
+            .onChange(of: state.subtitle) { showTitle() }
             .onChange(of: columns) { _, shown in
                 guard shown != .all else { return }
                 DispatchQueue.main.async {
@@ -307,8 +374,10 @@ struct LibraryView: View {
                     }
                 }
             }
-            .searchable(text: $state.filter.text, placement: .toolbar,
-                        prompt: "Name, text, tag:, app:, site:, or a date")
+            .searchable(text: $state.filter.text, tokens: filterTokens, placement: .toolbar,
+                        prompt: "Name, text, tag:, app:, site:, or a date") { token in
+                Text(token.title)
+            }
             .toolbar { LibraryToolbar(state: state) }
             .sheet(item: $state.guide) { GuideSheet(request: $0) }
             .sheet(item: $state.export) { BatchExportSheet(request: $0) }
@@ -329,6 +398,56 @@ struct LibraryView: View {
 
     private var deleteTitle: String {
         state.confirmDelete.count == 1 ? "Delete this capture?" : "Delete \(state.confirmDelete.count) captures?"
+    }
+
+    /// The title names the place picked in the sidebar; the subtitle counts what's in it.
+    private func showTitle() {
+        guard let window = LibraryWindow.shared.window else { return }
+        window.title = state.title
+        window.subtitle = state.subtitle
+    }
+
+    /// The filters in use, as tokens in the search field; removing one there clears it.
+    private var filterTokens: Binding<[FilterToken]> {
+        Binding(get: { FilterToken.tokens(for: state.filter, apps: store.facets.apps) },
+                set: { kept in
+                    let ids = Set(kept.map(\.id))
+                    for token in FilterToken.tokens(for: state.filter, apps: store.facets.apps) where !ids.contains(token.id) {
+                        token.clear(&state.filter)
+                    }
+                })
+    }
+}
+
+/// A filter in use, shown as a token in the search field.
+struct FilterToken: Identifiable, Hashable {
+    enum Kind: Hashable { case date, kind(CaptureItem.Kind), tag(String), app(String), site(String), notes, favorites }
+    let kind: Kind
+    let title: String
+    var id: Kind { kind }
+
+    static func tokens(for filter: LibraryFilter, apps: [(key: String, name: String, count: Int)]) -> [FilterToken] {
+        var list: [FilterToken] = []
+        if filter.dateRange != .any { list.append(.init(kind: .date, title: filter.dateRange.title)) }
+        for kind in CaptureItem.Kind.allCases where filter.kinds.contains(kind) { list.append(.init(kind: .kind(kind), title: kind.title)) }
+        for tag in filter.tags.sorted() { list.append(.init(kind: .tag(tag), title: tag)) }
+        for key in filter.apps.sorted() { list.append(.init(kind: .app(key), title: apps.first { $0.key == key }?.name ?? key)) }
+        for site in filter.websites.sorted() { list.append(.init(kind: .site(site), title: site)) }
+        if filter.withNotesOnly { list.append(.init(kind: .notes, title: "Has Notes")) }
+        if filter.favoritesOnly { list.append(.init(kind: .favorites, title: "Favorites")) }
+        return list
+    }
+
+    func clear(_ filter: inout LibraryFilter) {
+        switch kind {
+        case .date: filter.dateRange = .any
+        case .kind(let kind): filter.kinds.remove(kind)
+        case .tag(let tag): filter.tags.remove(tag)
+        case .app(let key): filter.apps.remove(key)
+        case .site(let site): filter.websites.remove(site)
+        case .notes: filter.withNotesOnly = false
+        case .favorites: filter.favoritesOnly = false
+        }
     }
 }
 
@@ -411,71 +530,190 @@ private struct CollapsedSideBar: View {
     }
 }
 
+/// The library's toolbar: the ways to capture over the captures, the selected capture's
+/// actions over its picture. View › Show Preset Buttons adds a button for each preset.
 struct LibraryToolbar: ToolbarContent {
     @Bindable var state: LibraryState
 
     var body: some ToolbarContent {
-        // One button per capture preset, in their order in Settings › Presets.
         ToolbarItemGroup(placement: .navigation) {
-            ForEach(Preferences.shared.presets) { preset in
-                Button {
-                    LibraryWindow.shared.window?.orderOut(nil)
-                    CaptureEngine.shared.run(preset)
-                } label: {
-                    Label(preset.name, systemImage: preset.delay > 0 ? "timer" : preset.mode.symbol)
+            CaptureMenuButton()
+            RecordButton()
+            Button { CaptureActions.captureText() } label: { Label("Capture Text", systemImage: "text.viewfinder") }
+                .help("Capture Text: drag over text on screen to copy it\(CaptureActions.keys(Preferences.shared.captureTextHotKey))")
+        }
+        if state.showPresetButtons {
+            ToolbarItemGroup(placement: .navigation) {
+                ForEach(Preferences.shared.presets) { preset in
+                    Button { CaptureActions.run(preset) } label: {
+                        Label(preset.name, systemImage: preset.delay > 0 ? "timer" : preset.mode.symbol)
+                    }
+                    .help("\(preset.name): \(preset.summary)\(CaptureActions.keys(preset.hotKey))")
                 }
-                .help("\(preset.name)\(preset.hotKey.map { " (\($0.display))" } ?? "") — \(preset.summary)")
             }
-            Button {
-                LibraryWindow.shared.window?.orderOut(nil)
-                CaptureEngine.shared.captureText()
-            } label: {
-                Label("Capture Text", systemImage: "text.viewfinder")
-            }
-            .help("Capture Text\(Preferences.shared.captureTextHotKey.map { " (\($0.display))" } ?? "") — drag over text on screen to copy it")
-            // Lit while the capture bar is showing.
-            Toggle(isOn: Binding(get: { Preferences.shared.showCaptureBar }, set: { Preferences.shared.showCaptureBar = $0 })) {
-                Label("Capture Bar", systemImage: "menubar.rectangle")
-            }
-            .help("\(Preferences.shared.showCaptureBar ? "Hide" : "Show") the capture bar\(Preferences.shared.captureBarHotKey.map { " (\($0.display))" } ?? "") — capture buttons above every window")
         }
         ToolbarItemGroup(placement: .primaryAction) {
+            SelectionActions.MarkupToggle(state: state)
+            SelectionActions.FavoriteButton(state: state)
+            SelectionActions.ShareToolbarButton(state: state)
+        }
+    }
+}
+
+/// Starting a capture from the library: the window steps aside first, so it isn't in the way.
+@MainActor
+enum CaptureActions {
+    static func run(_ preset: CapturePreset) {
+        LibraryWindow.shared.window?.orderOut(nil)
+        CaptureEngine.shared.run(preset)
+    }
+
+    static func captureText() {
+        LibraryWindow.shared.window?.orderOut(nil)
+        CaptureEngine.shared.captureText()
+    }
+
+    /// " (⌥⇧⌘4)" to end a tooltip with, or nothing without a shortcut.
+    static func keys(_ hotKey: HotKey?) -> String {
+        hotKey.map { " (\($0.display))" } ?? ""
+    }
+}
+
+/// What the menu bar's library commands act on.
+@MainActor
+enum LibraryCommands {
+    /// The library, or the selected capture in its own window, is in front.
+    static var libraryInFront: Bool {
+        guard let key = NSApp.keyWindow else { return false }
+        return key === LibraryWindow.shared.window || EditorWindow.shared.isKey
+    }
+
+    /// The one selected capture, if just one is.
+    static var single: CaptureItem? {
+        let selected = LibraryWindow.shared.state.selectedItems
+        return selected.count == 1 ? selected[0] : nil
+    }
+
+    /// Edit › Copy with captures selected: one picture as itself, marks drawn in, so it pastes
+    /// anywhere; a video or several captures as files.
+    static func copyProviders(_ items: [CaptureItem]) -> [NSItemProvider] {
+        guard !items.isEmpty else { return [] }
+        ActivityStore.shared.record(ActivityKey.copies, count: items.count)
+        if items.count == 1, items[0].kind != .video, let png = Flattener.png(items[0]) {
+            Notice.shared.show("Copied")
+            return [NSItemProvider(item: png as NSData, typeIdentifier: UTType.png.identifier)]
+        }
+        Notice.shared.show(items.count == 1 ? "Copied" : "Copied \(items.count) captures")
+        return items.compactMap(Flattener.temporaryFile).compactMap { NSItemProvider(contentsOf: $0) }
+    }
+}
+
+/// Capture: a click takes the first preset; the arrow lists every way to capture.
+private struct CaptureMenuButton: View {
+    @State private var prefs = Preferences.shared
+
+    var body: some View {
+        let first = prefs.presets.first { $0.mode != .recording } ?? prefs.presets.first
+        Menu {
+            ForEach(prefs.presets.filter { $0.mode != .recording }) { preset in
+                Button { CaptureActions.run(preset) } label: {
+                    Label(preset.name + CaptureActions.keys(preset.hotKey), systemImage: preset.delay > 0 ? "timer" : preset.mode.symbol)
+                }
+            }
+            Divider()
+            Button { CaptureActions.captureText() } label: {
+                Label("Capture Text" + CaptureActions.keys(prefs.captureTextHotKey), systemImage: "text.viewfinder")
+            }
+            Button("Capture Same Area Again" + CaptureActions.keys(prefs.captureAgainHotKey)) {
+                LibraryWindow.shared.window?.orderOut(nil)
+                CaptureEngine.shared.captureAgain()
+            }
+            .disabled(CaptureEngine.shared.lastRegion == nil)
+            Button("Record Steps…") { StepRecorder.shared.start() }
+        } label: {
+            Label("Capture", systemImage: first.map { $0.delay > 0 ? "timer" : $0.mode.symbol } ?? "viewfinder")
+                .labelStyle(.titleAndIcon)
+        } primaryAction: {
+            if let first { CaptureActions.run(first) }
+        }
+        .help(first.map { "\($0.name)\(CaptureActions.keys($0.hotKey)). Click the arrow for every way to capture." }
+              ?? "Every way to capture")
+    }
+}
+
+/// Record: the first recording preset; with several, the arrow lists them all.
+private struct RecordButton: View {
+    @State private var prefs = Preferences.shared
+
+    var body: some View {
+        let recordings = prefs.presets.filter { $0.mode == .recording }
+        if recordings.count > 1 {
+            Menu {
+                ForEach(recordings) { preset in
+                    Button(preset.name + CaptureActions.keys(preset.hotKey)) { CaptureActions.run(preset) }
+                }
+            } label: {
+                Label("Record", systemImage: "record.circle")
+            } primaryAction: {
+                CaptureActions.run(recordings[0])
+            }
+            .help("\(recordings[0].name)\(CaptureActions.keys(recordings[0].hotKey)). Click the arrow for the other recordings.")
+        } else {
+            Button { if let preset = recordings.first { CaptureActions.run(preset) } } label: {
+                Label("Record", systemImage: "record.circle")
+            }
+            .disabled(recordings.isEmpty)
+            .help(recordings.first.map { "Record a video of the screen\(CaptureActions.keys($0.hotKey))" }
+                  ?? "Add a Video recording preset in Settings › Presets to record from here")
+        }
+    }
+}
+
+/// What can be done to the selected capture from the toolbar: mark it up, favorite it,
+/// share it. The rest is in the menus and its right-click menu.
+enum SelectionActions {
+    /// On: the markup tools, over the original. Off: the finished picture, as it's copied
+    /// and saved.
+    struct MarkupToggle: View {
+        let state: LibraryState
+        @State private var editor = AnnotationEditor.shared
+
+        var body: some View {
+            let item = state.selectedItems.count == 1 ? state.selectedItems.first : nil
+            let usable = item != nil && item?.kind != .video
+            Toggle(isOn: Binding(get: { usable && !editor.showResult }, set: { editor.showResult = !$0 })) {
+                Label("Markup", systemImage: "pencil.tip.crop.circle")
+            }
+            .disabled(!usable)
+            .help(editor.showResult ? "Show the markup tools, to annotate and adjust the picture (⇧⌘A)"
+                                    : "Hide the markup tools and see the finished picture, as it's copied and saved (⇧⌘A)")
+        }
+    }
+
+    struct FavoriteButton: View {
+        let state: LibraryState
+
+        var body: some View {
+            let items = state.selectedItems
+            let all = !items.isEmpty && items.allSatisfy(\.favorite)
+            Button { LibraryStore.shared.toggleFavorite(state.selection) } label: {
+                Label(all ? "Remove from Favorites" : "Add to Favorites", systemImage: all ? "star.fill" : "star")
+            }
+            .disabled(items.isEmpty)
+            .help(all ? "Remove from Favorites" : "Add to Favorites")
+        }
+    }
+
+    struct ShareToolbarButton: View {
+        let state: LibraryState
+
+        var body: some View {
             // A toolbar button like its neighbors (an AppKit one sits smaller and off-center
             // there); the share menu opens at the click, just under it.
             Button { ShareButton.shareAtPointer(state.selectedItems) } label: { Label("Share", systemImage: "square.and.arrow.up") }
                 .disabled(state.selection.isEmpty)
                 .help(state.selection.count > 1 ? "Share the selected captures" : "Share the selected capture")
-            Button { importFiles() } label: { Label("Import", systemImage: "tray.and.arrow.down") }
-                .help("Add pictures from files to the library")
-            Menu {
-                Picker("Sort", selection: $state.sort) {
-                    ForEach(LibrarySort.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.inline)
-                Divider()
-                Button("Bigger Thumbnails") { state.stepThumbnails(bigger: true) }
-                    .keyboardShortcut("+", modifiers: .command)
-                Button("Smaller Thumbnails") { state.stepThumbnails(bigger: false) }
-                    .keyboardShortcut("-", modifiers: .command)
-            } label: {
-                Label("View", systemImage: "arrow.up.arrow.down")
-            }
-            .help("Sort, and thumbnail size")
-            Button { state.showInspector.toggle() } label: { Label("Details", systemImage: "sidebar.right") }
-                .help(state.showInspector ? "Hide the selected capture" : "Show the selected capture")
-            Button { SettingsWindow.shared.show() } label: { Label("Settings", systemImage: "gearshape") }
-                .help("SnagAnything Settings")
         }
-    }
-
-    private func importFiles() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.image]
-        panel.allowsMultipleSelection = true
-        panel.message = "Choose pictures to add to the library"
-        guard panel.runModal() == .OK else { return }
-        let count = LibraryStore.shared.importFiles(panel.urls)
-        if count == 0 { NSSound.beep() }
     }
 }
 
@@ -539,7 +777,7 @@ private struct FoldingHeader: View {
                 if !open { Text("\(count)").foregroundStyle(.tertiary).monospacedDigit() }
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))
                     .rotationEffect(.degrees(open ? 90 : 0))
                     .foregroundStyle(.secondary)
             }
@@ -560,6 +798,16 @@ struct LibrarySidebar: View {
     @AppStorage("library.sidebar.tagsOpen", store: AppDefaults.store) private var tagsOpen = true
     @AppStorage("library.sidebar.appsOpen", store: AppDefaults.store) private var appsOpen = true
     @AppStorage("library.sidebar.sitesOpen", store: AppDefaults.store) private var sitesOpen = true
+    /// Every tag, or just the most used.
+    @AppStorage("library.sidebar.allTags", store: AppDefaults.store) private var showAllTags = false
+    private static let tagsShown = 8
+
+    /// The most used tags, still in A–Z order.
+    private static func mostUsed(_ tags: [(tag: String, count: Int)]) -> [(tag: String, count: Int)] {
+        guard tags.count > tagsShown else { return tags }
+        let kept = Set(tags.sorted { $0.count > $1.count }.prefix(tagsShown).map(\.tag))
+        return tags.filter { kept.contains($0.tag) }
+    }
     /// Narrower than this, the sidebar is a column of icons.
     @State private var compact = false
 
@@ -591,39 +839,29 @@ struct LibrarySidebar: View {
             let tags = store.facets.tags
             if !tags.isEmpty {
                 Section {
-                    // Tags as chips: many fit in little room. Click one to show its captures,
-                    // again to go back; right-click to rename or remove it.
+                    // Rows like Apps and Websites: the most used first, the rest a click away.
+                    // Right-click one to rename or remove it.
                     if tagsOpen {
-                        FlowLayout(spacing: 6) {
-                            ForEach(tags, id: \.tag) { entry in
-                                let on = state.section == .tag(entry.tag)
-                                Button {
-                                    state.section = on ? .all : .tag(entry.tag)
-                                    state.selection = []
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Text(entry.tag).lineLimit(1)
-                                        Text("\(entry.count)").foregroundStyle(on ? Color.white.opacity(0.75) : Color.secondary).monospacedDigit()
-                                    }
-                                    .font(.callout)
-                                    .padding(.horizontal, 9)
-                                    .padding(.vertical, 3)
-                                    .background(Capsule().fill(on ? Color.accentColor : Color.primary.opacity(0.08)))
-                                    .foregroundStyle(on ? Color.white : Color.primary)
-                                    .contentShape(Capsule())
-                                }
-                                .buttonStyle(.plain)
-                                .help("Show captures tagged “\(entry.tag)”")
+                        ForEach(showAllTags ? tags : Self.mostUsed(tags), id: \.tag) { entry in
+                            row(entry.tag, "tag", entry.count)
+                                .tag(LibraryState.Section.tag(entry.tag))
                                 .contextMenu {
                                     Button("Rename Tag…") { renamingTag = entry.tag; newTagName = entry.tag }
                                     Button("Remove Tag from All Captures") {
                                         store.setTags(Set(items.map(\.id)), remove: [entry.tag])
                                     }
                                 }
-                            }
                         }
-                        .padding(.vertical, 2)
-                        .selectionDisabled()
+                        if tags.count > Self.tagsShown {
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.15)) { showAllTags.toggle() }
+                            } label: {
+                                Label(showAllTags ? "Show Fewer" : "\(tags.count - Self.tagsShown) More", systemImage: "ellipsis")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .selectionDisabled()
+                        }
                     }
                 } header: {
                     FoldingHeader(title: "Tags", count: tags.count, open: $tagsOpen)
@@ -656,7 +894,6 @@ struct LibrarySidebar: View {
             }
         }
         .listStyle(.sidebar)
-        .safeAreaInset(edge: .bottom) { WeekCard().padding(.horizontal, 10).padding(.bottom, 10) }
         .alert("Rename Tag", isPresented: Binding(get: { renamingTag != nil }, set: { if !$0 { renamingTag = nil } })) {
             TextField("Tag", text: $newTagName)
             Button("Rename") {
@@ -773,33 +1010,6 @@ struct LibrarySidebar: View {
     }
 }
 
-/// At the foot of the sidebar: how much was captured and recorded this week, from Activity.
-private struct WeekCard: View {
-    @State private var activity = ActivityStore.shared
-
-    var body: some View {
-        let start = Calendar.current.date(byAdding: .day, value: -6, to: Calendar.current.startOfDay(for: Date())) ?? Date()
-        let totals = activity.log.totals(since: start)
-        let captures = ActivityKey.captureKinds.reduce(0) { $0 + (totals[$1] ?? 0) } + (totals[ActivityKey.imported] ?? 0)
-        let minutes = (totals[ActivityKey.recordingSeconds] ?? 0) / 60
-        Button { SettingsWindow.shared.show(tab: "Activity") } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("This week").font(.callout.weight(.semibold))
-                Text("\(captures) capture\(captures == 1 ? "" : "s")\(minutes > 0 ? " · \(minutes) min recorded" : "")")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.08)))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("See more in Settings › Activity")
-    }
-}
-
 /// An app's icon, from its bundle ID.
 struct AppIcon: View {
     let bundleID: String
@@ -813,40 +1023,6 @@ struct AppIcon: View {
     }
 }
 
-// MARK: - Header
-
-/// Above the filters: what's showing, in big type, and how many captures that is.
-struct LibraryHeader: View {
-    @Bindable var state: LibraryState
-    @State private var store = LibraryStore.shared
-
-    private var title: String {
-        switch state.section {
-        case .all: "All Captures"
-        case .pinned: "Pinned"
-        case .favorites: "Favorites"
-        case .recent: "Last 7 Days"
-        case .notes: "With Notes"
-        case .text: "Text Captures"
-        case .tag(let tag): "#\(tag)"
-        case .app(let key): store.facets.apps.first { $0.key == key }?.name ?? "App"
-        case .site(let site): site
-        }
-    }
-
-    var body: some View {
-        let shown = state.results.count
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(title).font(.title2.weight(.bold)).lineLimit(1)
-            Text("\(shown) capture\(shown == 1 ? "" : "s")").font(.callout).foregroundStyle(.secondary).monospacedDigit()
-            Spacer()
-        }
-        .padding(.horizontal, 14)
-        .padding(.top, 10)
-        .padding(.bottom, 2)
-    }
-}
-
 // MARK: - Filter chips
 
 struct FilterBar: View {
@@ -857,8 +1033,10 @@ struct FilterBar: View {
     @State private var customEnd = Date()
 
     var body: some View {
-        // Pills wrap onto more lines when the window is too narrow for one.
-        FlowLayout(spacing: 6) {
+        // One line: in a narrow window the pills scroll sideways under a still sort menu.
+        HStack(spacing: 8) {
+        ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 6) {
                 Chip(title: state.filter.dateRange == .any ? "Date" : state.filter.dateRange.title,
                      symbol: "calendar", active: state.filter.dateRange != .any,
                      clear: { state.filter.dateRange = .any }) {
@@ -910,7 +1088,7 @@ struct FilterBar: View {
                     }
                 }
 
-                ToggleChip(title: "Favorites", symbol: "star", isOn: $state.filter.favoritesOnly)
+                // Favorites is a place in the sidebar, so it isn't a filter here too.
                 ToggleChip(title: "Has Notes", symbol: "note.text", isOn: $state.filter.withNotesOnly)
 
                 if !state.filter.isEmpty {
@@ -920,8 +1098,18 @@ struct FilterBar: View {
                         .padding(.vertical, 4)
                 }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        // Pills running under the sort menu fade out rather than stop at a hard edge.
+        .mask {
+            HStack(spacing: 0) {
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: 20)
+            }
+        }
+            SortMenu(state: state).padding(.trailing, 12)
+        }
         .padding(.vertical, 8)
     }
 
@@ -939,6 +1127,27 @@ struct FilterBar: View {
         return .action(title, checked: on) {
             if on { state.filter[keyPath: path].remove(value) } else { state.filter[keyPath: path].insert(value) }
         }
+    }
+}
+
+/// At the end of the filter bar: the order the captures are in.
+private struct SortMenu: View {
+    @Bindable var state: LibraryState
+
+    var body: some View {
+        Menu {
+            Picker("Sort", selection: $state.sort) {
+                ForEach(LibrarySort.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Text(state.sort.title)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .help("The order the captures are in")
     }
 }
 
@@ -1126,8 +1335,11 @@ struct CaptureGrid: View {
                 .focusEffectDisabled()
                 .onMoveCommand { state.move($0, columns: columns, in: list) }
                 .onDeleteCommand { if !state.selection.isEmpty { state.confirmDelete = state.selection } }
+                // Edit › Copy (⌘C): the selected captures as they look, marks drawn in.
+                .onCopyCommand { LibraryCommands.copyProviders(state.selectedItems) }
                 .onKeyPress(.return) {
                     guard let id = state.selection.first else { return .ignored }
+                    state.showInfo = true
                     state.renaming = id
                     return .handled
                 }
@@ -1156,44 +1368,19 @@ struct CaptureGrid: View {
     }
 }
 
-/// Below the grid: how many captures are showing, and the thumbnail size slider.
-struct GridStatusBar: View {
-    @Bindable var state: LibraryState
-
-    var body: some View {
-        let shown = state.results.count
-        HStack(spacing: 8) {
-            Text(state.selection.count > 1 ? "\(state.selection.count) of \(shown) selected"
-                 : "\(shown) capture\(shown == 1 ? "" : "s")")
-                .font(.callout).foregroundStyle(.secondary).monospacedDigit()
-            Spacer()
-            Button { state.stepThumbnails(bigger: false) } label: { Image(systemName: "photo").font(.caption) }
-                .buttonStyle(.borderless)
-                .help("Smaller thumbnails (⌘−)")
-            Slider(value: $state.thumbnailSize, in: LibraryState.thumbnailRange)
-                .controlSize(.small)
-                .frame(width: 140)
-                .help("Thumbnail size")
-            Button { state.stepThumbnails(bigger: true) } label: { Image(systemName: "photo").font(.body) }
-                .buttonStyle(.borderless)
-                .help("Bigger thumbnails (⌘+)")
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 5)
-    }
-}
-
 struct CaptureCell: View {
     let item: CaptureItem
     let size: Double
     let selected: Bool
     let analyzing: Bool
     @State private var store = LibraryStore.shared
+    @Environment(\.appearsActive) private var active
 
     var body: some View {
         VStack(spacing: 6) {
             ZStack {
-                RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.08))
+                // Selected, a gray backing like Finder's, so nothing covers the picture itself.
+                RoundedRectangle(cornerRadius: 8).fill(selected ? Color.secondary.opacity(0.22) : .clear)
                 if let image = store.thumbnail(item) {
                     Image(nsImage: image)
                         .resizable()
@@ -1206,7 +1393,6 @@ struct CaptureCell: View {
                 }
             }
             .frame(width: size, height: size * 0.68)
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? Color.accentColor : .clear, lineWidth: 3))
             .overlay {
                 if item.kind == .video {
                     Image(systemName: "play.circle.fill")
@@ -1254,12 +1440,24 @@ struct CaptureCell: View {
                         .padding(6)
                 }
             }
-            VStack(spacing: 1) {
+            VStack(spacing: 2) {
                 HStack(spacing: 4) {
                     if analyzing { ProgressView().controlSize(.mini) }
                     Text(item.name).lineLimit(1).truncationMode(.middle)
                 }
-                .font(.callout.weight(selected ? .semibold : .regular))
+                .font(.callout)
+                // Selected, the name sits in a capsule: the accent while the window is in
+                // front, gray behind, as in Finder.
+                .padding(.horizontal, selected ? 6 : 0)
+                .padding(.vertical, 1)
+                .foregroundStyle(selected && active ? Color(nsColor: .alternateSelectedControlTextColor) : .primary)
+                .background {
+                    if selected {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(active ? Color.accentColor : Color.secondary.opacity(0.3))
+                    }
+                }
+                .frame(maxWidth: size)
                 Text(item.created.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -1327,7 +1525,7 @@ struct CaptureMenu: View {
             Button("Save As…") { Exporter.save(item) }
             Button("Share…") { ShareButton.shareAtPointer([item]) }
             Divider()
-            Button("Rename…") { state.selection = [item.id]; state.renaming = item.id; state.showInspector = true }
+            Button("Rename…") { state.selection = [item.id]; state.showInfo = true; state.renaming = item.id }
             Button("Suggest a Name") { store.suggestName(item.id) }
             if let url = item.source.url.flatMap(URL.init(string:)) {
                 Button("Open Web Page") { NSWorkspace.shared.open(url) }
@@ -1399,7 +1597,9 @@ struct ShareButton: NSViewRepresentable {
 
     /// From a menu: the share sheet opens where the pointer is.
     @MainActor static func shareAtPointer(_ items: [CaptureItem]) {
-        guard let window = LibraryWindow.shared.window, let view = window.contentView else { return }
+        // The pop-out picture's window when it's in front, else the library's.
+        let front = EditorWindow.shared.isKey ? NSApp.keyWindow : nil
+        guard let window = front ?? LibraryWindow.shared.window, let view = window.contentView else { return }
         let files = items.compactMap(Flattener.temporaryFile)
         guard !files.isEmpty else { return NSSound.beep() }
         let point = view.convert(window.mouseLocationOutsideOfEventStream, from: nil)

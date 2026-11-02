@@ -208,7 +208,7 @@ struct GuideSheet: View {
                     .onMove { request.items.move(fromOffsets: $0, toOffset: $1) }
                 }
                 .frame(minHeight: 180)
-                Text("Drag to reorder. Each capture's name is its heading; its More Info notes go under it.")
+                Text("Drag to reorder. Each capture's name is its heading; its notes go under it.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 HStack {

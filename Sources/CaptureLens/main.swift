@@ -73,6 +73,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         // Updated from CaptureLens: becomes SnagAnything.app and reopens from there first.
         if AppRename.renameIfNeeded() { return }
         AppAppearance.start()
+        // One library window: no tab bar items in the View and Window menus.
+        NSWindow.allowsAutomaticWindowTabbing = false
         let mainMenu = AppPresence.mainMenu(appName: AppInfo.name, settingsTitle: "Settings…",
                                             target: self, settings: #selector(showSettings))
         // Right below About in the app menu, where Mac apps keep it.
@@ -82,8 +84,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         mainMenu.items.first?.submenu?.insertItem(item("Check for Updates…", #selector(checkForUpdates)), at: 1)
         mainMenu.items.first?.submenu?.insertItem(item("Our other apps…", #selector(showOtherApps)), at: 2)
         #endif
-        mainMenu.addItem(editMenu())
-        mainMenu.addItem(viewMenu())
+        // In Apple's order, ahead of the Window menu: File, Edit, View, then Capture.
+        for (index, menu) in [fileMenu(), editMenu(), viewMenu(), captureMenu()].enumerated() {
+            mainMenu.insertItem(menu, at: 1 + index)
+        }
         // Help menu, with the standard ⌘? (macOS adds its search field).
         let helpItem = NSMenuItem()
         let help = NSMenu(title: "Help")
@@ -290,6 +294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === captureMenuList { return fillCaptureMenu(menu) }
         menu.removeAllItems()
         let prefs = Preferences.shared
 
@@ -389,10 +394,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         }
     }
 
-    private func item(_ title: String, _ action: Selector, key: String = "", hotKey: HotKey? = nil,
-                      symbol: String? = nil) -> NSMenuItem {
+    private func item(_ title: String, _ action: Selector, key: String = "", modifiers: NSEvent.ModifierFlags? = nil,
+                      hotKey: HotKey? = nil, symbol: String? = nil) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.target = self
+        if let modifiers { item.keyEquivalentModifierMask = modifiers }
         if let shortcut = hotKey?.menuKeyEquivalent {
             item.keyEquivalent = shortcut.key
             item.keyEquivalentModifierMask = shortcut.mask
@@ -407,24 +413,114 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         return item
     }
 
-    /// View › Show Capture Bar, where Mac apps keep show-and-hide switches.
+    /// File: bringing pictures in, and saving or sharing the selected capture.
+    private func fileMenu() -> NSMenuItem {
+        let file = NSMenu(title: "File")
+        file.addItem(item("Import Pictures…", #selector(importPictures), key: "I"))
+        file.addItem(item("Import from Snagit…", #selector(importFromSnagit)))
+        file.addItem(.separator())
+        file.addItem(item("Open in Its Own Window", #selector(openInOwnWindow), key: "o", modifiers: [.command, .option]))
+        file.addItem(.separator())
+        file.addItem(item("Save As…", #selector(saveSelected), key: "S"))
+        file.addItem(item("Share…", #selector(shareSelected)))
+        file.addItem(item("Export…", #selector(exportSelected)))
+        file.addItem(item("Make a Guide…", #selector(guideFromSelected)))
+        let item = NSMenuItem()
+        item.submenu = file
+        return item
+    }
+
+    /// View: what the library window shows, and how big.
     private func viewMenu() -> NSMenuItem {
         let view = NSMenu(title: "View")
+        view.addItem(item("Show Markup Tools", #selector(toggleMarkup), key: "A"))
+        view.addItem(.separator())
+        view.addItem(item("Hide Captures", #selector(toggleCaptures), key: "1", modifiers: [.command, .option]))
+        view.addItem(item("Hide Picture", #selector(togglePicture), key: "2", modifiers: [.command, .option]))
+        view.addItem(item("Hide Details", #selector(toggleDetails), key: "i", modifiers: [.command, .control]))
+        view.addItem(.separator())
+        view.addItem(item("Bigger Thumbnails", #selector(biggerThumbnails), key: "+"))
+        view.addItem(item("Smaller Thumbnails", #selector(smallerThumbnails), key: "-"))
+        view.addItem(.separator())
+        view.addItem(item("Zoom In", #selector(zoomPictureIn)))
+        view.addItem(item("Zoom Out", #selector(zoomPictureOut)))
+        view.addItem(item("Zoom to Fit", #selector(zoomPictureToFit)))
+        view.addItem(.separator())
         view.addItem(item("Show Capture Bar", #selector(toggleCaptureBar)))
+        view.addItem(item("Show Preset Buttons", #selector(togglePresetButtons)))
+        let toolbar = NSMenuItem(title: "Hide Toolbar", action: #selector(NSWindow.toggleToolbarShown(_:)), keyEquivalent: "t")
+        toolbar.keyEquivalentModifierMask = [.command, .option]
+        view.addItem(toolbar)
         let item = NSMenuItem()
         item.submenu = view
         return item
     }
 
-    /// Ticks Show Capture Bar in the View menu; every other item stays enabled, as before.
+    /// Capture: every preset and the other ways to capture, with their shortcuts. Filled as
+    /// it opens, so it follows Settings › Presets.
+    private let captureMenuList = NSMenu(title: "Capture")
+
+    private func captureMenu() -> NSMenuItem {
+        captureMenuList.delegate = self
+        let item = NSMenuItem()
+        item.submenu = captureMenuList
+        return item
+    }
+
+    private func fillCaptureMenu(_ menu: NSMenu) {
+        menu.removeAllItems()
+        let prefs = Preferences.shared
+        for item in captureItems() { menu.addItem(item) }
+        menu.addItem(.separator())
+        menu.addItem(item("Capture Text", #selector(captureText), hotKey: prefs.captureTextHotKey))
+        let again = item("Capture Same Area Again", #selector(captureAgain), hotKey: prefs.captureAgainHotKey)
+        again.isEnabled = engine.lastRegion != nil
+        menu.addItem(again)
+        let recorder = StepRecorder.shared
+        menu.addItem(item(recorder.isRecording ? "Stop Recording Steps" : "Record Steps…", #selector(toggleSteps)))
+    }
+
+    /// Ticks and names the switches, and turns off what doesn't apply now, as menus should.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        if menuItem.action == #selector(toggleCaptureBar) {
+        let state = LibraryWindow.shared.state
+        let inFront = LibraryCommands.libraryInFront
+        let selected = state.selectedItems
+        switch menuItem.action {
+        case #selector(toggleCaptureBar):
             menuItem.state = Preferences.shared.showCaptureBar ? .on : .off
+        case #selector(togglePresetButtons):
+            menuItem.state = state.showPresetButtons ? .on : .off
+        case #selector(toggleMarkup):
+            menuItem.title = AnnotationEditor.shared.showResult ? "Show Markup Tools" : "Hide Markup Tools"
+            return inFront && selected.count == 1 && selected.first?.kind != .video
+        case #selector(toggleCaptures):
+            menuItem.title = state.foldedSide == .captures ? "Show Captures" : "Hide Captures"
+            return inFront
+        case #selector(togglePicture):
+            menuItem.title = state.pictureHidden ? "Show Picture" : "Hide Picture"
+            return inFront
+        case #selector(toggleDetails):
+            menuItem.title = state.showInfo ? "Hide Details" : "Show Details"
+            return inFront
+        case #selector(biggerThumbnails), #selector(smallerThumbnails):
+            return inFront && state.foldedSide != .captures
+        case #selector(zoomPictureIn), #selector(zoomPictureOut), #selector(zoomPictureToFit):
+            return inFront && !state.pictureHidden && selected.count == 1 && selected.first?.kind != .video
+        case #selector(saveSelected), #selector(openInOwnWindow):
+            return inFront && selected.count == 1
+        case #selector(shareSelected):
+            return inFront && !selected.isEmpty
+        case #selector(exportSelected), #selector(guideFromSelected):
+            return inFront && selected.count > 1
+        case #selector(deleteSelected):
+            // ⌘⌫ deletes to the start of the line while typing.
+            return inFront && !selected.isEmpty && !(NSApp.keyWindow?.firstResponder is NSText)
+        default: break
         }
         return true
     }
 
-    /// Cut, Copy, Paste and Select All, so text fields in the library and Settings take them.
+    /// Edit: Undo and the clipboard for text fields and the selected captures, and deleting them.
     private func editMenu() -> NSMenuItem {
         let edit = NSMenu(title: "Edit")
         edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
@@ -434,6 +530,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        edit.addItem(.separator())
+        let delete = item("Delete…", #selector(deleteSelected), key: "\u{8}")
+        edit.addItem(delete)
         let item = NSMenuItem()
         item.submenu = edit
         return item
@@ -451,6 +550,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         if StepRecorder.shared.isRecording { StepRecorder.shared.stop(makeGuide: true) } else { StepRecorder.shared.start() }
     }
     @objc func showLibrary() { LibraryWindow.shared.show() }
+    @objc func toggleMarkup() { AnnotationEditor.shared.showResult.toggle() }
+    @objc func toggleCaptures() {
+        let state = LibraryWindow.shared.state
+        state.fold(state.foldedSide == .captures ? nil : .captures)
+    }
+    @objc func togglePicture() {
+        let state = LibraryWindow.shared.state
+        state.setPictureHidden(!state.pictureHidden)
+    }
+    @objc func toggleDetails() { LibraryWindow.shared.state.showInfo.toggle() }
+    @objc func togglePresetButtons() { LibraryWindow.shared.state.showPresetButtons.toggle() }
+    @objc func biggerThumbnails() { LibraryWindow.shared.state.stepThumbnails(bigger: true) }
+    @objc func smallerThumbnails() { LibraryWindow.shared.state.stepThumbnails(bigger: false) }
+    @objc func zoomPictureIn() { CanvasZoom.shared.step(in: true) }
+    @objc func zoomPictureOut() { CanvasZoom.shared.step(in: false) }
+    @objc func zoomPictureToFit() { CanvasZoom.shared.fitRequested += 1 }
+    @objc func openInOwnWindow() { EditorWindow.shared.open() }
+    @objc func saveSelected() { LibraryCommands.single.map(Exporter.save) }
+    @objc func shareSelected() { ShareButton.shareAtPointer(LibraryWindow.shared.state.selectedItems) }
+    @objc func exportSelected() {
+        let state = LibraryWindow.shared.state
+        state.export = ExportRequest(items: state.selectedItems.map(\.id))
+    }
+    @objc func guideFromSelected() {
+        let state = LibraryWindow.shared.state
+        state.makeGuide(from: state.selectedItems)
+    }
+    @objc func deleteSelected() {
+        let state = LibraryWindow.shared.state
+        state.confirmDelete = state.selection
+    }
     @objc func toggleCaptureBar() { CaptureBar.shared.toggle() }
     @objc func copyRecent(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID, let entry = LibraryStore.shared.entry(id),

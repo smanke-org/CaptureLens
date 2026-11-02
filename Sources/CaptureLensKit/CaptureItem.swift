@@ -46,7 +46,7 @@ public struct CaptureItem: Codable, Identifiable, Equatable, Sendable {
     /// Whether the name came from on-device naming (or the fallback), rather than the user.
     public var nameIsAutomatic: Bool
     public var tags: [String]
-    /// The user's own notes ("More Info").
+    /// The user's own notes.
     public var notes: String
     /// Text read from the picture, for searching.
     public var recognizedText: String

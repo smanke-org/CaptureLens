@@ -34,7 +34,7 @@ SnagAnything also:
 - **Lets you select and copy text** right in the picture, with macOS's own Live Text.
 - **Captures text**: press ⌥⇧⌘T and drag over any text on screen, even in a picture, a video or a PDF, and it's
   copied, ready to paste. The picture is kept in the library too, with the copied words along its thumbnail.
-- **Organizes** with tags, favorites and notes ("More Info"), and filters by date, type, tag, app or website in
+- **Organizes** with tags, favorites and notes, and filters by date, type, tag, app or website in
   one click.
 - **Lays out the library your way**: drag the lines between the captures, the picture and its details, fold
   either side away, and open a capture beside the captures or in a window of its own. The layout follows you to

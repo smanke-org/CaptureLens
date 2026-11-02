@@ -658,7 +658,8 @@ private struct RecordingBar: View {
     }
 
     /// One thing to record along with the screen: its symbol (struck through when off, in the
-    /// accent color when on), what it is, and a switch at the right.
+    /// accent color when on), what it is, and a switch at the right. The words stay at full
+    /// strength either way: gray words read as "can't be used", not "off".
     private func option(_ title: String, on: String, off: String, _ value: Binding<Bool>) -> some View {
         HStack(spacing: 10) {
             Image(systemName: value.wrappedValue ? on : off)
@@ -666,7 +667,6 @@ private struct RecordingBar: View {
                 .foregroundStyle(value.wrappedValue ? Color.accentColor : Color.secondary)
                 .frame(width: 24)
             Text(title)
-                .foregroundStyle(value.wrappedValue ? Color.primary : Color.secondary)
             Spacer(minLength: 8)
             Toggle(title, isOn: value)
                 .toggleStyle(ClearSwitch())

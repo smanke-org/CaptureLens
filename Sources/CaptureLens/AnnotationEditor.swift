@@ -1058,6 +1058,7 @@ extension AnnotationRenderer {
 struct AnnotationToolbar: View {
     @State private var editor = AnnotationEditor.shared
     @State private var prefs = Preferences.shared
+    @State private var showSettings = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -1094,15 +1095,12 @@ struct AnnotationToolbar: View {
 
     @ViewBuilder private var trailing: some View {
             let _ = editor.revision
-            // Toolbar or dial, also in Settings › Library.
-            Picker("Tools", selection: $prefs.toolStyle) {
-                Image(systemName: "sidebar.left").help("Tools in a toolbar over the picture").tag(ToolStyle.toolbar)
-                Image(systemName: "circle.circle").help("Tools in a dial: \(prefs.dialTrigger.hint.lowercased())").tag(ToolStyle.dial)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .help("Show the tools as a toolbar or a dial")
+            // How marks look in full, and whether the tools are a strip or a dial.
+            Button { showSettings.toggle() } label: { Image(systemName: "slider.horizontal.3") }
+                .help("Markup settings: colors, sizes, styles, and tools in a strip or a dial")
+                .popover(isPresented: $showSettings, arrowEdge: .bottom) {
+                    MarkupPanel().frame(width: 360, height: 520)
+                }
             Divider().frame(height: 16)
             Button { editor.undo() } label: { Image(systemName: "arrow.uturn.backward") }
                 .disabled(!editor.undoManager.canUndo)
@@ -1243,7 +1241,7 @@ struct AnnotationToolbar: View {
 }
 
 /// The tools, in a column beside the picture, grouped by what they're for. Select is on
-/// top; each group's tools follow under a small heading.
+/// top; a line sets each group off.
 struct ToolPalette: View {
     @State private var editor = AnnotationEditor.shared
 
@@ -1302,15 +1300,15 @@ struct ToolPalette: View {
     }
 
     private var column: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             button(Self.selectItem)
             ForEach(Self.groups, id: \.title) { group in
-                VStack(alignment: .leading, spacing: 4) {
-                    heading(group.title)
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: 4) {
-                        ForEach(group.items, id: \.self) { item in button(item) }
-                    }
+                Divider().padding(.horizontal, 4)
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 4) {
+                    ForEach(group.items, id: \.self) { item in button(item) }
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(group.title)
             }
         }
         .padding(.horizontal, 8)
@@ -1318,27 +1316,20 @@ struct ToolPalette: View {
     }
 
     private var row: some View {
-        HStack(alignment: .bottom, spacing: 12) {
+        HStack(alignment: .center, spacing: 8) {
             button(Self.selectItem)
             ForEach(Self.groups, id: \.title) { group in
-                VStack(alignment: .leading, spacing: 4) {
-                    heading(group.title)
-                    LazyHGrid(rows: rows, alignment: .top, spacing: 4) {
-                        ForEach(group.items, id: \.self) { item in button(item) }
-                    }
+                Divider().frame(height: 60)
+                LazyHGrid(rows: rows, alignment: .top, spacing: 4) {
+                    ForEach(group.items, id: \.self) { item in button(item) }
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(group.title)
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .fixedSize()
-    }
-
-    private func heading(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(.system(size: 9, weight: .semibold))
-            .foregroundStyle(.secondary)
-            .padding(.leading, 2)
     }
 
     @ViewBuilder private func button(_ item: Item) -> some View {
@@ -1393,7 +1384,7 @@ struct ToolPalette: View {
             .foregroundStyle(on ? Color.accentColor : .primary)
             .overlay(alignment: .bottomTrailing) {
                 if let key {
-                    Text(key).font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary).padding(.trailing, 3).padding(.bottom, 1)
+                    Text(key).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary).padding(.trailing, 2).padding(.bottom, 0)
                 }
             }
             .contentShape(Rectangle())
