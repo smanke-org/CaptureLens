@@ -36,8 +36,9 @@ SnagAnything also:
   copied, ready to paste. The picture is kept in the library too, with the copied words along its thumbnail.
 - **Organizes** with tags, favorites and notes, and filters by date, type, tag, app or website in
   one click.
-- **Lays out the library your way**: drag the line between the captures and the picture, hide the captures, the
-  picture or the details (⌥⌘1, ⌥⌘2, ⌃⌘I), and open a capture beside the captures or in a window of its own. The layout follows you to
+- **Lays out the library your way**: drag the line between the captures and the picture, hide the picture or the
+  details (⌥⌘2, ⌃⌘I), show the picture full width with the captures in a strip under it (⌥⌘1, Esc to go
+  back), and open a capture beside the captures, full width or in a window of its own. The layout follows you to
   your other Macs as proportions, so it fits each screen.
 - **Remembers where a capture came from**: the app, the window, and in a browser, the web page.
 - **Brings your old library along**: Import from Snagit moves Snagit captures in with their dates, apps, web

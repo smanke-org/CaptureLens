@@ -516,6 +516,19 @@ struct LibrarySettings: View {
     @State private var lock = LibraryLock.shared
     @State private var confirmDecrypt = false
 
+    /// What a click and a double-click on a thumbnail do, in words.
+    private var footer: String {
+        let click = prefs.clickShows == .beside
+            ? "A click shows the capture beside the captures."
+            : "A click shows the capture full width, with the captures in a strip under it; the Captures button on the strip, Esc or ⌥⌘1 goes back."
+        let double = switch prefs.doubleClickOpens {
+        case .sidePane: "A double-click opens it beside the captures."
+        case .fullWidth: "A double-click opens it full width."
+        case .ownWindow: "A double-click opens it in a window of its own, as big as you like; so does double-clicking the picture beside the captures."
+        }
+        return click + " " + double
+    }
+
     var body: some View {
         Form {
             Section {
@@ -527,13 +540,14 @@ struct LibrarySettings: View {
                     Label("\(store.unreadable) capture\(store.unreadable == 1 ? " is" : "s are") encrypted with a key this Mac no longer has.",
                           systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                 }
+                Picker("Clicking a capture shows it", selection: $prefs.clickShows) {
+                    ForEach(ClickShows.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
                 Picker("Double-click a capture to open it", selection: $prefs.doubleClickOpens) {
                     ForEach(OpenPlace.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
             } footer: {
-                Text(prefs.doubleClickOpens == .sidePane
-                     ? "A capture double-clicked in the library opens in the pane beside the captures."
-                     : "A capture double-clicked in the library opens in a window of its own, as big as you like; so does double-clicking the picture beside the captures.")
+                Text(footer)
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {

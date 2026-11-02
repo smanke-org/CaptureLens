@@ -676,6 +676,33 @@ enum DebugCommands {
             case "fold":
                 // `fold:<captures|editor|none>`: folds that side of the library to a slim bar.
                 LibraryWindow.shared.state.fold(LibraryState.Side(rawValue: arg))
+            case "click-shows": if let shows = ClickShows(rawValue: arg) { prefs.clickShows = shows }
+            case "layout-now": result = layoutNow()
+            case "key-esc":
+                // Esc in the library window, as typed; reports the layout after.
+                if let window = LibraryWindow.shared.window {
+                    window.makeKeyAndOrderFront(nil)
+                    for type in [NSEvent.EventType.keyDown, .keyUp] {
+                        if let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                        windowNumber: window.windowNumber, context: nil, characters: "\u{1b}",
+                                                        charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53) {
+                            NSApp.postEvent(event, atStart: false)
+                        }
+                    }
+                    try await Task.sleep(for: .milliseconds(600))
+                }
+                result = layoutNow()
+            case "view-menu":
+                // `view-menu:<title>`: chooses that View menu item, if it's enabled; reports the layout after.
+                let menu = NSApp.mainMenu?.items.first { $0.submenu?.title == "View" }?.submenu
+                menu?.update()
+                if let menu, let index = menu.items.firstIndex(where: { $0.title == arg }) {
+                    let enabled = menu.items[index].isEnabled
+                    if enabled { menu.performActionForItem(at: index) }
+                    try await Task.sleep(for: .milliseconds(600))
+                    menu.update()
+                    result = "enabled \(enabled), ticked \(menu.items[index].state == .on); " + layoutNow()
+                } else { result = "no View item \(arg)" }
             case "windows":
                 // Every window the app has: class, number, frame, title, what it shows.
                 result = NSApp.windows.map { w in
@@ -1098,6 +1125,14 @@ enum DebugCommands {
         post(.flagsChanged, [], keyCode: 59) // left ⌃
         try? await Task.sleep(for: .milliseconds(500))
         return "after click \(started), posted \(posted), button on screen \(NSStringFromRect(button.debugScreenFrame)), hint on screen \(NSStringFromRect(button.debugHintFrame)); hint \(button.debugHintShowing), title \(button.debugTitle)"
+    }
+
+    /// The library's layout in a line: full width or not, what's folded, what's selected.
+    private static func layoutNow() -> String {
+        let state = LibraryWindow.shared.state
+        return "fullWidth \(state.picturesFirst) folded \(state.foldedSide?.rawValue ?? "none") pictureHidden \(state.pictureHidden) "
+            + "filmstrip \(state.showsFilmstrip) markup \(!AnnotationEditor.shared.showResult) editorWindow \(EditorWindow.shared.isOpen) "
+            + "clickShows \(Preferences.shared.clickShows.rawValue) selected \(state.selectedItems.map(\.name))"
     }
 
     private static func writeStatus(_ path: String) {

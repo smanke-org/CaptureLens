@@ -435,7 +435,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         let view = NSMenu(title: "View")
         view.addItem(item("Show Markup Tools", #selector(toggleMarkup), key: "A"))
         view.addItem(.separator())
-        view.addItem(item("Hide Captures", #selector(toggleCaptures), key: "1", modifiers: [.command, .option]))
+        view.addItem(item("Picture Full Width", #selector(toggleCaptures), key: "1", modifiers: [.command, .option]))
         view.addItem(item("Hide Picture", #selector(togglePicture), key: "2", modifiers: [.command, .option]))
         view.addItem(item("Hide Details", #selector(toggleDetails), key: "i", modifiers: [.command, .control]))
         view.addItem(item("Show Sidebar as Icons", #selector(toggleSidebar), key: "s", modifiers: [.command, .control]))
@@ -494,8 +494,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             menuItem.title = AnnotationEditor.shared.showResult ? "Show Markup Tools" : "Hide Markup Tools"
             return inFront && selected.count == 1 && selected.first?.kind != .video
         case #selector(toggleCaptures):
-            menuItem.title = state.foldedSide == .captures ? "Show Captures" : "Hide Captures"
-            return inFront
+            // Ticked while the picture fills the window; choosing it again goes back.
+            menuItem.state = state.picturesFirst ? .on : .off
+            return inFront && (state.picturesFirst || state.selection.count == 1)
         case #selector(togglePicture):
             menuItem.title = state.pictureHidden ? "Show Picture" : "Hide Picture"
             return inFront
@@ -565,10 +566,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
     @objc func showLibrary() { LibraryWindow.shared.show() }
     @objc func toggleMarkup() { AnnotationEditor.shared.showResult.toggle() }
-    @objc func toggleCaptures() {
-        let state = LibraryWindow.shared.state
-        state.fold(state.foldedSide == .captures ? nil : .captures)
-    }
+    @objc func toggleCaptures() { LibraryWindow.shared.state.toggleFullWidth() }
     @objc func togglePicture() {
         let state = LibraryWindow.shared.state
         state.setPictureHidden(!state.pictureHidden)

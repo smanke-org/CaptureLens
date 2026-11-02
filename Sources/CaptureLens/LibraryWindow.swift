@@ -30,6 +30,7 @@ final class LibraryWindow: NSObject, NSWindowDelegate {
             window.setFrameAutosaveName("CaptureLensLibrary")
             if window.frame.origin == .zero { window.center() }
             self.window = window
+            watchEscape()
         }
         window?.title = state.title
         window?.subtitle = state.subtitle
@@ -46,6 +47,20 @@ final class LibraryWindow: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
         if opening { LibraryLayout.placeSidebar(in: window) }
+    }
+
+    /// Esc leaves a full-width picture once nothing else wants it: the dial closes first, a
+    /// selected mark is let go and a tool goes back to Select, and typing keeps it.
+    private func watchEscape() {
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.keyCode == 53, let window = self.window, event.window === window,
+                  self.state.picturesFirst, DialPresenter.shared.request == nil,
+                  !(window.firstResponder is NSText), !(window.firstResponder is NSTextField) else { return event }
+            let editor = AnnotationEditor.shared
+            guard editor.selection == nil, editor.selectedCut == nil, editor.tool == .select else { return event }
+            self.state.leaveFullWidth()
+            return nil
+        }
     }
 
     func windowDidBecomeKey(_ notification: Notification) { LibraryLock.shared.touch() }
@@ -109,20 +124,38 @@ final class LibraryState {
     /// The picture is out of sight: hidden, or folded to a slim bar.
     var pictureHidden: Bool { !showInspector || foldedSide == .editor }
 
-    /// Marking up one picture beside the captures (Markup on). The picture then gets the
-    /// room, with the captures in a filmstrip under it; with Markup off, the grid comes back.
-    var markingUp: Bool {
-        guard !pictureHidden, !EditorWindow.shared.isOpen, selection.count == 1, let id = selection.first,
-              let item = LibraryStore.shared.entry(id), item.kind != .video else { return false }
-        return !AnnotationEditor.shared.showResult
+    /// The picture fills the width, with the captures folded to a filmstrip under it: chosen
+    /// with View › Picture Full Width, the toolbar, a right-click, or as what a click does.
+    var picturesFirst: Bool { !pictureHidden && foldedSide == .captures }
+
+    /// The filmstrip under a full-width picture, with the button that brings the grid back.
+    var showsFilmstrip: Bool { picturesFirst }
+
+    /// Leaving full width goes back to the layout it was entered from: the picture beside the
+    /// captures, or the captures alone.
+    private var fullWidthFromGrid = AppDefaults.store.bool(forKey: "library.fullWidthFromGrid") {
+        didSet { AppDefaults.store.set(fullWidthFromGrid, forKey: "library.fullWidthFromGrid") }
     }
 
-    /// The picture fills the width: while marking up, or with the captures folded away (they
-    /// fold to a filmstrip under it).
-    var picturesFirst: Bool { !pictureHidden && (markingUp || foldedSide == .captures) }
+    func showFullWidth() {
+        guard !picturesFirst else { return }
+        fullWidthFromGrid = pictureHidden
+        // Out of its own window, back into the library.
+        if EditorWindow.shared.isOpen { EditorWindow.shared.close() }
+        showInspector = true
+        fold(.captures)
+    }
 
-    /// The filmstrip under the picture. Folding the captures while marking up hides it too.
-    var showsFilmstrip: Bool { picturesFirst && !(markingUp && foldedSide == .captures) }
+    func leaveFullWidth() {
+        guard picturesFirst else { return }
+        fold(fullWidthFromGrid ? .editor : nil)
+        fullWidthFromGrid = false
+        scrollTarget = anchor ?? selection.first
+    }
+
+    func toggleFullWidth() {
+        if picturesFirst { leaveFullWidth() } else { showFullWidth() }
+    }
 
     /// The grid is on screen, so the thumbnail commands apply.
     var gridVisible: Bool { !picturesFirst }
@@ -177,13 +210,17 @@ final class LibraryState {
         anchor = id
         let prefs = Preferences.shared
         if let place, remember { prefs.doubleClickOpens = place }
-        if (place ?? prefs.doubleClickOpens) == .ownWindow {
+        switch place ?? prefs.doubleClickOpens {
+        case .ownWindow:
             EditorWindow.shared.open()
-        } else {
-            // Out of its own window, back beside the captures.
+        case .fullWidth:
+            showFullWidth()
+        case .sidePane:
+            // Out of its own window or full width, back beside the captures.
             if EditorWindow.shared.isOpen { EditorWindow.shared.close() }
             showInspector = true
-            if foldedSide == .editor { fold(nil) }
+            if foldedSide != nil { fold(nil) }
+            fullWidthFromGrid = false
         }
     }
 
@@ -269,6 +306,14 @@ final class LibraryState {
             selection = [id]
             anchor = id
         }
+    }
+
+    /// A click on a thumbnail in the grid: selects it, and with Settings › Library set to
+    /// show clicked captures full width, gives its picture the window.
+    func clickInGrid(_ id: UUID, in list: [CaptureItem]) {
+        click(id, in: list)
+        let plain = NSEvent.modifierFlags.intersection([.command, .shift]).isEmpty
+        if plain, Preferences.shared.clickShows == .fullWidth, !EditorWindow.shared.isOpen { showFullWidth() }
     }
 
     /// Arrow keys: move through the grid, `columns` items to a row.
@@ -579,6 +624,7 @@ struct LibraryToolbar: ToolbarContent {
             }
         }
         ToolbarItemGroup(placement: .primaryAction) {
+            SelectionActions.FullWidthToggle(state: state)
             SelectionActions.MarkupToggle(state: state)
             SelectionActions.FavoriteButton(state: state)
             SelectionActions.ShareToolbarButton(state: state)
@@ -736,6 +782,22 @@ enum SelectionActions {
             .disabled(!usable)
             .help(editor.showResult ? "Show the markup tools, to annotate and adjust the picture (⇧⌘A)"
                                     : "Hide the markup tools and see the finished picture, as it's copied and saved (⇧⌘A)")
+        }
+    }
+
+    /// The picture across the whole library, or back beside the captures (or the captures
+    /// alone, if that's where it came from).
+    struct FullWidthToggle: View {
+        let state: LibraryState
+
+        var body: some View {
+            let on = state.picturesFirst
+            Toggle(isOn: Binding(get: { on }, set: { _ in state.toggleFullWidth() })) {
+                Label(on ? "Show Captures" : "Picture Full Width",
+                      systemImage: on ? "square.grid.2x2" : "arrow.up.left.and.arrow.down.right")
+            }
+            .disabled(!on && state.selection.count != 1)
+            .help(on ? "Show the captures again (Esc or ⌥⌘1)" : "Show the picture across the whole window, with the captures in a strip under it (⌥⌘1)")
         }
     }
 
@@ -1413,7 +1475,7 @@ struct CaptureGrid: View {
                                             analyzing: store.analyzing.contains(item.id))
                                     .id(item.id)
                                     .onTapGesture(count: 2) { state.open(item.id) }
-                                    .simultaneousGesture(TapGesture().onEnded { state.click(item.id, in: list); focused = true })
+                                    .simultaneousGesture(TapGesture().onEnded { state.clickInGrid(item.id, in: list); focused = true })
                                     .onDrag { CaptureGrid.dragProvider(item) }
                                     .contextMenu { CaptureMenu(state: state, item: item) }
                             }
@@ -1478,6 +1540,27 @@ struct Filmstrip: View {
 
     var body: some View {
         let list = state.results
+        HStack(spacing: 0) {
+            // The way back from full width, always in sight at the strip's start.
+            Button { state.leaveFullWidth() } label: {
+                VStack(spacing: Space.xs) {
+                    Image(systemName: "square.grid.2x2").font(.title3)
+                    Text("Captures").font(.caption)
+                }
+                .frame(width: 72, height: 64)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.bordered)
+            .padding(.leading, Space.lg)
+            .help("Show the captures again (Esc or ⌥⌘1)")
+            filmstrip(list)
+        }
+        .frame(height: Self.height)
+        .frame(maxWidth: .infinity)
+        .background(.bar)
+    }
+
+    @ViewBuilder private func filmstrip(_ list: [CaptureItem]) -> some View {
         Group {
             if list.isEmpty {
                 Text(store.items.isEmpty ? "No captures yet" : "Nothing matches the search and filters")
@@ -1510,9 +1593,7 @@ struct Filmstrip: View {
                 }
             }
         }
-        .frame(height: Self.height)
-        .frame(maxWidth: .infinity)
-        .background(.bar)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .focusable()
         .focused($focused)
         .focusEffectDisabled()
@@ -1723,6 +1804,8 @@ struct CaptureMenu: View {
             let place = Preferences.shared.doubleClickOpens
             Toggle("Open Beside the Captures", isOn: Binding(get: { place == .sidePane },
                                                              set: { _ in state.open(item.id, in: .sidePane, remember: remember) }))
+            Toggle("Open Full Width", isOn: Binding(get: { place == .fullWidth },
+                                                    set: { _ in state.open(item.id, in: .fullWidth, remember: remember) }))
             Toggle("Open in Its Own Window", isOn: Binding(get: { place == .ownWindow },
                                                            set: { _ in state.open(item.id, in: .ownWindow, remember: remember) }))
             Toggle("Remember for Double-Click", isOn: $remember)
