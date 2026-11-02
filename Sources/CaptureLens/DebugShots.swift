@@ -93,8 +93,45 @@ enum DebugShots {
                 await shoot(window, "dial", out: out, note: note)
                 scroll.closeDial()
             }
-            prefs.toolStyle = .toolbar
+            // A real right-click on the picture, through the event queue, with the details
+            // showing as they do by default.
             library.state.showInfo = true
+            try? await Task.sleep(for: .seconds(1.5))
+            if let scroll = findScroll(window.contentView) {
+                let point = scroll.convert(CGPoint(x: scroll.bounds.midX, y: scroll.bounds.midY), to: nil)
+                note("dial test: tool style \(prefs.toolStyle.rawValue), trigger \(prefs.dialTrigger.rawValue), key \(window.isKeyWindow), scroll \(scroll.frame.size), overlay \(DialPresenter.shared.overlayAreas[window.windowNumber] ?? .zero)")
+                if let down = NSEvent.mouseEvent(with: .rightMouseDown, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                 windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1),
+                   let up = NSEvent.mouseEvent(with: .rightMouseUp, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                               windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0) {
+                    window.postEvent(up, atStart: false)
+                    window.postEvent(down, atStart: true)
+                }
+                try? await Task.sleep(for: .seconds(1))
+                note("dial after right-click: \(scroll.debugDialInfo) | presenter \(DialPresenter.shared.request != nil)")
+                await shoot(window, "dial-rightclick", out: out, note: note)
+                scroll.closeDial()
+                // The same with the cursor in the Name field, as after renaming a capture.
+                if let name = textField(in: window.contentView, value: "Quarterly Sales Dashboard") {
+                    window.makeFirstResponder(name)
+                    try? await Task.sleep(for: .seconds(0.5))
+                    note("dial test with name field: first responder \(window.firstResponder.map { String(describing: type(of: $0)) } ?? "none")")
+                    if let down = NSEvent.mouseEvent(with: .rightMouseDown, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                     windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1),
+                       let up = NSEvent.mouseEvent(with: .rightMouseUp, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                   windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0) {
+                        window.postEvent(up, atStart: false)
+                        window.postEvent(down, atStart: true)
+                    }
+                    try? await Task.sleep(for: .seconds(1))
+                    note("dial after right-click with name field: \(scroll.debugDialInfo) | first responder \(window.firstResponder.map { String(describing: type(of: $0)) } ?? "none")")
+                    scroll.closeDial()
+                    window.makeFirstResponder(nil)
+                } else {
+                    note("dial test: no name field found")
+                }
+            }
+            prefs.toolStyle = .toolbar
             try? await Task.sleep(for: .seconds(1))
 
             // The sidebar with Apps folded away.
@@ -217,6 +254,13 @@ enum DebugShots {
             try? FileManager.default.removeItem(at: want)
             note("\(name): \(FileManager.default.fileExists(atPath: png.path) ? "shot outside" : "FAILED \(error.localizedDescription)")")
         }
+    }
+
+    static func textField(in view: NSView?, value: String) -> NSTextField? {
+        guard let view else { return nil }
+        if let field = view as? NSTextField, field.isEditable, field.stringValue == value { return field }
+        for sub in view.subviews { if let hit = textField(in: sub, value: value) { return hit } }
+        return nil
     }
 
     static func findScroll(_ view: NSView?) -> ZoomingScrollView? {

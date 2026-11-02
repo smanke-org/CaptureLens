@@ -680,8 +680,11 @@ final class ZoomingScrollView: NSScrollView {
             }
             return event
         case .rightMouseDown:
-            guard usesDial, trigger.rightClick, isPointerOver(event), !isTyping(in: window) else { return event }
+            guard usesDial, trigger.rightClick, isPointerOver(event), !isTypingOnPicture(in: window) else { return event }
             if isOnDial(event) { return event }
+            // Typing in a field beside the picture (a name, tags, notes, search) ends here, as a
+            // click on the picture would, rather than keeping the dial from opening.
+            if isTyping(in: window) { window.makeFirstResponder(pictureLayer) }
             openDial(at: convert(event.locationInWindow, from: nil), held: false)
             return nil
         case .leftMouseDown where isDialOpen:
@@ -752,6 +755,21 @@ final class ZoomingScrollView: NSScrollView {
     private func isTyping(in window: NSWindow) -> Bool {
         guard let responder = window.firstResponder else { return false }
         return responder is NSText || responder is NSTextField
+    }
+
+    /// Typing in a text box on the picture itself, where a right-click belongs to the text.
+    private func isTypingOnPicture(in window: NSWindow) -> Bool {
+        isTyping(in: window) && (window.firstResponder as? NSView)?.isDescendant(of: self) == true
+    }
+
+    /// The drawing layer, to take the keyboard back from a field when the picture is used.
+    private var pictureLayer: NSView? {
+        func find(_ view: NSView) -> NSView? {
+            if view is AnnotationLayerView { return view }
+            for sub in view.subviews { if let hit = find(sub) { return hit } }
+            return nil
+        }
+        return documentView.flatMap(find)
     }
 
     #if DEBUG
