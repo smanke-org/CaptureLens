@@ -7,7 +7,7 @@ need means opening them one by one. SnagAnything keeps every capture in a librar
 named from what's in it ("Quarterly Revenue Chart", "Xcode Build Error") by Apple Intelligence on your Mac, and
 you can find it again by its name, the date, its tags or notes, or any text that appears in the picture.
 
-<p align="center"><img src="docs/images/capturelens-library-editor.webp" width="800" alt="The SnagAnything library with nine sample captures, filters for tags, apps and websites, and a sales chart open beside them with the markup toolbar"></p>
+<p align="center"><img src="docs/images/capturelens-library-editor.webp" width="800" alt="The SnagAnything library with nine sample captures, filters for tags, apps and websites, and a marked-up sales chart beside them with the markup tools, and its name, tags and notes at the right"></p>
 
 SnagAnything also:
 - **Captures** the whole screen, one window (even where others cover it), an area you drag out, or a frame of an
@@ -36,8 +36,8 @@ SnagAnything also:
   copied, ready to paste. The picture is kept in the library too, with the copied words along its thumbnail.
 - **Organizes** with tags, favorites and notes, and filters by date, type, tag, app or website in
   one click.
-- **Lays out the library your way**: drag the lines between the captures, the picture and its details, fold
-  either side away, and open a capture beside the captures or in a window of its own. The layout follows you to
+- **Lays out the library your way**: drag the line between the captures and the picture, hide the captures, the
+  picture or the details (⌥⌘1, ⌥⌘2, ⌃⌘I), and open a capture beside the captures or in a window of its own. The layout follows you to
   your other Macs as proportions, so it fits each screen.
 - **Remembers where a capture came from**: the app, the window, and in a browser, the web page.
 - **Brings your old library along**: Import from Snagit moves Snagit captures in with their dates, apps, web
@@ -66,8 +66,8 @@ Requires macOS 26 or later. Automatic names need Apple Intelligence turned on.
 
 <table>
 <tr>
-<td width="50%"><img src="docs/images/capturelens-annotate.jpg" alt="A sample sales chart marked up with a numbered box, a callout and an arrow, above the markup toolbar"><br><sub><b>Markup.</b> Boxes, arrows, callouts and steps that stay editable.</sub></td>
-<td width="50%"><img src="docs/images/capturelens-dial.webp" alt="The markup tools as a radial dial over a capture, with colors inside and line widths underneath"><br><sub><b>Toolbar or dial.</b> The tools as a radial dial, pinned open.</sub></td>
+<td width="50%"><img src="docs/images/capturelens-annotate.webp" alt="A sample sales chart marked up with a numbered box, a callout and an arrow, with the markup tools in a strip beside it"><br><sub><b>Markup.</b> Boxes, arrows, callouts and steps that stay editable.</sub></td>
+<td width="50%"><img src="docs/images/capturelens-dial.webp" alt="The markup tools as a radial dial over a capture, with colors inside and line widths underneath"><br><sub><b>Strip or dial.</b> The tools as a radial dial, pinned open.</sub></td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/images/capturelens-smart-move.webp" alt="Smart Move outlining the fields, buttons and lines of text in a sample Account Settings capture"><br><sub><b>Smart Move.</b> Pick up parts of the picture and move them.</sub></td>
@@ -98,7 +98,9 @@ away, choose Open Captures in Library in the menu bar menu; hold ⌥ while click
 Presets are saved ways to capture, each with its own shortcut: what to capture, a countdown, an exact size, and
 whether to copy. Make and change them in Settings › Presets.
 
-In the library, search finds words in names, tags, notes and the text in the pictures. It also understands
+In the library, the Capture button captures with your first preset (its arrow lists them all), and Markup, the
+star and Share act on the selected capture; everything else is in the menus and the right-click menu. Search
+finds words in names, tags, notes and the text in the pictures. It also understands
 `tag:work`, `app:safari`, `site:example.com` and dates such as `yesterday` or `March 3`.
 
 Actions can also be run from a URL, for ToolHUD, Shortcuts or scripts: `snaganything://capture`, `screen`,

@@ -14,6 +14,9 @@ enum DebugShots {
         let env = ProcessInfo.processInfo.environment
         guard env["CAPTURELENS_DEFAULTS_SUITE"] != nil, env["CAPTURELENS_LIBRARY_FOLDER"] != nil else { exit(2) }
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        // A regular app can be brought to the front (`open` the running copy), so its windows
+        // are shot active, as people see them.
+        NSApp.setActivationPolicy(.regular)
         AppDefaults.store.set("dark", forKey: AppAppearance.key)
         AppDefaults.store.set("left", forKey: "editor.palettePlacement")
         let prefs = Preferences.shared
@@ -102,6 +105,15 @@ enum DebugShots {
 
             // Smart Move on the settings page, the pointer over its button; the toolbar on the
             // right, clear of the button.
+            // The picture fills the window: the captures and details folded away. First the
+            // marked-up chart with the tools beside it, then Smart Move with them on the right.
+            library.state.showInfo = false
+            library.state.foldedSide = .captures
+            library.show(select: ids.dashboard)
+            try? await Task.sleep(for: .seconds(1.5))
+            CanvasZoom.shared.fitRequested += 1
+            try? await Task.sleep(for: .seconds(0.5))
+            await shoot(window, "markup-full", out: out, note: note)
             AppDefaults.store.set("right", forKey: "editor.palettePlacement")
             library.show(select: ids.settings)
             try? await Task.sleep(for: .seconds(1.5))
@@ -118,6 +130,8 @@ enum DebugShots {
             try? await Task.sleep(for: .seconds(1))
             await shoot(window, "smart-move", out: out, note: note)
             editor.pick(.select)
+            library.state.foldedSide = nil
+            library.state.showInfo = true
             AppDefaults.store.set("left", forKey: "editor.palettePlacement")
 
             // Simplify, shown as the finished picture.
