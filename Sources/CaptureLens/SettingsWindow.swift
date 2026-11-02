@@ -295,13 +295,16 @@ struct CaptureSettings: View {
                     Picker("Open the dial", selection: $prefs.dialTrigger) {
                         ForEach(DialTrigger.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
+                    Picker("Dial layout", selection: $prefs.dialLayout) {
+                        ForEach(DialLayout.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
                 }
             } header: {
                 Text("Markup")
             } footer: {
                 Text(prefs.toolStyle == .toolbar
                      ? "The tools sit in a strip beside the picture. Drag its grip to put it on the left, right or bottom."
-                     : "The tools open in a dial around the pointer, the ones you use most closest to the middle, with colors and line widths underneath. Click a tool, or with ⌘⌥ held, let go over it. Drag the dial to move it; its pin keeps it open after you pick a tool. Esc closes it.")
+                     : "The tools open in a dial around the pointer, grouped by kind, with colors and line widths underneath. All tools in groups gives each group a slice of the dial; One button per group shows a group's tools when you point at it. Click a tool, or with ⌘⌥ held, let go over it. Drag the dial to move it; its pin keeps it open after you pick a tool. Esc closes it.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {

@@ -608,6 +608,7 @@ final class ZoomingScrollView: NSScrollView {
         guard let window, let content = window.contentView else { return }
         AnnotationEditor.shared.holdSelect(false)
         dialState.hovered = nil
+        dialState.openGroup = nil
         dialState.held = held
         let size = ToolDialView.size
         func clamp(_ value: CGFloat, _ length: CGFloat, _ low: CGFloat, _ room: CGFloat) -> CGFloat {

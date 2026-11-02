@@ -1026,27 +1026,23 @@ extension AnnotationEditor.Tool {
     }
 }
 
-/// How often each tool is picked on this Mac, so the dial puts the favorites closest.
+/// The tools picked on this Mac, latest first, so each of the dial's group buttons shows the
+/// one last used from its group.
 @MainActor
 enum ToolUse {
-    private static let key = "editor.toolUse"
+    private static let key = "editor.recentTools"
 
     static func note(_ tool: AnnotationEditor.Tool) {
-        var counts = AppDefaults.store.dictionary(forKey: key) as? [String: Int] ?? [:]
-        counts[tool.id, default: 0] += 1
-        AppDefaults.store.set(counts, forKey: key)
+        var recent = AppDefaults.store.stringArray(forKey: key) ?? []
+        recent.removeAll { $0 == tool.id }
+        recent.insert(tool.id, at: 0)
+        AppDefaults.store.set(Array(recent.prefix(40)), forKey: key)
     }
 
-    /// The tools, most used first; ties (and tools never used) keep the palette's order,
-    /// led by a few everyday ones so a new dial is useful straight away.
-    static func ranked() -> [AnnotationEditor.Tool] {
-        let counts = AppDefaults.store.dictionary(forKey: key) as? [String: Int] ?? [:]
-        let everyday: [AnnotationEditor.Tool] = [.select, .draw(.arrow), .draw(.rectangle), .draw(.text), .draw(.step), .draw(.highlighter), .draw(.blur), .crop]
-        let order = everyday + AnnotationEditor.Tool.all.filter { !everyday.contains($0) }
-        return order.enumerated().sorted { a, b in
-            let ca = counts[a.element.id] ?? 0, cb = counts[b.element.id] ?? 0
-            return ca != cb ? ca > cb : a.offset < b.offset
-        }.map(\.element)
+    /// Of these tools, the one picked last; nil if none has been.
+    static func latest(of tools: [AnnotationEditor.Tool]) -> AnnotationEditor.Tool? {
+        let recent = AppDefaults.store.stringArray(forKey: key) ?? []
+        return recent.lazy.compactMap { id in tools.first { $0.id == id } }.first
     }
 }
 

@@ -26,6 +26,9 @@ struct MarkupPanel: View {
                     Picker("Open the dial", selection: $prefs.dialTrigger) {
                         ForEach(DialTrigger.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
+                    Picker("Dial layout", selection: $prefs.dialLayout) {
+                        ForEach(DialLayout.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
                 }
             }
             Section("Color") {

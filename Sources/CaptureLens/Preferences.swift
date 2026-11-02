@@ -137,6 +137,19 @@ enum DialTrigger: String, CaseIterable {
     var commandOption: Bool { self != .rightClick }
 }
 
+/// How the dial lays out its tools: every one in its group's slice, or a button per group
+/// that shows the group's tools when pointed at.
+enum DialLayout: String, CaseIterable {
+    case slices, groups
+
+    var title: String {
+        switch self {
+        case .slices: "All tools in groups"
+        case .groups: "One button per group"
+        }
+    }
+}
+
 /// Where double-clicking a capture opens it.
 enum OpenPlace: String, CaseIterable {
     case sidePane, fullWidth, ownWindow
@@ -376,6 +389,7 @@ final class Preferences {
     var toolStyle = ToolStyle.toolbar { didSet { save(toolStyle.rawValue, "toolStyle") } }
     /// What opens the dial, when the tools are a dial.
     var dialTrigger = DialTrigger.rightClick { didSet { save(dialTrigger.rawValue, "dialTrigger") } }
+    var dialLayout = DialLayout.slices { didSet { save(dialLayout.rawValue, "dialLayout") } }
     var doubleClickOpens = OpenPlace.sidePane { didSet { save(doubleClickOpens.rawValue, "doubleClickOpens") } }
     var clickShows = ClickShows.beside { didSet { save(clickShows.rawValue, "clickShows") } }
 
@@ -416,7 +430,7 @@ final class Preferences {
         "copyToClipboard", "afterCapture", "captureCursor", "showCursorByDefault", "windowShadow", "playSound", "showNotice",
         "autoName", "recognizeText", "recordWebAddress", "librarySync", "libraryBackend", "annotationStyle", "quickStyles", "presets", "libraryHotKey", "captureAgainHotKey",
         "captureTextHotKey", "recordMicrophone", "recordSystemAudio", "recordCamera", "showClicks", "showKeys", "recordFrameRate", "syncVideos",
-        "toolStyle", "dialTrigger", "doubleClickOpens", "clickShows", "recordCountdown", "microphoneID", "cameraID", "confirmQuit",
+        "toolStyle", "dialTrigger", "dialLayout", "doubleClickOpens", "clickShows", "recordCountdown", "microphoneID", "cameraID", "confirmQuit",
         "showCaptureBar", "captureBarLayout", "captureBarPosition", "captureBarHotKey",
         "captureBarSize", "captureBarColors", "captureBarLook",
     ]
@@ -492,7 +506,7 @@ final class Preferences {
             "captureTextHotKey": data(captureTextHotKey),
             "recordMicrophone": recordMicrophone, "recordSystemAudio": recordSystemAudio, "recordCamera": recordCamera,
             "showClicks": showClicks, "showKeys": showKeys, "recordFrameRate": recordFrameRate, "syncVideos": syncVideos,
-            "toolStyle": toolStyle.rawValue, "dialTrigger": dialTrigger.rawValue, "doubleClickOpens": doubleClickOpens.rawValue,
+            "toolStyle": toolStyle.rawValue, "dialTrigger": dialTrigger.rawValue, "dialLayout": dialLayout.rawValue, "doubleClickOpens": doubleClickOpens.rawValue,
             "clickShows": clickShows.rawValue,
             "recordCountdown": recordCountdown, "microphoneID": microphoneID, "cameraID": cameraID,
             "confirmQuit": confirmQuit,
@@ -569,6 +583,7 @@ final class Preferences {
         syncVideos = bool("syncVideos", false)
         toolStyle = ToolStyle(rawValue: string("toolStyle")) ?? .toolbar
         dialTrigger = DialTrigger(rawValue: string("dialTrigger")) ?? .rightClick
+        dialLayout = DialLayout(rawValue: string("dialLayout")) ?? .slices
         doubleClickOpens = OpenPlace(rawValue: string("doubleClickOpens")) ?? .sidePane
         clickShows = ClickShows(rawValue: string("clickShows")) ?? .beside
         recordCountdown = d.object(forKey: "recordCountdown") as? Int ?? 3

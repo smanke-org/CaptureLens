@@ -144,6 +144,8 @@ extension DialTrigger {
 @MainActor
 final class ToolDialState {
     var hovered: AnnotationEditor.Tool?
+    /// With one button per group: the group whose tools are showing (nil: the tool in use's).
+    var openGroup: DialGroup?
     /// Opened by holding ⌘⌥: letting go picks the tool under the pointer.
     var held = false
     /// How far it's been dragged from where it opened (points; down is positive).
@@ -166,12 +168,62 @@ final class ToolDialState {
     }
 }
 
-/// The tools in two rings around the pointer, the ones used most on the inside, on a glass
-/// disc; colors and line widths in a bar underneath. The middle shows the tool in use;
-/// clicking it closes the dial. Each tool's key is in its tooltip.
+/// The dial's groups of tools, in order round it from the top.
+enum DialGroup: CaseIterable {
+    case select, shapes, text, draw, focus, hide, smart, adjust
+
+    /// A button on the dial: a tool, or an action on the whole picture.
+    enum Entry: Hashable {
+        case tool(AnnotationEditor.Tool)
+        case action(Action)
+    }
+
+    enum Action: Hashable { case rotateLeft, rotateRight, smartRedact, simplify, adjust }
+
+    var title: String {
+        switch self {
+        case .select: "Select"
+        case .shapes: "Shapes"
+        case .text: "Text"
+        case .draw: "Draw"
+        case .focus: "Focus"
+        case .hide: "Hide"
+        case .smart: "Smart tools"
+        case .adjust: "Adjust"
+        }
+    }
+
+    /// Its buttons, the main one first.
+    var entries: [Entry] {
+        func draws(_ kinds: [Annotation.Kind]) -> [Entry] { kinds.map { .tool(.draw($0)) } }
+        switch self {
+        case .select: return [.tool(.select)]
+        case .shapes: return draws([.arrow, .rectangle, .ellipse, .line])
+        case .text: return draws([.text, .callout, .step, .stamp])
+        case .draw: return draws([.pen, .highlighter])
+        case .focus: return draws([.spotlight, .magnify])
+        case .hide: return draws([.blur, .pixelate, .redact]) + [.action(.smartRedact)]
+        case .smart: return draws([.move, .editText]) + [.action(.simplify)]
+        case .adjust: return [.tool(.crop), .tool(.cut(.horizontal)), .tool(.cut(.vertical)),
+                              .action(.rotateLeft), .action(.rotateRight), .action(.adjust)]
+        }
+    }
+
+    var tools: [AnnotationEditor.Tool] {
+        entries.compactMap { if case .tool(let tool) = $0 { tool } else { nil } }
+    }
+
+    static func of(_ tool: AnnotationEditor.Tool) -> DialGroup? { allCases.first { $0.tools.contains(tool) } }
+}
+
+/// The tools around the pointer on a glass disc, grouped by kind: every tool in its group's
+/// slice, or one button per group that shows the group's tools when pointed at. Colors and
+/// line widths are in a bar underneath. The middle shows the tool in use; clicking it closes
+/// the dial. Each tool's key is in its tooltip.
 struct ToolDialView: View {
     let state: ToolDialState
     @State private var editor = AnnotationEditor.shared
+    @State private var prefs = Preferences.shared
     /// Where a drag started from.
     @State private var dragStart: CGSize?
 
@@ -181,16 +233,20 @@ struct ToolDialView: View {
     private static let disc: CGFloat = 360
     private static let innerRadius: CGFloat = 96
     private static let outerRadius: CGFloat = 148
-    private static let innerCount = 8
+    private static let innerSize: CGFloat = 50
+    private static let outerSize: CGFloat = 40
 
-    private enum Action: Hashable { case rotateLeft, rotateRight, smartRedact, simplify, adjust }
+    typealias Entry = DialGroup.Entry
+    typealias Action = DialGroup.Action
+
+    /// A button's place: degrees clockwise from the top, and which ring.
+    private struct Placed {
+        let entry: Entry
+        let angle: Double
+        let inner: Bool
+    }
 
     var body: some View {
-        let ranked = ToolUse.ranked()
-        let inner = Array(ranked.prefix(Self.innerCount))
-        let outer = Array(ranked.dropFirst(Self.innerCount))
-        let actions: [Action] = [.rotateLeft, .rotateRight, .adjust, .smartRedact, .simplify]
-        let outerCount = outer.count + actions.count
         ZStack(alignment: .topLeading) {
             // The disc itself is the handle: drag any empty part of it to move the dial.
             Color.clear
@@ -210,14 +266,9 @@ struct ToolDialView: View {
                 .help("Drag to move the dial")
                 .position(Self.center)
 
-            ForEach(Array(inner.enumerated()), id: \.offset) { index, tool in
-                toolButton(tool, size: 50).position(point(index, of: inner.count, radius: Self.innerRadius))
-            }
-            ForEach(Array(outer.enumerated()), id: \.offset) { index, tool in
-                toolButton(tool, size: 40).position(point(index, of: outerCount, radius: Self.outerRadius))
-            }
-            ForEach(Array(actions.enumerated()), id: \.offset) { index, action in
-                actionButton(action).position(point(outer.count + index, of: outerCount, radius: Self.outerRadius))
+            switch prefs.dialLayout {
+            case .slices: slices
+            case .groups: groups
             }
             hub.position(Self.center)
             widths.position(x: Self.center.x, y: Self.disc + Space.sm + 20)
@@ -225,11 +276,74 @@ struct ToolDialView: View {
         .frame(width: Self.size.width, height: Self.size.height)
     }
 
-    /// Evenly round a ring, starting at the top.
-    private func point(_ index: Int, of count: Int, radius: CGFloat) -> CGPoint {
-        let angle = (-90 + Double(index) * 360 / Double(max(count, 1))) * .pi / 180
-        return CGPoint(x: Self.center.x + radius * cos(angle), y: Self.center.y + radius * sin(angle))
+    // MARK: Layouts
+
+    /// Every tool, each group in a slice of its own: its main tool on the inner ring, the rest
+    /// just outside it, with a line between slices. Draw and Focus share one.
+    @ViewBuilder private var slices: some View {
+        let (placed, dividers) = Self.sliceLayout()
+        Path { path in
+            for angle in dividers {
+                path.move(to: point(angle, radius: Self.outerRadius - 24))
+                path.addLine(to: point(angle, radius: Self.disc / 2 - 4))
+            }
+        }
+        .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+        .allowsHitTesting(false)
+        ForEach(placed, id: \.entry) { place in
+            entryButton(place.entry, size: place.inner ? Self.innerSize : Self.outerSize)
+                .position(point(place.angle, radius: place.inner ? Self.innerRadius : Self.outerRadius))
+        }
     }
+
+    /// The slices: each takes a step of the outer ring per tool beyond its main one (at least
+    /// one), with its main tool on the inner ring in the middle of them. Select comes first,
+    /// so it's straight above the middle.
+    private static func sliceLayout() -> (placed: [Placed], dividers: [Double]) {
+        let slices: [[DialGroup]] = [[.select], [.shapes], [.text], [.draw, .focus], [.hide], [.smart], [.adjust]]
+        let entries = slices.map { $0.flatMap(\.entries) }
+        let step = 360 / Double(entries.reduce(0) { $0 + max($1.count - 1, 1) })
+        var placed: [Placed] = [], dividers: [Double] = [], slot = 0
+        for slice in entries {
+            let width = max(slice.count - 1, 1)
+            placed.append(Placed(entry: slice[0], angle: (Double(slot) + Double(width - 1) / 2) * step, inner: true))
+            for (index, entry) in slice.dropFirst().enumerated() {
+                placed.append(Placed(entry: entry, angle: Double(slot + index) * step, inner: false))
+            }
+            slot += width
+            dividers.append((Double(slot) - 0.5) * step)
+        }
+        return (placed, dividers)
+    }
+
+    /// One button per group on the inner ring, each showing the group's tool used last;
+    /// pointing at one shows all its tools on the outer ring beside it.
+    @ViewBuilder private var groups: some View {
+        let all = DialGroup.allCases
+        let open = state.openGroup ?? DialGroup.of(editor.tool) ?? .select
+        let step = 360 / Double(all.count)
+        ForEach(Array(all.enumerated()), id: \.element) { index, group in
+            groupButton(group, open: group == open && group.entries.count > 1)
+                .position(point(Double(index) * step, radius: Self.innerRadius))
+        }
+        if open.entries.count > 1, let index = all.firstIndex(of: open) {
+            let fan = open.entries
+            ForEach(Array(fan.enumerated()), id: \.element) { offset, entry in
+                entryButton(entry, size: Self.outerSize)
+                    .position(point(Double(index) * step + (Double(offset) - Double(fan.count - 1) / 2) * 18, radius: Self.outerRadius))
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+            }
+            .id(open)
+        }
+    }
+
+    /// A point on a ring, `angle` degrees clockwise from the top.
+    private func point(_ angle: Double, radius: CGFloat) -> CGPoint {
+        let radians = angle * .pi / 180
+        return CGPoint(x: Self.center.x + radius * sin(radians), y: Self.center.y - radius * cos(radians))
+    }
+
+    // MARK: Buttons
 
     private var hub: some View {
         Button { state.close() } label: {
@@ -246,27 +360,58 @@ struct ToolDialView: View {
         .help("Close the dial (Esc)")
     }
 
+    @ViewBuilder private func entryButton(_ entry: Entry, size: CGFloat) -> some View {
+        switch entry {
+        case .tool(let tool): toolButton(tool, size: size)
+        case .action(let action): actionButton(action)
+        }
+    }
+
     private func toolButton(_ tool: AnnotationEditor.Tool, size: CGFloat) -> some View {
-        let on = editor.tool == tool
-        let hovered = state.hovered == tool
-        return Button {
+        Button {
             editor.pick(tool)
             state.done()
         } label: {
-            Image(systemName: tool.symbol)
-                .font(.system(size: size * 0.4))
-                .frame(width: size, height: size)
-                .background(Circle().fill(on ? Color.accentColor : (hovered ? Color.accentColor.opacity(0.25) : Color.primary.opacity(0.07))))
-                .foregroundStyle(on ? Color.white : Color.primary)
-                .contentShape(Circle())
-                .scaleEffect(hovered ? 1.12 : 1)
-                .animation(Motion.quick, value: hovered)
+            disc(tool.symbol, size: size, on: editor.tool == tool, hovered: state.hovered == tool)
         }
         .buttonStyle(.plain)
         .help(tool.title + (tool.shortcut.map { " (\($0))" } ?? ""))
         .onHover { inside in
             if inside { state.hovered = tool } else if state.hovered == tool { state.hovered = nil }
         }
+    }
+
+    /// A group's button: picks the group's tool used last; pointing at it shows the others.
+    private func groupButton(_ group: DialGroup, open: Bool) -> some View {
+        let tool = ToolUse.latest(of: group.tools) ?? group.tools[0]
+        return Button {
+            editor.pick(tool)
+            state.done()
+        } label: {
+            disc(tool.symbol, size: Self.innerSize, on: group.tools.contains(editor.tool), hovered: state.hovered == tool)
+                .overlay(Circle().strokeBorder(open ? Color.accentColor : .clear, lineWidth: 2))
+        }
+        .buttonStyle(.plain)
+        .help(group.title + ": " + tool.title + (tool.shortcut.map { " (\($0))" } ?? ""))
+        .onHover { inside in
+            if inside {
+                withAnimation(Motion.quick) { state.openGroup = group }
+                state.hovered = tool
+            } else if state.hovered == tool {
+                state.hovered = nil
+            }
+        }
+    }
+
+    private func disc(_ symbol: String, size: CGFloat, on: Bool, hovered: Bool) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: size * 0.4))
+            .frame(width: size, height: size)
+            .background(Circle().fill(on ? Color.accentColor : (hovered ? Color.accentColor.opacity(0.25) : Color.primary.opacity(0.07))))
+            .foregroundStyle(on ? Color.white : Color.primary)
+            .contentShape(Circle())
+            .scaleEffect(hovered ? 1.12 : 1)
+            .animation(Motion.quick, value: hovered)
     }
 
     @ViewBuilder private func actionButton(_ action: Action) -> some View {

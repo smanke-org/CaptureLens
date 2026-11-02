@@ -1013,6 +1013,11 @@ enum DebugCommands {
                 if parts.count == 2 { AppDefaults.store.set(parts[1], forKey: parts[0]) }
             case "tool-style": prefs.toolStyle = ToolStyle(rawValue: arg) ?? .toolbar
             case "dial-trigger": prefs.dialTrigger = DialTrigger(rawValue: arg) ?? .rightClick
+            case "dial-layout": prefs.dialLayout = DialLayout(rawValue: arg) ?? .slices
+            case "dial-group":
+                // `dial-group:<n>`: the open dial shows group n's tools, as pointing at it would.
+                if let window = LibraryWindow.shared.window, let scroll = PanTest.find(window.contentView), let n = Int(arg),
+                   DialGroup.allCases.indices.contains(n) { scroll.debugDialState.openGroup = DialGroup.allCases[n] }
             case "palette": AppDefaults.store.set(arg, forKey: "editor.palettePlacement")
             case "open-dial":
                 if let window = LibraryWindow.shared.window, let scroll = PanTest.find(window.contentView) {
@@ -1485,8 +1490,8 @@ enum PanTest {
         scroll.openDial(at: CGPoint(x: scroll.bounds.minX + 210, y: scroll.bounds.midY), held: false)
         try? await Task.sleep(for: .seconds(0.6))
         guard let center = scroll.debugDialCenter else { return "dial didn't open" }
-        // The first tool of the inner ring sits straight above the middle.
-        let first = ToolUse.ranked()[0]
+        // Select sits straight above the middle in either layout.
+        let first = AnnotationEditor.Tool.select
         await click(CGPoint(x: center.x, y: center.y + 112))
         steps.append("pinned, clicked \(first.id): tool \(editor.tool.id), open \(scroll.isDialOpen)")
         // Draw a box on the picture, away from the dial.

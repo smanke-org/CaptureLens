@@ -23,7 +23,8 @@ SnagAnything also:
 - **Keeps the pointer separate**, so you can show, hide, move or resize it after the capture.
 - **Marks captures up** with boxes, arrows, text, callouts, numbered steps, a pen, a highlighter, a spotlight, a
   magnifier and stamps, in any color and size. The marks stay separate from the picture, so they can be moved,
-  resized or edited any time, and copying or saving draws them in.
+  resized or edited any time, and copying or saving draws them in. The tools sit in a strip beside the picture
+  or in a dial around the pointer, grouped by kind: every tool in its group's slice, or one button per group.
 - **Adjusts captures without touching the original**: crop, rotate, resize, cut strips out with torn or wavy
   seams, add borders, shadows and torn or faded edges, remove the background, and blur or black out anything
   sensitive, which Smart Redact finds for you (emails, phone and card numbers, keys and more). Save as PNG, JPEG,
