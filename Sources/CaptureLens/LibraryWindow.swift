@@ -583,6 +583,12 @@ struct LibraryToolbar: ToolbarContent {
             SelectionActions.FavoriteButton(state: state)
             SelectionActions.ShareToolbarButton(state: state)
         }
+        // Settings in a glass button of its own, apart from the buttons that act on a capture.
+        ToolbarSpacer(.fixed, placement: .primaryAction)
+        ToolbarItem(placement: .primaryAction) {
+            Button { SettingsWindow.shared.show() } label: { Label("Settings", systemImage: "gearshape") }
+                .help("Open SnagAnything Settings (⌘,)")
+        }
     }
 }
 

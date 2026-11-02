@@ -262,6 +262,7 @@ enum Help {
                 ("Pinch or ⌃-scroll", "Zoom in and out around the pointer; or use − and + in the picture's corner, or pick a level (or Zoom to Fit) from the percentage"),
                 ("⌘+  ⌘−  ⌘0", "Zoom the picture in, out, or to fit when it's what you're working on (you last clicked it, or it fills the window); otherwise ⌘+ and ⌘− make the thumbnails bigger or smaller. The View menu says which"),
                 ("View › Show Preset Buttons", "A button for each preset in the toolbar, beside Capture"),
+                ("Gear button", "In the toolbar, after Share: opens Settings (or press ⌘,)"),
             ]),
             .heading("Captures from other tools"),
             .text("To keep everything in one library whatever you capture with, turn on macOS screenshots or Snagit captures in Settings › Library › Captures from other tools. New ones come in as you take them, and SnagAnything asks whether to bring in ones you already have: only new ones, the last 7, 30 or 90 days, or all of them. Screenshots taken with ⇧⌘3, ⇧⌘4, ⇧⌘5 or the Screenshot app are found wherever they're saved, and keep whether they were an area, a window or the screen; for one taken while SnagAnything was running, it notes the app and window too. Snagit captures come in as an import from Snagit would."),

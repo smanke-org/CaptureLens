@@ -99,7 +99,7 @@ Presets are saved ways to capture, each with its own shortcut: what to capture, 
 whether to copy. Make and change them in Settings › Presets.
 
 In the library, the Capture button captures with your first preset (its arrow lists them all), and Markup, the
-star and Share act on the selected capture; everything else is in the menus and the right-click menu. Search
+star and Share act on the selected capture, and the gear opens Settings; everything else is in the menus and the right-click menu. Search
 finds words in names, tags, notes and the text in the pictures. It also understands
 `tag:work`, `app:safari`, `site:example.com` and dates such as `yesterday` or `March 3`.
 
