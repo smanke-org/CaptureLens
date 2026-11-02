@@ -68,11 +68,11 @@ struct VideoPane: View {
                      ? "It was imported on another Mac, and imported videos stay on the Mac that has them. Its name, tags and notes are here."
                      : prefs.syncVideos
                      ? "It arrives once the Mac that recorded it has synced it. Its name, tags and notes are here already."
-                     : "Turn on “Sync video files” in Settings › Library on both Macs to play it here.")
+                     : "Turn on “Sync video files” in Settings › General on both Macs to play it here.")
                     .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 360)
             }
             .padding()
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.card))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -88,6 +88,8 @@ final class VideoModel {
     private(set) var missing = false
     /// Where playback is, in the original recording's seconds.
     private(set) var time: Double = 0
+    /// Playing now, for the Play button under the timeline.
+    private(set) var playing = false
     @ObservationIgnored private var info = VideoInfo(duration: 0)
     @ObservationIgnored private var showingResult = false
     @ObservationIgnored private var observer: Any?
@@ -112,6 +114,8 @@ final class VideoModel {
                 guard let self else { return }
                 let seconds = time.seconds.isFinite ? time.seconds : 0
                 self.time = self.showingResult ? self.info.edits.originalTime(forResult: seconds, duration: self.info.duration) : seconds
+                // Also called as playback starts and stops.
+                self.playing = (self.player?.rate ?? 0) != 0
             }
         }
         frames = await Self.filmstrip(asset, duration: info.duration, count: 14)
@@ -129,6 +133,22 @@ final class VideoModel {
             let at = result ? info.edits.resultTime(forOriginal: keep, duration: info.duration) : keep
             await player.seek(to: CMTime(seconds: at, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
         }
+    }
+
+    /// Play or pause, from the button under the timeline (Space in the player does the same).
+    func togglePlay() {
+        guard let player else { return }
+        if player.rate != 0 {
+            player.pause()
+        } else {
+            // At the end, playing starts over.
+            if let item = player.currentItem, item.duration.isNumeric,
+               player.currentTime().seconds >= item.duration.seconds - 0.05 {
+                player.seek(to: .zero)
+            }
+            player.play()
+        }
+        playing = player.rate != 0
     }
 
     /// Moves playback to `seconds` of the original.
@@ -257,7 +277,7 @@ private struct VideoTimeline: View {
             })
         }
         .frame(height: 56)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
         .focusable()
         .focused($focused)
         .focusEffectDisabled()
@@ -280,7 +300,7 @@ private struct VideoTimeline: View {
     }
 
     private func handle(at x: CGFloat, height: CGFloat, leading: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 3)
+        RoundedRectangle(cornerRadius: Radius.xs)
             .fill(Color.yellow)
             .frame(width: 8, height: height)
             .overlay(Capsule().fill(.black.opacity(0.5)).frame(width: 2, height: height * 0.4))
@@ -302,7 +322,8 @@ private struct Hatching: Shape {
     }
 }
 
-/// Under the timeline: undo, set the ends at the playhead, cut out, save a frame.
+/// Under the timeline: play, undo, set the ends at the playhead, cut out, save a frame.
+/// Icon buttons with their names in tooltips, so the bar never wraps in a narrow pane.
 private struct VideoEditBar: View {
     let item: CaptureItem
     let model: VideoModel
@@ -311,44 +332,56 @@ private struct VideoEditBar: View {
     private var info: VideoInfo { item.video ?? VideoInfo(duration: 0) }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Space.sm) {
             let _ = editor.revision
-            Button { editor.undo() } label: { Image(systemName: "arrow.uturn.backward") }
+            Button { model.togglePlay() } label: {
+                Label(model.playing ? "Pause" : "Play", systemImage: model.playing ? "pause.fill" : "play.fill")
+                    .frame(width: 16)
+            }
+            .help(model.playing ? "Pause" : "Play")
+            Divider().frame(height: 16)
+            Button { editor.undo() } label: { Label("Undo", systemImage: "arrow.uturn.backward") }
                 .disabled(!editor.undoManager.canUndo).help("Undo")
-            Button { editor.redo() } label: { Image(systemName: "arrow.uturn.forward") }
+            Button { editor.redo() } label: { Label("Redo", systemImage: "arrow.uturn.forward") }
                 .disabled(!editor.undoManager.canRedo).help("Redo")
             Divider().frame(height: 16)
-            Button("Start Here") {
+            Button {
                 var edits = info.edits
                 edits.trimStart = min(model.time, (edits.trimEnd ?? info.duration) - 0.1)
                 editor.commitVideo(edits, action: "Trim")
-            }
-            .help("Trim off everything before the playhead")
-            Button("End Here") {
+            } label: { Label("Start Here", systemImage: "arrow.right.to.line") }
+            .help("Start Here: trim off everything before the playhead")
+            Button {
                 var edits = info.edits
                 edits.trimEnd = max(model.time, edits.trimStart + 0.1)
                 editor.commitVideo(edits, action: "Trim")
-            }
-            .help("Trim off everything after the playhead")
+            } label: { Label("End Here", systemImage: "arrow.left.to.line") }
+            .help("End Here: trim off everything after the playhead")
             Toggle(isOn: $editor.cuttingVideo) { Label("Cut Out", systemImage: "scissors") }
                 .toggleStyle(.button)
-                .help("Drag across the timeline to cut that section out")
+                .help("Cut Out: drag across the timeline to cut that section out")
             if editor.selectedVideoCut != nil {
-                Button("Remove Cut") { editor.removeSelectedVideoCut() }
+                Button { editor.removeSelectedVideoCut() } label: { Label("Remove Cut", systemImage: "delete.backward") }
+                    .help("Remove the selected cut (Delete)")
             }
             if !info.edits.isEmpty {
-                Button("Reset") { editor.commitVideo(VideoEdits(), action: "Reset Video") }
-                    .help("Put back everything trimmed or cut")
+                Button { editor.commitVideo(VideoEdits(), action: "Reset Video") } label: {
+                    Label("Reset", systemImage: "arrow.counterclockwise")
+                }
+                .help("Reset: put back everything trimmed or cut")
             }
-            Spacer(minLength: 8)
-            Text("\(VideoModel.format(model.time)) · plays \(VideoModel.format(info.resultDuration))")
-                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            Spacer(minLength: Space.sm)
+            // Fixed-width digits, kept whole: the buttons give way first.
+            Text("\(VideoModel.format(model.time)) / \(VideoModel.format(info.resultDuration))")
+                .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
                 .lineLimit(1)
+                .fixedSize()
+                .help("Where the playhead is, and how long the finished video plays")
             Button { saveFrame() } label: { Label("Save Frame", systemImage: "camera") }
-                .help("Add the frame at the playhead to the library as a picture")
+                .help("Save Frame: add the frame at the playhead to the library as a picture")
         }
+        .labelStyle(.iconOnly)
         .buttonStyle(.borderless)
-        .controlSize(.small)
     }
 
     private func saveFrame() {

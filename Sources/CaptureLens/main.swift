@@ -438,13 +438,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         view.addItem(item("Hide Captures", #selector(toggleCaptures), key: "1", modifiers: [.command, .option]))
         view.addItem(item("Hide Picture", #selector(togglePicture), key: "2", modifiers: [.command, .option]))
         view.addItem(item("Hide Details", #selector(toggleDetails), key: "i", modifiers: [.command, .control]))
+        view.addItem(item("Show Sidebar as Icons", #selector(toggleSidebar), key: "s", modifiers: [.command, .control]))
         view.addItem(.separator())
-        view.addItem(item("Bigger Thumbnails", #selector(biggerThumbnails), key: "+"))
-        view.addItem(item("Smaller Thumbnails", #selector(smallerThumbnails), key: "-"))
-        view.addItem(.separator())
-        view.addItem(item("Zoom In", #selector(zoomPictureIn)))
-        view.addItem(item("Zoom Out", #selector(zoomPictureOut)))
-        view.addItem(item("Zoom to Fit", #selector(zoomPictureToFit)))
+        // ⌘+, ⌘− and ⌘0 zoom the picture when it's what you're working on, and size the
+        // thumbnails when the grid is; the titles say which.
+        view.addItem(item("Zoom In", #selector(zoomIn), key: "+"))
+        view.addItem(item("Zoom Out", #selector(zoomOut), key: "-"))
+        view.addItem(item("Zoom to Fit", #selector(zoomPictureToFit), key: "0"))
         view.addItem(.separator())
         view.addItem(item("Show Capture Bar", #selector(toggleCaptureBar)))
         view.addItem(item("Show Preset Buttons", #selector(togglePresetButtons)))
@@ -502,10 +502,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         case #selector(toggleDetails):
             menuItem.title = state.showInfo ? "Hide Details" : "Show Details"
             return inFront
-        case #selector(biggerThumbnails), #selector(smallerThumbnails):
-            return inFront && state.foldedSide != .captures
-        case #selector(zoomPictureIn), #selector(zoomPictureOut), #selector(zoomPictureToFit):
-            return inFront && !state.pictureHidden && selected.count == 1 && selected.first?.kind != .video
+        case #selector(toggleSidebar):
+            menuItem.title = LibrarySidebar.isCompact ? "Show Full Sidebar" : "Show Sidebar as Icons"
+            return LibraryWindow.shared.isKey
+        case #selector(zoomIn), #selector(zoomOut):
+            let picture = LibraryCommands.zoomsPicture
+            let bigger = menuItem.action == #selector(zoomIn)
+            menuItem.title = picture ? (bigger ? "Zoom In" : "Zoom Out") : (bigger ? "Bigger Thumbnails" : "Smaller Thumbnails")
+            return inFront && (picture || state.gridVisible)
+        case #selector(zoomPictureToFit):
+            return inFront && LibraryCommands.zoomsPicture
+        case #selector(findInLibrary):
+            return LibraryWindow.shared.isKey
         case #selector(saveSelected), #selector(openInOwnWindow):
             return inFront && selected.count == 1
         case #selector(shareSelected):
@@ -530,6 +538,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        edit.addItem(.separator())
+        let find = NSMenu(title: "Find")
+        find.addItem(item("Find…", #selector(findInLibrary), key: "f"))
+        let findItem = NSMenuItem(title: "Find", action: nil, keyEquivalent: "")
+        findItem.submenu = find
+        edit.addItem(findItem)
         edit.addItem(.separator())
         let delete = item("Delete…", #selector(deleteSelected), key: "\u{8}")
         edit.addItem(delete)
@@ -561,11 +575,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
     @objc func toggleDetails() { LibraryWindow.shared.state.showInfo.toggle() }
     @objc func togglePresetButtons() { LibraryWindow.shared.state.showPresetButtons.toggle() }
-    @objc func biggerThumbnails() { LibraryWindow.shared.state.stepThumbnails(bigger: true) }
-    @objc func smallerThumbnails() { LibraryWindow.shared.state.stepThumbnails(bigger: false) }
-    @objc func zoomPictureIn() { CanvasZoom.shared.step(in: true) }
-    @objc func zoomPictureOut() { CanvasZoom.shared.step(in: false) }
+    @objc func zoomIn() {
+        if LibraryCommands.zoomsPicture { CanvasZoom.shared.step(in: true) } else { LibraryWindow.shared.state.stepThumbnails(bigger: true) }
+    }
+    @objc func zoomOut() {
+        if LibraryCommands.zoomsPicture { CanvasZoom.shared.step(in: false) } else { LibraryWindow.shared.state.stepThumbnails(bigger: false) }
+    }
     @objc func zoomPictureToFit() { CanvasZoom.shared.fitRequested += 1 }
+    @objc func toggleSidebar() { LibrarySidebar.toggleCompact(in: LibraryWindow.shared.window) }
+    /// Edit › Find: into the library's search field.
+    @objc func findInLibrary() {
+        let search = LibraryWindow.shared.window?.toolbar?.items.lazy.compactMap { $0 as? NSSearchToolbarItem }.first
+        search?.beginSearchInteraction()
+    }
     @objc func openInOwnWindow() { EditorWindow.shared.open() }
     @objc func saveSelected() { LibraryCommands.single.map(Exporter.save) }
     @objc func shareSelected() { ShareButton.shareAtPointer(LibraryWindow.shared.state.selectedItems) }
@@ -621,7 +643,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         if !ScreenAccess.request() { ScreenAccess.openSettings() }
     }
     @objc func showSettings() { SettingsWindow.shared.show() }
-    @objc func chooseSyncFolder() { SettingsWindow.shared.show(tab: "Library") }
+    @objc func chooseSyncFolder() { SettingsWindow.shared.show(tab: "General") }
     @objc func showHelp() { HelpWindow.shared.show() }
     @objc func checkForUpdates() { UpdateController.checkForUpdates() }
     @objc func installUpdateNow() { AutoUpdater.shared.installNow() }

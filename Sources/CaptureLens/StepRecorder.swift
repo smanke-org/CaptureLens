@@ -235,7 +235,7 @@ struct GuideSheet: View {
                 }
             }
             .frame(width: 360, height: 480)
-            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: Radius.control))
         }
         .padding(20)
         .task(id: "\(request.template)|\(request.title)|\(request.items)") { await renderPreview() }

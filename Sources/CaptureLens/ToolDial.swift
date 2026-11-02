@@ -50,16 +50,20 @@ struct ToolPaletteDock<Content: View>: View {
         return Group {
             if horizontal {
                 HStack(spacing: 0) { grip(horizontal: true); ToolPalette(horizontal: true) }
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
+                // As wide as the tools (one column, or two when one doesn't fit).
                 VStack(spacing: 0) { grip(horizontal: false); ToolPalette() }
+                    .fixedSize(horizontal: true, vertical: false)
             }
         }
-        .glassEffect(.regular, in: .rect(cornerRadius: 14))
+        .glassEffect(.regular, in: .rect(cornerRadius: Radius.panel))
         .offset(drag)
         .zIndex(1)
-        .padding(8)
-        .frame(maxHeight: horizontal ? nil : .infinity, alignment: .top)
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .padding(Space.sm)
+        // The canvas color runs the whole length of the edge the tools are on.
+        .frame(maxWidth: horizontal ? .infinity : nil, maxHeight: horizontal ? nil : .infinity, alignment: .top)
+        .background(Color(nsColor: Surfaces.canvas))
     }
 
     /// The handle: drag it toward an edge to move the tools there.
@@ -68,7 +72,8 @@ struct ToolPaletteDock<Content: View>: View {
             .rotationEffect(.degrees(horizontal ? 90 : 0))
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(.secondary)
-            .frame(width: horizontal ? 18 : 92, height: horizontal ? 60 : 16)
+            .frame(width: horizontal ? 18 : nil, height: horizontal ? nil : 16)
+            .frame(maxWidth: horizontal ? nil : .infinity, maxHeight: horizontal ? .infinity : nil)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(coordinateSpace: .named("palette-area"))
@@ -76,7 +81,7 @@ struct ToolPaletteDock<Content: View>: View {
                     .onEnded { value in
                         let p = value.location
                         let edge: PalettePlacement = p.y > area.height * 0.72 ? .bottom : (p.x < area.width / 2 ? .left : .right)
-                        withAnimation(.easeInOut(duration: 0.2)) {
+                        withAnimation(Motion.ui) {
                             placementRaw = edge.rawValue
                             drag = .zero
                         }
@@ -161,17 +166,21 @@ final class ToolDialState {
     }
 }
 
-/// The tools in rings around the pointer: the ones used most on the inside, the rest
-/// around them, colors closest to the middle and line widths underneath. The middle shows
-/// the tool in use; clicking it closes the dial.
+/// The tools in two rings around the pointer, the ones used most on the inside, on a glass
+/// disc; colors and line widths in a bar underneath. The middle shows the tool in use;
+/// clicking it closes the dial. Each tool's key is in its tooltip.
 struct ToolDialView: View {
     let state: ToolDialState
     @State private var editor = AnnotationEditor.shared
     /// Where a drag started from.
     @State private var dragStart: CGSize?
 
-    static let size = CGSize(width: 404, height: 452)
-    private static let center = CGPoint(x: 202, y: 202)
+    static let size = CGSize(width: 440, height: 408)
+    /// Where its middle is, from its top-left corner.
+    static let center = CGPoint(x: 220, y: 180)
+    private static let disc: CGFloat = 360
+    private static let innerRadius: CGFloat = 96
+    private static let outerRadius: CGFloat = 148
     private static let innerCount = 8
 
     private enum Action: Hashable { case rotateLeft, rotateRight, smartRedact, simplify, adjust }
@@ -184,11 +193,9 @@ struct ToolDialView: View {
         let outerCount = outer.count + actions.count
         ZStack(alignment: .topLeading) {
             // The disc itself is the handle: drag any empty part of it to move the dial.
-            Circle()
-                .fill(.regularMaterial)
-                .overlay(Circle().strokeBorder(Color.primary.opacity(0.1)))
-                .shadow(color: .black.opacity(0.25), radius: 18, y: 6)
-                .frame(width: 396, height: 396)
+            Color.clear
+                .frame(width: Self.disc, height: Self.disc)
+                .glassEffect(.regular, in: .circle)
                 .contentShape(Circle())
                 .pointerStyle(dragStart == nil ? .grabIdle : .grabActive)
                 .gesture(
@@ -202,25 +209,18 @@ struct ToolDialView: View {
                 )
                 .help("Drag to move the dial")
                 .position(Self.center)
-            Circle()
-                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
-                .frame(width: 282, height: 282)
-                .position(Self.center)
 
-            ForEach(Array(AnnotationStyle.palette.enumerated()), id: \.offset) { index, color in
-                swatch(color).position(point(index, of: AnnotationStyle.palette.count, radius: 62))
-            }
             ForEach(Array(inner.enumerated()), id: \.offset) { index, tool in
-                toolButton(tool, size: 50).position(point(index, of: inner.count, radius: 112))
+                toolButton(tool, size: 50).position(point(index, of: inner.count, radius: Self.innerRadius))
             }
             ForEach(Array(outer.enumerated()), id: \.offset) { index, tool in
-                toolButton(tool, size: 40).position(point(index, of: outerCount, radius: 168))
+                toolButton(tool, size: 40).position(point(index, of: outerCount, radius: Self.outerRadius))
             }
             ForEach(Array(actions.enumerated()), id: \.offset) { index, action in
-                actionButton(action).position(point(outer.count + index, of: outerCount, radius: 168))
+                actionButton(action).position(point(outer.count + index, of: outerCount, radius: Self.outerRadius))
             }
             hub.position(Self.center)
-            widths.position(x: Self.center.x, y: 428)
+            widths.position(x: Self.center.x, y: Self.disc + Space.sm + 20)
         }
         .frame(width: Self.size.width, height: Self.size.height)
     }
@@ -258,17 +258,9 @@ struct ToolDialView: View {
                 .frame(width: size, height: size)
                 .background(Circle().fill(on ? Color.accentColor : (hovered ? Color.accentColor.opacity(0.25) : Color.primary.opacity(0.07))))
                 .foregroundStyle(on ? Color.white : Color.primary)
-                .overlay(alignment: .bottomTrailing) {
-                    if let key = tool.shortcut {
-                        Text(key)
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(on ? Color.white.opacity(0.85) : Color.secondary)
-                            .offset(x: -size * 0.12, y: -size * 0.08)
-                    }
-                }
                 .contentShape(Circle())
                 .scaleEffect(hovered ? 1.12 : 1)
-                .animation(.easeOut(duration: 0.1), value: hovered)
+                .animation(Motion.quick, value: hovered)
         }
         .buttonStyle(.plain)
         .help(tool.title + (tool.shortcut.map { " (\($0))" } ?? ""))
@@ -324,7 +316,7 @@ struct ToolDialView: View {
             Circle()
                 .fill(Color(cgColor: color.cgColor))
                 .overlay(Circle().strokeBorder(Color.primary.opacity(0.2)))
-                .frame(width: 22, height: 22)
+                .frame(width: 18, height: 18)
                 .padding(3)
                 .overlay(Circle().strokeBorder(on ? Color.accentColor : .clear, lineWidth: 2))
         }
@@ -332,18 +324,20 @@ struct ToolDialView: View {
         .help(AnnotationToolbar.name(color))
     }
 
-    /// The pin, line widths, and the system colors for any other color.
+    /// The pin, the colors, line widths, and the system colors for any other color.
     private var widths: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.xs) {
             Button { state.pinned.toggle() } label: {
                 Image(systemName: state.pinned ? "pin.fill" : "pin")
                     .foregroundStyle(state.pinned ? Color.accentColor : Color.primary)
                     .rotationEffect(.degrees(45))
-                    .frame(width: 30, height: 26)
+                    .frame(width: 28, height: 26)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help(state.pinned ? "Pinned: the dial stays open after you pick a tool. Click to unpin." : "Pin the dial open, so it stays after you pick a tool")
+            Divider().frame(height: 18)
+            ForEach(Array(AnnotationStyle.palette.enumerated()), id: \.offset) { _, color in swatch(color) }
             Divider().frame(height: 18)
             ForEach([2.0, 4, 8, 12], id: \.self) { width in
                 let on = editor.style.lineWidth == width
@@ -351,7 +345,7 @@ struct ToolDialView: View {
                     Capsule()
                         .fill(Color.primary)
                         .frame(width: 18, height: max(2, width / 2))
-                        .frame(width: 34, height: 26)
+                        .frame(width: 28, height: 26)
                         .background(Capsule().fill(on ? Color.accentColor.opacity(0.25) : Color.clear))
                         .contentShape(Capsule())
                 }
@@ -360,15 +354,14 @@ struct ToolDialView: View {
             }
             Divider().frame(height: 18)
             Button { ColorPanelBridge.shared.open() } label: {
-                Image(systemName: "paintpalette").frame(width: 30, height: 26).contentShape(Rectangle())
+                Image(systemName: "paintpalette").frame(width: 28, height: 26).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("Other color…")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.1)))
+        .padding(.horizontal, Space.sm)
+        .padding(.vertical, Space.xs)
+        .glassEffect(.regular, in: .capsule)
     }
 }
 

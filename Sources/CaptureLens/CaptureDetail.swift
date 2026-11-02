@@ -197,9 +197,11 @@ struct ResultCanvas: NSViewRepresentable {
         scroll.allowsMagnification = true
         scroll.minMagnification = 0.05
         scroll.maxMagnification = 8
-        scroll.backgroundColor = .underPageBackgroundColor
+        scroll.backgroundColor = Surfaces.canvas
         let clip = CenteringClipView()
-        clip.drawsBackground = false
+        // The clip view paints the canvas (a scroll view's own background only shows through it).
+        clip.drawsBackground = true
+        clip.backgroundColor = Surfaces.canvas
         scroll.contentView = clip
         context.coordinator.scroll = scroll
         scroll.documentView = context.coordinator.imageView
@@ -266,12 +268,19 @@ final class CheckerImageView: NSImageView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         imageScaling = .scaleAxesIndependently
+        // Lifted off the canvas, so a white picture's edges show.
+        wantsLayer = true
+        Surfaces.shadow(layer)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
+    /// Takes the keyboard when clicked, so ⌘+ and ⌘− zoom it rather than the thumbnails.
+    override var acceptsFirstResponder: Bool { true }
+
     /// Double-clicking the finished picture in the library can open it in its own window.
     override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
         if event.clickCount == 2, window === LibraryWindow.shared.window, Preferences.shared.doubleClickOpens == .ownWindow {
             EditorWindow.shared.open()
         } else {
@@ -352,9 +361,11 @@ struct CaptureCanvas: NSViewRepresentable {
         scroll.minMagnification = 0.05
         scroll.maxMagnification = 8
         scroll.drawsBackground = true
-        scroll.backgroundColor = .underPageBackgroundColor
+        scroll.backgroundColor = Surfaces.canvas
         let clip = CenteringClipView()
-        clip.drawsBackground = false
+        // The clip view paints the canvas (a scroll view's own background only shows through it).
+        clip.drawsBackground = true
+        clip.backgroundColor = Surfaces.canvas
         scroll.contentView = clip
         context.coordinator.attach(to: scroll)
         context.coordinator.load(item)
@@ -390,9 +401,7 @@ struct CaptureCanvas: NSViewRepresentable {
             imageView.imageScaling = .scaleAxesIndependently
             imageView.imageFrameStyle = .none
             imageView.wantsLayer = true
-            imageView.layer?.shadowOpacity = 0.25
-            imageView.layer?.shadowRadius = 6
-            imageView.layer?.shadowOffset = CGSize(width: 0, height: -2)
+            Surfaces.shadow(imageView.layer)
             canvas.addSubview(imageView)
             overlay.trackingImageView = imageView
             overlay.preferredInteractionTypes = .automatic
@@ -540,7 +549,7 @@ final class CanvasZoom {
 /// Holding ⌘ with the pointer over the picture gives the select tool until it's let go, as
 /// in most drawing apps.
 ///
-/// With the tools set to a dial (Settings › Library), right-clicking the picture or holding
+/// With the tools set to a dial (Settings › Capture), right-clicking the picture or holding
 /// ⌘⌥ over it opens the dial around the pointer (see `ToolDialView`); Esc or a click
 /// outside closes it, and letting go of ⌘⌥ picks the tool under the pointer.
 final class ZoomingScrollView: NSScrollView {
@@ -604,11 +613,11 @@ final class ZoomingScrollView: NSScrollView {
         func clamp(_ value: CGFloat, _ length: CGFloat, _ low: CGFloat, _ room: CGFloat) -> CGFloat {
             room <= length ? low + (room - length) / 2 : min(max(value, low), low + room - length)
         }
-        // ToolDialView puts its middle 202 points from its top; window coordinates run up.
+        // ToolDialView's middle is `center.y` points from its top; window coordinates run up.
         let p = convert(point, to: nil)
         let area = DialPresenter.shared.overlayAreas[window.windowNumber] ?? content.convert(content.bounds, to: nil)
         let frame = CGRect(x: clamp(p.x - size.width / 2, size.width, area.minX, area.width),
-                           y: clamp(p.y - (size.height - 202), size.height, area.minY, area.height),
+                           y: clamp(p.y - (size.height - ToolDialView.center.y), size.height, area.minY, area.height),
                            width: size.width, height: size.height)
         dialFrame = frame
         // It may be dragged anywhere its area allows (offsets run down, window coordinates up).
@@ -635,7 +644,7 @@ final class ZoomingScrollView: NSScrollView {
     var debugDialState: ToolDialState { dialState }
     /// The dial's middle now, in window coordinates.
     var debugDialCenter: CGPoint? {
-        dialFrame.map { CGPoint(x: $0.midX + dialState.offset.width, y: $0.maxY - 202 - dialState.offset.height) }
+        dialFrame.map { CGPoint(x: $0.midX + dialState.offset.width, y: $0.maxY - ToolDialView.center.y - dialState.offset.height) }
     }
     var debugDialInfo: String {
         guard let dialFrame else { return "closed" }
@@ -894,8 +903,8 @@ struct CaptureInspector: View {
                     .frame(minHeight: 60)
                     .scrollContentBackground(.hidden)
                     .padding(4)
-                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
-                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.secondary.opacity(0.25)))
+                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: Radius.sm))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.sm).strokeBorder(Color.secondary.opacity(0.25)))
                     .accessibilityLabel("Notes")
             }
             Section {

@@ -148,7 +148,7 @@ enum Help {
         ]),
 
         HelpTopic(id: "annotate", title: "Annotating", symbol: "pencil.and.outline", blocks: [
-            .text("Select a capture in the library and mark it up right on the picture. Click Markup in the toolbar (or press ⇧⌘A) for the tools. They sit in a strip beside the picture, never over it, grouped as Shapes, Text, Draw, Focus, Hide, Smart and Adjust, each with its key letter in the corner; drag the strip's grip to put it on the left, right or bottom. Color, size, quick styles and undo are in the row above the picture, and in full under its settings button (the sliders): boxes, ellipses, arrows, lines, text, callouts, numbered steps, a pen, a highlighter, a spotlight, a magnifier and stamps. Marks stay separate from the picture, so you can move, resize, restyle or delete them any time, and the original is never changed."),
+            .text("Select a capture in the library and mark it up right on the picture. Click Markup in the toolbar (or press ⇧⌘A) for the tools. They sit in a slim strip beside the picture, never over it, grouped as Shapes, Text, Draw, Focus, Hide and smart tools, and Adjust; point at a tool to see its name and key. A button with a small triangle in its corner holds more than one tool (Blur, Pixelate and Redact; Edit Text and Smart Move; the two cut-outs; rotate left and right): click it for the one shown, or hold it (or right-click it) for the others, along with Smart Redact and Simplify. Drag the strip's grip to put it on the left, right or bottom; along the bottom it takes two rows when one doesn't fit. While Markup is on, the picture gets the window: the captures move to a filmstrip under it (click one, or press ← and →, to mark it up), and turning Markup off brings the grid back. Color, size, quick styles and undo are in the row above the picture, and in full under its settings button (the sliders): boxes, ellipses, arrows, lines, text, callouts, numbered steps, a pen, a highlighter, a spotlight, a magnifier and stamps. Marks stay separate from the picture, so you can move, resize, restyle or delete them any time, and the original is never changed."),
             .keys([
                 ("V", "Select: click a mark to select it, drag to move it, drag its handles to resize it"),
                 ("R  O  A  L", "Box, ellipse, arrow, line: drag to draw (hold ⇧ for squares, circles and 45° lines)"),
@@ -171,15 +171,15 @@ enum Help {
             .heading("Color, size and style"),
             .text("The color button and the size menu set how new marks look, and change the selected mark. The size menu also has bold text, filled shapes and text, shadows, and Bring to Front / Send to Back. Quick styles (the palette button) keep favorite combinations one click away; Save Current Style adds yours. The settings button (the sliders) above the picture has all of these laid out, with sliders for line and text size."),
             .heading("Toolbar or dial"),
-            .text("The settings button above the picture (or Settings › Library) switches the tools between the strip and a radial dial. The dial opens around the pointer when you right-click the picture or hold ⌘⌥ over it, as you choose: the tools you use most are closest to the middle, the rest around them, with colors inside and line widths underneath. Click a tool, or with ⌘⌥ held, let go over it. Esc or a click outside closes it. Drag any empty part of the dial to move it. The pin under it keeps it open: then picking a tool leaves it where it is, and clicks on the picture draw as usual; Esc or the middle of the dial closes it."),
+            .text("The settings button above the picture (or Settings › Capture) switches the tools between the strip and a radial dial. The dial opens around the pointer when you right-click the picture or hold ⌘⌥ over it, as you choose: the tools you use most are closest to the middle, the rest around them, with the colors and line widths in a bar underneath. Click a tool, or with ⌘⌥ held, let go over it. Esc or a click outside closes it. Drag any empty part of the dial to move it. The pin under it keeps it open: then picking a tool leaves it where it is, and clicks on the picture draw as usual; Esc or the middle of the dial closes it."),
             .heading("Smart tools"),
             .text("Edit Text changes words in the picture itself. Pick the tool and the lines of text SnagAnything found are outlined; click one and type. The old words are painted out with the background around them, and the new ones are set in a matching size, weight and color. Leave the line empty to just paint it out, or drag over any area to paint it out and type something new there."),
             .text("Smart Move picks up parts of the picture (buttons, icons, lines of text, fields) and puts them down elsewhere. Pick the tool, click a part and drag it; the spot it leaves is filled in with the background. Drag its handles to make it bigger or smaller, or drag over an area by hand to move something SnagAnything didn't outline."),
-            .text("Simplify (the shapes button) redraws the picture as plain shapes: a bar for each line of text and a box, circle or outline for each other part, in their own colors or in grays. It's handy for showing a layout without its details, or for keeping attention on one part: delete the shapes over the part that matters. Remove Simplify takes them all away."),
+            .text("Simplify (with Edit Text and Smart Move, under the smart tools button) redraws the picture as plain shapes: a bar for each line of text and a box, circle or outline for each other part, in their own colors or in grays. It's handy for showing a layout without its details, or for keeping attention on one part: delete the shapes over the part that matters. Remove Simplify takes them all away."),
             .tip("These work best on screenshots of apps and web pages, with plain backgrounds. Everything they do is an ordinary mark: select it to recolor, move or delete it, and the original picture is never changed."),
             .heading("Adjusting the picture"),
             .text("The Adjust button (the sliders) crops, rotates and resizes the picture, cuts strips out of it (drag across or down the strip; torn, wavy or straight seams), adds a border with rounded corners and a shadow, gives it torn, wavy or faded edges, and removes the background to keep just the subject. None of it changes the original: each adjustment can be changed, undone, or reset with Reset All Adjustments."),
-            .text("Smart Redact (also in Adjust) finds email addresses, phone numbers, card numbers, ID numbers, IP addresses, street addresses and keys or tokens in the picture and covers each with a black box, blur or pixels. The covers are ordinary marks: move, resize or delete any of them."),
+            .text("Smart Redact (in Adjust, and under the Blur button) finds email addresses, phone numbers, card numbers, ID numbers, IP addresses, street addresses and keys or tokens in the picture and covers each with a black box, blur or pixels. The covers are ordinary marks: move, resize or delete any of them."),
             .text("Markup in the toolbar turns editing on (mark up and adjust the original) or off (see the finished picture as it will be copied and saved). File › Save As… (⇧⌘S) writes PNG, JPEG, HEIC, TIFF, GIF, BMP or PDF."),
             .text("Copy, Save As, dragging a capture out and the thumbnails all include the marks. The eye button hides them to show the picture as captured. Marks sync with the capture to your other Macs."),
         ]),
@@ -210,10 +210,10 @@ enum Help {
             ]),
             .text("Pause and Resume leave out the time in between. The panel, the red outline and SnagAnything's other windows are never in the video."),
             .heading("In the library"),
-            .text("Recordings are named from what's in them and their text is searchable, like pictures; Type › Video in the filters shows just them. The timeline below the player trims and cuts: drag the yellow handles to trim the start and end (or use Start Here and End Here at the playhead), turn on Cut Out and drag across a section to take it out, click a cut and press Delete to put it back. Nothing is cut from the recording itself."),
+            .text("Recordings are named from what's in them and their text is searchable, like pictures; Type › Video in the filters shows just them. The timeline below the player trims and cuts: drag the yellow handles to trim the start and end (or use the Start Here and End Here buttons at the playhead), turn on Cut Out (the scissors) and drag across a section to take it out, click a cut and press Delete to put it back. Nothing is cut from the recording itself. The bar under the timeline has Play, undo and redo, and the time; point at a button to see its name."),
             .text("Save Frame adds the frame at the playhead to the library as a picture, to mark up like any capture. Copy, Save As (MP4 or an animated GIF), dragging out, sharing and Export all use the finished video."),
             .heading("Syncing videos"),
-            .text("Every recording's name, tags, notes and first frame sync like any capture. The video files themselves stay on the Mac that recorded them unless you turn on \"Sync video files\" in Settings › Library; then they go to your other Macs too, encrypted, through iCloud or your sync folder. Long recordings take a lot of space."),
+            .text("Every recording's name, tags, notes and first frame sync like any capture. The video files themselves stay on the Mac that recorded them unless you turn on \"Sync video files\" in Settings › General; then they go to your other Macs too, encrypted, through iCloud or your sync folder. Long recordings take a lot of space."),
             .tip("The first time, macOS asks to allow SnagAnything to use the microphone or camera, and Keys needs SnagAnything turned on in Privacy & Security › Accessibility."),
         ]),
 
@@ -240,7 +240,7 @@ enum Help {
                 ("yesterday, March 3, 2026-10-01", "Captures from that day"),
             ]),
             .heading("Filters"),
-            .text("The buttons above the captures narrow the list by date, type, tags, app and website, and to captures with notes; click × on one to clear it, or Clear All. Filters in use also show in the search field, where deleting one clears it. The menu at the end of the row sorts the captures. The sidebar has quick lists for favorites, the last 7 days, captures with notes, Capture Text clips (Text Captures), and each tag, app and website. Right-click a thumbnail and choose Pin Image to keep it in the Pinned list at the top of the sidebar; Unpin Image takes it out again. Drag its edge all the way in for just icons (tags, apps and websites become menus); drag it out again for the lists."),
+            .text("The buttons above the captures narrow the list by date, type, tags, app and website, and to captures with notes; click × on one to clear it, or Clear All. When the captures are too narrow for all of them, they fold into one Filters button with each filter inside. Filters in use also show in the search field, where deleting one clears it. The menu at the end of the row sorts the captures. The sidebar has quick lists for favorites, the last 7 days, captures with notes, Capture Text clips (Text Captures), and each tag, app and website. Right-click a thumbnail and choose Pin Image to keep it in the Pinned list at the top of the sidebar; Unpin Image takes it out again. Drag its edge all the way in for just icons (tags, apps and websites become menus), or choose View › Show Sidebar as Icons (⌃⌘S); drag it out again, or press ⌃⌘S, for the lists."),
             .heading("Tags and notes"),
             .text("Type a tag and press Return to add it, or click one of your existing tags listed below the field; typing narrows the list (commas add several at once). Tags are listed in the sidebar, the most used first (click More for the rest): click one to see its captures; right-click it to rename it everywhere. Notes hold text of any length; they're searchable too."),
             .heading("Text in a capture"),
@@ -255,11 +255,12 @@ enum Help {
                 ("⌘C  ⌘⌫", "Copy the selected captures, marks drawn in; delete them (asks first)"),
                 ("Markup, ★ and Share", "In the toolbar over the picture: mark it up, add it to Favorites, share it. File has Save As… (⇧⌘S), Export… and Make a Guide…"),
                 ("Open in Its Own Window", "File › Open in Its Own Window (⌥⌘O) moves the picture and its tools into a window of their own, as big as you like; it follows the capture selected in the library. Closing it brings the picture back"),
-                ("⌥⌘1  ⌥⌘2  ⌃⌘I", "View › Hide Captures, Hide Picture and Hide Details, for more room; the slim bar left at the side brings captures or the picture back. The button at the top right shows and hides the details too"),
+                ("⌥⌘1  ⌥⌘2  ⌃⌘I", "View › Hide Captures, Hide Picture and Hide Details, for more room. Hidden captures fold to a filmstrip under the picture (while marking up, they go altogether); a hidden picture leaves a slim bar that brings it back. The button at the top right shows and hides the details too"),
+                ("⌘F", "Edit › Find: type in the search field"),
                 ("Drag the line beside the picture", "Make the captures wider or narrower; double-click the line for the usual width"),
                 ("Scroll over the picture", "Move around a zoomed-in picture; or hold Space and drag"),
                 ("Pinch or ⌃-scroll", "Zoom in and out around the pointer; or use − and + in the picture's corner, or pick a level (or Zoom to Fit) from the percentage"),
-                ("⌘+ / ⌘−", "Make the thumbnails bigger or smaller (View › Bigger Thumbnails, Smaller Thumbnails)"),
+                ("⌘+  ⌘−  ⌘0", "Zoom the picture in, out, or to fit when it's what you're working on (you last clicked it, or it fills the window); otherwise ⌘+ and ⌘− make the thumbnails bigger or smaller. The View menu says which"),
                 ("View › Show Preset Buttons", "A button for each preset in the toolbar, beside Capture"),
             ]),
             .heading("Captures from other tools"),
@@ -271,10 +272,10 @@ enum Help {
         ]),
 
         HelpTopic(id: "sync", title: "Sync and Security", symbol: "lock.icloud", blocks: [
-            .text("Turn on \"Sync with your other Macs\" in Settings › General and choose a sync passphrase. Your settings and your library then follow you to every Mac with SnagAnything and sync on, end-to-end encrypted: neither Apple nor the developer can see them. Below it, Settings and Library switch each on or off for this Mac alone."),
+            .text("Turn on \"Sync with your other Macs\" in Settings › General and choose a sync passphrase. Your settings and your library then follow you to every Mac with SnagAnything and sync on, end-to-end encrypted: neither Apple nor the developer can see them. Below it, the Settings switch and the Library menu (iCloud, a sync folder, or Don't sync) choose for this Mac alone; how the library is syncing shows under them."),
             .text("The library window's layout comes along too: the sidebar's width and which of its sections are open, the line between the captures and the picture, which panes are folded or hidden, whether the details show, thumbnail size, and sort order. Sizes go as shares of the window, so a pane that's half the window on a big screen is half on a small one. The window's own size and place stay with each Mac, and another Mac's layout is taken up the next time you open the library, so nothing moves while you work."),
             .heading("Syncing the library through Dropbox, OneDrive or Google Drive"),
-            .text("In Settings › Library, set \"Sync the library through\" to \"Dropbox, OneDrive or Google Drive\", then choose where the folder is on this Mac: Dropbox, OneDrive and Google Drive are offered when they're installed, or pick any folder that a sync app keeps on all your Macs. SnagAnything puts a \"CaptureLens Library\" folder inside it. Settings and the sync passphrase still go through iCloud."),
+            .text("In Settings › General, turn on \"Sync with your other Macs\" and set Library to \"Dropbox, OneDrive or Google Drive\", then choose where the folder is on this Mac: Dropbox, OneDrive and Google Drive are offered when they're installed, or pick any folder that a sync app keeps on all your Macs. SnagAnything puts a \"CaptureLens Library\" folder inside it. Settings and the sync passphrase still go through iCloud."),
             .text("Each Mac makes this choice for itself, so choose the same on every Mac that shares the library; each picks its own folder location. On a Mac that hasn't yet, the menu bar menu shows \"Choose Sync Folder…\". Every file in the folder is encrypted with your sync passphrase, so the sync service can't see your captures."),
             .tip("Changes arrive once the sync app has synced the folder, usually within seconds. If two Macs change the same capture at once, the newest change wins and the sync app's \"conflicted copy\" files are tidied away. After moving the library to a folder, \"Remove from iCloud…\" frees the iCloud space; update SnagAnything on every Mac first."),
             .text("On each Mac, Settings › Library can encrypt the library file itself and require Touch ID or your password to open the library. The lock comes back after a while away, when the Mac sleeps, or when the screen locks. Capturing keeps working while it's locked."),
@@ -287,7 +288,7 @@ enum Help {
                 ("Follow you", "Presets and their shortcuts, the library shortcut, Capture options, video recording choices and countdown, naming and search options, markup styles, what double-clicking a capture does, appearance, Show in Dock and menu bar, ToolHUD's menu, update choices, asking before quitting, and the library window's layout"),
                 ("Stay on each Mac", "Open at login, encrypting the library, the library lock, the microphone and camera chosen for recording, captures from other tools, the window's own size, and whether (and how) this Mac syncs its settings and library"),
             ]),
-            .text("Settings and Library are separate switches: a Mac can share its settings but keep its captures, or the other way round. Settings another Mac shares while Settings is off here are taken up when you switch it back on; otherwise this Mac's settings go to the others. The library syncs through iCloud or a sync folder, chosen in Settings › Library on each Mac."),
+            .text("Settings and Library are separate switches: a Mac can share its settings but keep its captures, or the other way round. Settings another Mac shares while Settings is off here are taken up when you switch it back on; otherwise this Mac's settings go to the others. The library syncs through iCloud or a sync folder, chosen in Settings › General on each Mac."),
         ]),
 
         HelpTopic(id: "updates", title: "Updates", symbol: "arrow.down.circle", blocks: [
@@ -448,7 +449,7 @@ struct HelpPage: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: Radius.control))
         case .keys(let rows):
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 8) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
@@ -458,7 +459,7 @@ struct HelpPage: View {
                         Text(keys)
                             .font(.body.monospaced().weight(.medium))
                             .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 5))
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: Radius.sm))
                             // The same key column width in every table on every page.
                             .frame(width: 210, alignment: .leading)
                         Text(what).fixedSize(horizontal: false, vertical: true)

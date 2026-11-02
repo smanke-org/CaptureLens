@@ -585,35 +585,30 @@ private struct RecordingBar: View {
                     option("Show a ring where you click", on: "cursorarrow.click.2", off: "cursorarrow", $prefs.showClicks)
                     Divider()
                     option("Show shortcuts you press", on: "command.square.fill", off: "command.square", $prefs.showKeys)
-                }
-                .padding(.horizontal, 12)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.05)))
-                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
-                    GridRow {
-                        Text("Frame rate")
+                    Divider()
+                    // The pickers are rows of the same box, laid out like the switches above.
+                    pickerRow("Frame rate", symbol: "film") {
                         Picker("Frame rate", selection: $prefs.recordFrameRate) {
                             ForEach(Preferences.frameRates, id: \.rate) { Text("\($0.rate) frames a second").tag($0.rate) }
                         }
-                        .labelsHidden()
-                        .fixedSize()
                     }
-                    GridRow {
-                        Text("Countdown")
+                    Divider()
+                    pickerRow("Countdown", symbol: "timer") {
                         Picker("Countdown", selection: $prefs.recordCountdown) {
                             ForEach(Preferences.countdowns, id: \.self) { Text($0 == 0 ? "None" : "\($0) seconds").tag($0) }
                         }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .fixedSize()
                         .disabled((recorder.preset?.delay ?? 0) > 0)
                         .help((recorder.preset?.delay ?? 0) > 0 ? "This preset waits its own delay first" : "Seconds to get ready before recording starts")
                     }
                 }
-                .padding(.horizontal, 4)
+                .padding(.horizontal, Space.md)
+                .background(RoundedRectangle(cornerRadius: Radius.card).fill(Color.primary.opacity(0.05)))
                 HStack {
                     Button("Cancel") { recorder.cancel() }.keyboardShortcut(.cancelAction)
                     Spacer()
+                    // What the panel is for: red, as recording is everywhere on the Mac.
                     Button { recorder.record() } label: { Label("Record", systemImage: "record.circle.fill") }
+                        .buttonStyle(RecordButtonStyle())
                         .keyboardShortcut(.defaultAction)
                         .disabled(recorder.phase != .ready)
                 }
@@ -677,6 +672,22 @@ private struct RecordingBar: View {
         .onTapGesture { value.wrappedValue.toggle() }
     }
 
+    /// A choice in the same box as the switches: its symbol, what it is, and a menu at the right.
+    private func pickerRow(_ title: String, symbol: String, @ViewBuilder _ picker: () -> some View) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
+                .frame(width: 24)
+            Text(title)
+            Spacer(minLength: Space.sm)
+            picker()
+                .labelsHidden()
+                .fixedSize()
+        }
+        .padding(.vertical, Space.xs)
+    }
+
     /// Which microphone or camera, under its switch.
     private func deviceRow(_ picker: DevicePicker) -> some View {
         HStack {
@@ -687,6 +698,23 @@ private struct RecordingBar: View {
         }
         .padding(.leading, 34)
         .padding(.bottom, 8)
+    }
+}
+
+/// The panel's Record button: red whether or not SnagAnything is the active app. The panel
+/// often opens while another app is in front, and a prominent system button turns gray then,
+/// looking just like Cancel.
+struct RecordButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.white)
+            .padding(.horizontal, Space.md)
+            .padding(.vertical, Space.xs)
+            .background(RoundedRectangle(cornerRadius: Radius.sm).fill(Color.red.opacity(configuration.isPressed ? 0.75 : 1)))
+            .opacity(enabled ? 1 : 0.5)
+            .contentShape(Rectangle())
     }
 }
 
@@ -704,7 +732,7 @@ struct ClearSwitch: ToggleStyle {
                         .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
                         .padding(2)
                 }
-                .animation(.easeInOut(duration: 0.15), value: configuration.isOn)
+                .animation(Motion.fold, value: configuration.isOn)
         }
         .buttonStyle(.plain)
         .accessibilityValue(configuration.isOn ? "On" : "Off")

@@ -109,6 +109,24 @@ final class LibraryState {
     /// The picture is out of sight: hidden, or folded to a slim bar.
     var pictureHidden: Bool { !showInspector || foldedSide == .editor }
 
+    /// Marking up one picture beside the captures (Markup on). The picture then gets the
+    /// room, with the captures in a filmstrip under it; with Markup off, the grid comes back.
+    var markingUp: Bool {
+        guard !pictureHidden, !EditorWindow.shared.isOpen, selection.count == 1, let id = selection.first,
+              let item = LibraryStore.shared.entry(id), item.kind != .video else { return false }
+        return !AnnotationEditor.shared.showResult
+    }
+
+    /// The picture fills the width: while marking up, or with the captures folded away (they
+    /// fold to a filmstrip under it).
+    var picturesFirst: Bool { !pictureHidden && (markingUp || foldedSide == .captures) }
+
+    /// The filmstrip under the picture. Folding the captures while marking up hides it too.
+    var showsFilmstrip: Bool { picturesFirst && !(markingUp && foldedSide == .captures) }
+
+    /// The grid is on screen, so the thumbnail commands apply.
+    var gridVisible: Bool { !picturesFirst }
+
     /// View › Hide Picture and Show Picture.
     func setPictureHidden(_ hidden: Bool) {
         if hidden {
@@ -149,7 +167,7 @@ final class LibraryState {
     }
 
     func fold(_ side: Side?) {
-        withAnimation(.easeInOut(duration: 0.2)) { foldedSide = side }
+        withAnimation(Motion.ui) { foldedSide = side }
     }
     /// A capture double-clicked: shown beside the captures, or in a window of its own, as
     /// Settings › Library says.
@@ -286,9 +304,13 @@ struct LibraryView: View {
     /// beside it. A share rather than points, so it carries to a Mac with another screen.
     @AppStorage(LibraryLayout.detailKey, store: AppDefaults.store) private var detailShare = LibraryLayout.defaultDetail
 
+    /// The narrowest the captures or the picture go: 360 points, or half the room in a small
+    /// window, so the two always fit side by side.
+    static func paneMinimum(_ room: CGFloat) -> Double { min(360, max(0, Double(room) / 2 - 1)) }
+
     /// Room for the selected capture, leaving the captures at least as much as it needs.
     static func detailRange(_ room: CGFloat) -> ClosedRange<Double> {
-        let minimum = 360.0
+        let minimum = paneMinimum(room)
         return minimum...max(minimum, Double(room) - minimum - 1)
     }
 
@@ -308,36 +330,40 @@ struct LibraryView: View {
             } detail: {
                 // The room the window gives, not what the columns ask for, sets how wide the line can go.
                 GeometryReader { room in
+                let first = state.picturesFirst
+                VStack(spacing: 0) {
                 HStack(spacing: 0) {
-                    // Either side can fold to a slim bar, so the other fills the window.
-                    if state.showInspector && state.foldedSide == .captures {
-                        CollapsedSideBar(title: "Captures", symbol: "square.grid.2x2", edge: .leading) { state.fold(nil) }
-                    } else {
+                    // Each part is its own child of the stack, and the picture is always the
+                    // same one: moving it elsewhere in the layout would make a new picture view,
+                    // which loads its capture into the markup editor afresh.
+                    if !first {
                         // The title and count are the window's; the thumbnail size is in View.
                         VStack(spacing: 0) {
                             FilterBar(state: state)
                             Divider()
                             CaptureGrid(state: state)
                         }
-                        .frame(minWidth: 360)
+                        .frame(minWidth: Self.paneMinimum(room.size.width))
                     }
-                    if state.showInspector {
-                        if state.foldedSide == .editor {
-                            Divider()
-                            CollapsedSideBar(title: "Picture", symbol: "photo", edge: .trailing) { state.fold(nil) }
-                        } else if state.foldedSide == .captures {
-                            Divider()
-                            CaptureDetail(state: state)
-                                .frame(minWidth: 360)
-                        } else {
-                            // Drag the line between them to share the room differently.
-                            let width = detailWidth(room.size.width)
-                            PaneDivider(axis: .columns, length: width, range: Self.detailRange(room.size.width),
-                                        reset: { detailShare = LibraryLayout.defaultDetail })
-                            CaptureDetail(state: state)
-                                .frame(width: width.wrappedValue)
-                        }
+                    if state.showInspector && state.foldedSide == .editor {
+                        Divider()
+                        CollapsedSideBar(title: "Picture", symbol: "photo", edge: .trailing) { state.fold(nil) }
                     }
+                    if !first && !state.pictureHidden {
+                        // Drag the line between them to share the room differently.
+                        PaneDivider(axis: .columns, length: detailWidth(room.size.width), range: Self.detailRange(room.size.width),
+                                    reset: { detailShare = LibraryLayout.defaultDetail })
+                    }
+                    if !state.pictureHidden {
+                        CaptureDetail(state: state)
+                            .frame(width: first ? nil : detailWidth(room.size.width).wrappedValue)
+                            .frame(maxWidth: first ? .infinity : nil)
+                    }
+                }
+                if state.showsFilmstrip {
+                    Divider()
+                    Filmstrip(state: state)
+                }
                 }
                 .frame(width: room.size.width, height: room.size.height)
                 }
@@ -588,6 +614,22 @@ enum LibraryCommands {
         return key === LibraryWindow.shared.window || EditorWindow.shared.isKey
     }
 
+    /// ⌘+ and ⌘− zoom the picture (rather than size the thumbnails) when it's what's being
+    /// worked on: in its own window, filling the library, or the last thing clicked.
+    static var zoomsPicture: Bool {
+        guard let item = single, item.kind != .video else { return false }
+        if EditorWindow.shared.isKey { return true }
+        let state = LibraryWindow.shared.state
+        guard !state.pictureHidden, !EditorWindow.shared.isOpen else { return false }
+        if !state.gridVisible { return true }
+        var view = NSApp.keyWindow?.firstResponder as? NSView
+        while let current = view {
+            if current is ZoomingScrollView || (current as? NSScrollView)?.documentView is CheckerImageView { return true }
+            view = current.superview
+        }
+        return false
+    }
+
     /// The one selected capture, if just one is.
     static var single: CaptureItem? {
         let selected = LibraryWindow.shared.state.selectedItems
@@ -631,7 +673,8 @@ private struct CaptureMenuButton: View {
             .disabled(CaptureEngine.shared.lastRegion == nil)
             Button("Record Steps…") { StepRecorder.shared.start() }
         } label: {
-            Label("Capture", systemImage: first.map { $0.delay > 0 ? "timer" : $0.mode.symbol } ?? "viewfinder")
+            // The same symbol as the capture bar's Capture button and the menu bar icon.
+            Label("Capture", systemImage: "camera.viewfinder")
                 .labelStyle(.titleAndIcon)
         } primaryAction: {
             if let first { CaptureActions.run(first) }
@@ -770,7 +813,7 @@ private struct FoldingHeader: View {
 
     var body: some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.15)) { open.toggle() }
+            withAnimation(Motion.fold) { open.toggle() }
         } label: {
             HStack(spacing: 4) {
                 Text(title)
@@ -815,6 +858,23 @@ struct LibrarySidebar: View {
     static let railWidth: CGFloat = 72
     private static let compactBelow: CGFloat = 130
 
+    /// Showing just its icons now.
+    @MainActor static var isCompact: Bool { LibraryLayout.sidebarWidth > 0 && LibraryLayout.sidebarWidth < compactBelow }
+    /// The width to go back to from the icons.
+    @MainActor private static var fullWidth: CGFloat = 210
+
+    /// View › Show Sidebar as Icons, and back (⌃⌘S). The sidebar never hides altogether:
+    /// with nothing left on screen, there'd be nothing to bring it back with.
+    @MainActor static func toggleCompact(in window: NSWindow?) {
+        guard let split = SidebarStaysOpen.Finder.splitView(in: window?.contentView) else { return }
+        if isCompact {
+            split.setPosition(fullWidth, ofDividerAt: 0)
+        } else {
+            fullWidth = max(CGFloat(LibraryLayout.sidebarWidth), compactBelow + 40)
+            split.setPosition(railWidth, ofDividerAt: 0)
+        }
+    }
+
     var body: some View {
         Group {
             if compact { rail } else { list }
@@ -843,7 +903,7 @@ struct LibrarySidebar: View {
                     // Right-click one to rename or remove it.
                     if tagsOpen {
                         ForEach(showAllTags ? tags : Self.mostUsed(tags), id: \.tag) { entry in
-                            row(entry.tag, "tag", entry.count)
+                            row(entry.tag, "tag", entry.count, quiet: true)
                                 .tag(LibraryState.Section.tag(entry.tag))
                                 .contextMenu {
                                     Button("Rename Tag…") { renamingTag = entry.tag; newTagName = entry.tag }
@@ -854,7 +914,7 @@ struct LibrarySidebar: View {
                         }
                         if tags.count > Self.tagsShown {
                             Button {
-                                withAnimation(.easeInOut(duration: 0.15)) { showAllTags.toggle() }
+                                withAnimation(Motion.fold) { showAllTags.toggle() }
                             } label: {
                                 Label(showAllTags ? "Show Fewer" : "\(tags.count - Self.tagsShown) More", systemImage: "ellipsis")
                                     .foregroundStyle(.secondary)
@@ -886,7 +946,7 @@ struct LibrarySidebar: View {
             if !sites.isEmpty {
                 Section {
                     if sitesOpen { ForEach(sites.prefix(30), id: \.site) { site in
-                        row(site.site, "globe", site.count).tag(LibraryState.Section.site(site.site))
+                        row(site.site, "globe", site.count, quiet: true).tag(LibraryState.Section.site(site.site))
                     } }
                 } header: {
                     FoldingHeader(title: "Websites", count: sites.count, open: $sitesOpen)
@@ -970,7 +1030,7 @@ struct LibrarySidebar: View {
                 .font(.system(size: 16))
                 .frame(width: 40, height: 32)
                 .foregroundStyle(picked ? Color.white : Color.accentColor)
-                .background(picked ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+                .background(picked ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: Radius.control))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -986,7 +1046,7 @@ struct LibrarySidebar: View {
                 .font(.system(size: 16))
                 .frame(width: 40, height: 32)
                 .foregroundStyle(picked ? Color.white : Color.accentColor)
-                .background(picked ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+                .background(picked ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: Radius.control))
                 .contentShape(Rectangle())
         }
         .menuStyle(.button)
@@ -997,15 +1057,17 @@ struct LibrarySidebar: View {
         .accessibilityLabel(title)
     }
 
-    private func row(_ title: String, _ symbol: String, _ count: Int?) -> some View {
+    /// A place: its symbol, name and count. Tags, apps and websites have quieter symbols than
+    /// the library's own places, and an empty place shows no count.
+    private func row(_ title: String, _ symbol: String, _ count: Int?, quiet: Bool = false) -> some View {
         Label {
             HStack {
                 Text(title).lineLimit(1)
                 Spacer()
-                if let count { Text("\(count)").foregroundStyle(.secondary).monospacedDigit() }
+                if let count, count > 0 { Text("\(count)").foregroundStyle(.secondary).monospacedDigit() }
             }
         } icon: {
-            Image(systemName: symbol)
+            if quiet { Image(systemName: symbol).foregroundStyle(.secondary) } else { Image(systemName: symbol) }
         }
     }
 }
@@ -1033,84 +1095,102 @@ struct FilterBar: View {
     @State private var customEnd = Date()
 
     var body: some View {
-        // One line: in a narrow window the pills scroll sideways under a still sort menu.
-        HStack(spacing: 8) {
-        ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 6) {
-                Chip(title: state.filter.dateRange == .any ? "Date" : state.filter.dateRange.title,
-                     symbol: "calendar", active: state.filter.dateRange != .any,
-                     clear: { state.filter.dateRange = .any }) {
-                    LibraryFilter.DateRange.presets.map { range in
-                        .action(range.title, checked: state.filter.dateRange == range) { state.filter.dateRange = range }
-                    } + [.separator, .action("Choose Dates…") { customDates = true }]
-                }
-                .popover(isPresented: $customDates) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        DatePicker("From", selection: $customStart, displayedComponents: .date)
-                        DatePicker("To", selection: $customEnd, displayedComponents: .date)
-                        HStack {
-                            Spacer()
-                            Button("Show") {
-                                state.filter.dateRange = .custom(start: customStart, end: customEnd)
-                                customDates = false
-                            }
-                            .keyboardShortcut(.defaultAction)
-                        }
-                    }
-                    .padding()
-                    .frame(width: 260)
-                }
-
-                Chip(title: chipTitle(state.filter.kinds.map(\.title), fallback: "Type"), symbol: "rectangle.dashed",
-                     active: !state.filter.kinds.isEmpty, clear: { state.filter.kinds = [] }) {
-                    CaptureItem.Kind.allCases.map { kind in toggle(\.kinds, kind, title: kind.title) }
-                }
-
-                // The lists are made when a menu opens, from counts the library keeps.
-                Chip(title: chipTitle(Array(state.filter.tags), fallback: "Tags"), symbol: "tag",
-                     active: !state.filter.tags.isEmpty, clear: { state.filter.tags = [] }) {
-                    let tags = store.facets.tags
-                    return tags.isEmpty ? [.note("No tags yet")]
-                        : tags.map { toggle(\.tags, $0.tag, title: "\($0.tag) (\($0.count))") }
-                }
-
-                Chip(title: chipTitle(store.facets.apps.filter { state.filter.apps.contains($0.key) }.map(\.name), fallback: "App"),
-                     symbol: "app", active: !state.filter.apps.isEmpty, clear: { state.filter.apps = [] }) {
-                    let apps = store.facets.apps
-                    return apps.isEmpty ? [.note("No apps yet")]
-                        : apps.map { toggle(\.apps, $0.key, title: "\($0.name) (\($0.count))") }
-                }
-
-                if !store.facets.websites.isEmpty {
-                    Chip(title: chipTitle(Array(state.filter.websites), fallback: "Website"), symbol: "globe",
-                         active: !state.filter.websites.isEmpty, clear: { state.filter.websites = [] }) {
-                        store.facets.websites.map { toggle(\.websites, $0.site, title: "\($0.site) (\($0.count))") }
-                    }
-                }
-
-                // Favorites is a place in the sidebar, so it isn't a filter here too.
-                ToggleChip(title: "Has Notes", symbol: "note.text", isOn: $state.filter.withNotesOnly)
-
-                if !state.filter.isEmpty {
-                    Button("Clear All") { state.filter = LibraryFilter() }
-                        .buttonStyle(.link)
-                        .padding(.leading, 4)
-                        .padding(.vertical, 4)
-                }
+        // Every filter as its own pill when they fit; in a narrower pane, one Filters pill
+        // with each of them inside. Filters in use show as tokens in the search field either way.
+        HStack(spacing: Space.sm) {
+            ViewThatFits(in: .horizontal) {
+                pills
+                filtersMenu
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .popover(isPresented: $customDates) { datePopover }
+            SortMenu(state: state)
         }
-        .padding(.horizontal, 12)
-        }
-        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-        // Pills running under the sort menu fade out rather than stop at a hard edge.
-        .mask {
-            HStack(spacing: 0) {
-                Color.black
-                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: 20)
+        .padding(.horizontal, Space.md)
+        .padding(.vertical, Space.sm)
+    }
+
+    private var pills: some View {
+        HStack(spacing: Space.sm) {
+            Chip(title: state.filter.dateRange == .any ? "Date" : state.filter.dateRange.title,
+                 symbol: "calendar", active: state.filter.dateRange != .any,
+                 clear: { state.filter.dateRange = .any }) { dateItems }
+            Chip(title: chipTitle(state.filter.kinds.map(\.title), fallback: "Type"), symbol: "rectangle.dashed",
+                 active: !state.filter.kinds.isEmpty, clear: { state.filter.kinds = [] }) { typeItems }
+            // The lists are made when a menu opens, from counts the library keeps.
+            Chip(title: chipTitle(Array(state.filter.tags), fallback: "Tags"), symbol: "tag",
+                 active: !state.filter.tags.isEmpty, clear: { state.filter.tags = [] }) { tagItems }
+            Chip(title: chipTitle(store.facets.apps.filter { state.filter.apps.contains($0.key) }.map(\.name), fallback: "App"),
+                 symbol: "app", active: !state.filter.apps.isEmpty, clear: { state.filter.apps = [] }) { appItems }
+            if !store.facets.websites.isEmpty {
+                Chip(title: chipTitle(Array(state.filter.websites), fallback: "Website"), symbol: "globe",
+                     active: !state.filter.websites.isEmpty, clear: { state.filter.websites = [] }) { siteItems }
+            }
+            // Favorites is a place in the sidebar, so it isn't a filter here too.
+            ToggleChip(title: "Has Notes", symbol: "note.text", isOn: $state.filter.withNotesOnly)
+            if !state.filter.isEmpty {
+                Button("Clear All") { state.filter = LibraryFilter() }
+                    .buttonStyle(.link)
+                    .padding(.leading, Space.xs)
             }
         }
-            SortMenu(state: state).padding(.trailing, 12)
+        .fixedSize()
+    }
+
+    /// All the filters behind one pill, when the pills don't fit.
+    private var filtersMenu: some View {
+        let inUse = FilterToken.tokens(for: state.filter, apps: store.facets.apps).count
+        return Chip(title: inUse == 0 ? "Filters" : "Filters (\(inUse))", symbol: "line.3.horizontal.decrease",
+                    active: inUse > 0, clear: { state.filter = LibraryFilter() }) {
+            var items: [ChipMenu.Item] = [
+                .submenu("Date", dateItems), .submenu("Type", typeItems), .submenu("Tags", tagItems), .submenu("App", appItems),
+            ]
+            if !store.facets.websites.isEmpty { items.append(.submenu("Website", siteItems)) }
+            items.append(.action("Has Notes", checked: state.filter.withNotesOnly) { state.filter.withNotesOnly.toggle() })
+            return items
         }
-        .padding(.vertical, 8)
+        .fixedSize()
+    }
+
+    private var dateItems: [ChipMenu.Item] {
+        LibraryFilter.DateRange.presets.map { range in
+            .action(range.title, checked: state.filter.dateRange == range) { state.filter.dateRange = range }
+        } + [.separator, .action("Choose Dates…") { customDates = true }]
+    }
+
+    private var typeItems: [ChipMenu.Item] {
+        CaptureItem.Kind.allCases.map { kind in toggle(\.kinds, kind, title: kind.title) }
+    }
+
+    private var tagItems: [ChipMenu.Item] {
+        let tags = store.facets.tags
+        return tags.isEmpty ? [.note("No tags yet")] : tags.map { toggle(\.tags, $0.tag, title: "\($0.tag) (\($0.count))") }
+    }
+
+    private var appItems: [ChipMenu.Item] {
+        let apps = store.facets.apps
+        return apps.isEmpty ? [.note("No apps yet")] : apps.map { toggle(\.apps, $0.key, title: "\($0.name) (\($0.count))") }
+    }
+
+    private var siteItems: [ChipMenu.Item] {
+        store.facets.websites.map { toggle(\.websites, $0.site, title: "\($0.site) (\($0.count))") }
+    }
+
+    private var datePopover: some View {
+        VStack(alignment: .leading, spacing: Space.sm) {
+            DatePicker("From", selection: $customStart, displayedComponents: .date)
+            DatePicker("To", selection: $customEnd, displayedComponents: .date)
+            HStack {
+                Spacer()
+                Button("Show") {
+                    state.filter.dateRange = .custom(start: customStart, end: customEnd)
+                    customDates = false
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(Space.lg)
+        .frame(width: 260)
     }
 
     private func chipTitle(_ values: [String], fallback: String) -> String {
@@ -1199,6 +1279,7 @@ enum ChipMenu {
         case action(String, checked: Bool = false, () -> Void)
         case note(String)
         case separator
+        case submenu(String, [Item])
     }
 
     /// The chip's place in the window, for opening the menu under it.
@@ -1221,6 +1302,15 @@ enum ChipMenu {
     }
 
     static func show(_ items: [Item], below view: NSView?) {
+        let menu = build(items)
+        if let view {
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.isFlipped ? view.bounds.maxY + 4 : -4), in: view)
+        } else {
+            menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        }
+    }
+
+    private static func build(_ items: [Item]) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
         for item in items {
@@ -1238,13 +1328,13 @@ enum ChipMenu {
                 entry.representedObject = handler // the target is weak; this keeps it
                 entry.state = checked ? .on : .off
                 menu.addItem(entry)
+            case .submenu(let title, let entries):
+                let entry = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+                entry.submenu = build(entries)
+                menu.addItem(entry)
             }
         }
-        if let view {
-            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.isFlipped ? view.bounds.maxY + 4 : -4), in: view)
-        } else {
-            menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
-        }
+        return menu
     }
 }
 
@@ -1318,7 +1408,7 @@ struct CaptureGrid: View {
                                     .id(item.id)
                                     .onTapGesture(count: 2) { state.open(item.id) }
                                     .simultaneousGesture(TapGesture().onEnded { state.click(item.id, in: list); focused = true })
-                                    .onDrag { dragProvider(item) }
+                                    .onDrag { CaptureGrid.dragProvider(item) }
                                     .contextMenu { CaptureMenu(state: state, item: item) }
                             }
                         }
@@ -1361,10 +1451,114 @@ struct CaptureGrid: View {
         }
     }
 
-    private func dragProvider(_ item: CaptureItem) -> NSItemProvider {
+    /// A capture dragged out (to Finder, Mail, anywhere): a file of it as it looks.
+    static func dragProvider(_ item: CaptureItem) -> NSItemProvider {
         guard let url = Flattener.temporaryFile(item) else { return NSItemProvider() }
         ActivityStore.shared.record(ActivityKey.drags)
         return NSItemProvider(contentsOf: url) ?? NSItemProvider()
+    }
+}
+
+/// Under the picture while it's marked up: the same captures as the grid (the same place,
+/// search and filters) in one row, so the picture gets the window. Click one to mark it up,
+/// or use ← and →.
+struct Filmstrip: View {
+    @Bindable var state: LibraryState
+    @State private var store = LibraryStore.shared
+    @FocusState private var focused: Bool
+
+    /// A 64-pt picture with its selection ring, and 16 pt above and below.
+    static let height: CGFloat = 96
+
+    var body: some View {
+        let list = state.results
+        Group {
+            if list.isEmpty {
+                Text(store.items.isEmpty ? "No captures yet" : "Nothing matches the search and filters")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal) {
+                        LazyHStack(spacing: Space.md) {
+                            ForEach(list) { item in
+                                FilmstripCell(item: item, selected: state.selection.contains(item.id))
+                                    .id(item.id)
+                                    .onTapGesture(count: 2) { state.open(item.id) }
+                                    .simultaneousGesture(TapGesture().onEnded { state.click(item.id, in: list); focused = true })
+                                    .onDrag { CaptureGrid.dragProvider(item) }
+                                    .contextMenu { CaptureMenu(state: state, item: item) }
+                            }
+                        }
+                        .padding(.horizontal, Space.lg)
+                        .frame(maxHeight: .infinity)
+                    }
+                    .scrollIndicators(.automatic)
+                    // It opens on the capture being marked up.
+                    .onAppear { if let id = state.anchor ?? state.selection.first { proxy.scrollTo(id, anchor: .center) } }
+                    .onChange(of: state.scrollTarget) { _, id in
+                        guard let id else { return }
+                        withAnimation(Motion.ui) { proxy.scrollTo(id, anchor: .center) }
+                        state.scrollTarget = nil
+                    }
+                }
+            }
+        }
+        .frame(height: Self.height)
+        .frame(maxWidth: .infinity)
+        .background(.bar)
+        .focusable()
+        .focused($focused)
+        .focusEffectDisabled()
+        .onMoveCommand { direction in
+            guard direction == .left || direction == .right else { return }
+            state.move(direction, columns: 1, in: list)
+        }
+        .onDeleteCommand { if !state.selection.isEmpty { state.confirmDelete = state.selection } }
+        .onCopyCommand { LibraryCommands.copyProviders(state.selectedItems) }
+    }
+}
+
+/// A capture in the filmstrip: its picture, ringed in the accent color when selected.
+private struct FilmstripCell: View {
+    let item: CaptureItem
+    let selected: Bool
+    @State private var store = LibraryStore.shared
+    @Environment(\.appearsActive) private var active
+
+    private static let pictureHeight: CGFloat = 64
+
+    var body: some View {
+        let image = store.thumbnail(item)
+        let aspect = image.map { $0.size.width / max($0.size.height, 1) } ?? 1.5
+        // Very wide or tall pictures keep a sensible shape.
+        let width = (Self.pictureHeight * min(max(aspect, 0.6), 3)).rounded()
+        ZStack {
+            if let image {
+                Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+            } else {
+                Image(systemName: "photo").foregroundStyle(.tertiary)
+            }
+        }
+        .frame(width: width, height: Self.pictureHeight)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
+        .overlay {
+            if item.kind == .video {
+                Image(systemName: "play.circle.fill").font(.title3).foregroundStyle(.white, .black.opacity(0.45))
+            }
+        }
+        .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+        .padding(Space.xs)
+        .overlay {
+            if selected {
+                RoundedRectangle(cornerRadius: Radius.control)
+                    .strokeBorder(active ? Color.accentColor : Color.secondary, lineWidth: 3)
+            }
+        }
+        .contentShape(Rectangle())
+        .help(item.name)
+        .accessibilityLabel(item.name)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -1377,17 +1571,19 @@ struct CaptureCell: View {
     @Environment(\.appearsActive) private var active
 
     var body: some View {
-        VStack(spacing: 6) {
-            ZStack {
+        VStack(spacing: Space.sm) {
+            // Pictures stand on the cell's bottom edge, so every name starts the same distance
+            // under its picture.
+            ZStack(alignment: .bottom) {
                 // Selected, a gray backing like Finder's, so nothing covers the picture itself.
-                RoundedRectangle(cornerRadius: 8).fill(selected ? Color.secondary.opacity(0.22) : .clear)
+                RoundedRectangle(cornerRadius: Radius.control).fill(selected ? Color.secondary.opacity(0.22) : .clear)
                 if let image = store.thumbnail(item) {
                     Image(nsImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
                         .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
-                        .padding(8)
+                        .padding(Space.sm)
                 } else {
                     Image(systemName: "photo").font(.largeTitle).foregroundStyle(.tertiary)
                 }
@@ -1430,17 +1626,7 @@ struct CaptureCell: View {
                 }
                 .padding(6)
             }
-            // A text capture's strip has the bottom, so its tags go to the top.
-            .overlay(alignment: item.kind == .text ? .topLeading : .bottomLeading) {
-                if !item.tags.isEmpty {
-                    Text(item.tags.prefix(2).joined(separator: " · ") + (item.tags.count > 2 ? " +\(item.tags.count - 2)" : ""))
-                        .font(.caption2.weight(.medium))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(.thinMaterial, in: Capsule())
-                        .padding(6)
-                }
-            }
-            VStack(spacing: 2) {
+            VStack(spacing: Space.xxs) {
                 HStack(spacing: 4) {
                     if analyzing { ProgressView().controlSize(.mini) }
                     Text(item.name).lineLimit(1).truncationMode(.middle)
@@ -1453,18 +1639,36 @@ struct CaptureCell: View {
                 .foregroundStyle(selected && active ? Color(nsColor: .alternateSelectedControlTextColor) : .primary)
                 .background {
                     if selected {
-                        RoundedRectangle(cornerRadius: 4)
+                        RoundedRectangle(cornerRadius: Radius.xs)
                             .fill(active ? Color.accentColor : Color.secondary.opacity(0.3))
                     }
                 }
                 .frame(maxWidth: size)
                 Text(item.created.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption).foregroundStyle(.secondary)
+                // Tags under the date, off the picture; a line kept even without tags, so
+                // the rows stay even.
+                Label(item.tags.isEmpty ? " " : item.tags.joined(separator: ", "), systemImage: "tag")
+                    .labelStyle(TagLineStyle(showsIcon: !item.tags.isEmpty))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.tail)
+                    .frame(maxWidth: size)
             }
             .frame(width: size)
         }
         .contentShape(Rectangle())
         .help(item.name)
+    }
+}
+
+/// A thumbnail's tag line: a small tag symbol before the tags, none without them.
+private struct TagLineStyle: LabelStyle {
+    let showsIcon: Bool
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: Space.xs) {
+            if showsIcon { configuration.icon.imageScale(.small) }
+            configuration.title
+        }
     }
 }
 

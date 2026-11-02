@@ -85,17 +85,13 @@ final class SettingsTabs: NSTabViewController {
     private func add(_ title: String, _ symbol: String, _ view: some View) {
         let pane = VStack(spacing: 0) {
             view
-            // The version in the middle, the round Help button in the corner, as macOS does.
-            ZStack {
-                Text("\(AppInfo.name) \(AppInfo.displayVersion)")
-                    .font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    Spacer()
-                    HelpButton(topic: Help.topic(forSettingsTab: title)).fixedSize()
-                }
+            // The round Help button in the corner, as macOS does. (The version is in General.)
+            HStack {
+                Spacer()
+                HelpButton(topic: Help.topic(forSettingsTab: title)).fixedSize()
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 12)
+            .padding(.horizontal, Space.xl)
+            .padding(.bottom, Space.md)
         }
         // Each pane gets its natural height, capped to the screen, with the Form scrolling
         // inside. Letting SwiftUI size the window to the Form's full height crashed once
@@ -292,6 +288,23 @@ struct CaptureSettings: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
+                Picker("Markup tools", selection: $prefs.toolStyle) {
+                    ForEach(ToolStyle.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                if prefs.toolStyle == .dial {
+                    Picker("Open the dial", selection: $prefs.dialTrigger) {
+                        ForEach(DialTrigger.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                }
+            } header: {
+                Text("Markup")
+            } footer: {
+                Text(prefs.toolStyle == .toolbar
+                     ? "The tools sit in a strip beside the picture. Drag its grip to put it on the left, right or bottom."
+                     : "The tools open in a dial around the pointer, the ones you use most closest to the middle, with colors and line widths underneath. Click a tool, or with ⌘⌥ held, let go over it. Drag the dial to move it; its pin keeps it open after you pick a tool. Esc closes it.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
                 Toggle("Name captures from what's in them", isOn: $prefs.autoName)
                 if prefs.autoName, let reason = AutoNamer.unavailableReason {
                     Text(reason).font(.caption).foregroundStyle(.orange)
@@ -354,7 +367,10 @@ struct PresetSettings: View {
                         Image(systemName: preset.mode.symbol).frame(width: 20).foregroundStyle(.secondary)
                         VStack(alignment: .leading) {
                             Text(preset.name)
-                            Text(preset.summary).font(.caption).foregroundStyle(.secondary)
+                            // "Window" under "Window" says nothing new.
+                            if preset.summary.localizedCaseInsensitiveCompare(preset.name) != .orderedSame {
+                                Text(preset.summary).font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                         Spacer()
                         ShortcutRecorder(hotKey: Binding(get: { prefs.preset(preset.id)?.hotKey }, set: { key in
@@ -498,53 +514,10 @@ struct LibrarySettings: View {
     @State private var prefs = Preferences.shared
     @State private var store = LibraryStore.shared
     @State private var lock = LibraryLock.shared
-    @State private var settingsSync = SettingsSync.shared
-    @State private var librarySync = LibrarySync.shared
     @State private var confirmDecrypt = false
-    @State private var confirmRemoveICloud = false
-
-    /// Off, iCloud or a folder, as one choice.
-    private var libraryService: Binding<LibraryBackend?> {
-        Binding(get: { prefs.librarySync ? prefs.libraryBackend : nil }, set: { choice in
-            if let choice {
-                prefs.libraryBackend = choice
-                prefs.librarySync = true
-            } else {
-                prefs.librarySync = false
-            }
-        })
-    }
-
-    private var syncFooter: String {
-        switch (prefs.librarySync, prefs.libraryBackend) {
-        case (false, _):
-            "Captures stay on this Mac. Settings still sync when that's on in General. Each Mac makes this choice for itself."
-        case (true, .iCloud):
-            "Captures, with their names, tags, notes and pictures, go to every Mac where you use SnagAnything with sync on, end-to-end encrypted with your sync passphrase. Deleting a capture removes it everywhere. Captures count against your iCloud storage."
-        case (true, .folder):
-            "Captures go into a folder that Dropbox, OneDrive, Google Drive or any other sync app keeps on all your Macs, each file encrypted with your sync passphrase, so the service can't see them. Each Mac picks where that folder is; settings still sync through iCloud. Each Mac makes this choice for itself, so choose the same on every Mac that shares the library."
-        }
-    }
 
     var body: some View {
         Form {
-            Section {
-                Picker("Markup tools", selection: $prefs.toolStyle) {
-                    ForEach(ToolStyle.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-                if prefs.toolStyle == .dial {
-                    Picker("Open the dial", selection: $prefs.dialTrigger) {
-                        ForEach(DialTrigger.allCases, id: \.self) { Text($0.title).tag($0) }
-                    }
-                }
-            } header: {
-                Text("Markup")
-            } footer: {
-                Text(prefs.toolStyle == .toolbar
-                     ? "The tools float over the picture. Drag the toolbar's grip to put it on the left, right or bottom."
-                     : "The tools open in a dial around the pointer, the ones you use most closest to the middle, with colors and line widths. Click a tool, or with ⌘⌥ held, let go over it. Drag the dial to move it; its pin keeps it open after you pick a tool. Esc closes it.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
             Section {
                 LabeledContent("\(store.items.count) capture\(store.items.count == 1 ? "" : "s")") {
                     Button("Show Library") { LibraryWindow.shared.show() }
@@ -591,66 +564,6 @@ struct LibrarySettings: View {
                 Text("Encryption seals every capture, its picture, name, tags and notes with AES-256 using a key kept in this Mac's keychain, so the library file on its own reveals nothing. The lock also locks when your Mac sleeps or its screen locks. Both are settings of this Mac only.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section {
-                Picker("Sync the library through", selection: libraryService) {
-                    Text("Don't sync").tag(nil as LibraryBackend?)
-                    Divider()
-                    ForEach(LibraryBackend.allCases, id: \.self) { Text($0.title).tag($0 as LibraryBackend?) }
-                }
-                if prefs.librarySync {
-                    if !settingsSync.isEnabled {
-                        Text("Turn on “Sync with your other Macs” in General to start. The sync passphrase you choose there also encrypts the library, wherever it syncs.")
-                            .foregroundStyle(.secondary)
-                    } else if !settingsSync.isReady {
-                        Text("Waiting for your sync passphrase in General.").foregroundStyle(.secondary)
-                    } else if prefs.libraryBackend == .folder {
-                        FolderSyncRows()
-                    } else if let error = librarySync.lastError {
-                        Text(error).foregroundStyle(.red)
-                    } else {
-                        LabeledContent {
-                            Button("Sync Now") { librarySync.syncNow() }
-                        } label: {
-                            if librarySync.pendingUploads > 0 {
-                                Text("Uploading \(librarySync.pendingUploads) capture\(librarySync.pendingUploads == 1 ? "" : "s")…")
-                            } else if let date = librarySync.lastSynced {
-                                Text("Synced \(date.formatted(date: .omitted, time: .shortened))")
-                            } else {
-                                Text("Waiting for iCloud…")
-                            }
-                        }
-                    }
-                }
-                if prefs.librarySync {
-                    Toggle(isOn: $prefs.syncVideos) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Sync video files")
-                            Text(prefs.syncVideos
-                                 ? "Recordings play on every Mac. Long ones take a lot of room\(prefs.libraryBackend == .iCloud ? " in iCloud" : " in the sync folder")."
-                                 : "Recordings' names, tags, notes and first frames sync; the videos stay on the Mac that recorded them.")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    if let problem = librarySync.videoProblem, prefs.syncVideos, prefs.libraryBackend == .iCloud {
-                        Text(problem).font(.caption).foregroundStyle(.orange)
-                    }
-                }
-                if prefs.librarySync && prefs.libraryBackend == .folder && settingsSync.isReady && librarySync.iCloudCaptureCount > 0 {
-                    LabeledContent {
-                        Button("Remove from iCloud…") { confirmRemoveICloud = true }
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(librarySync.iCloudCaptureCount) capture\(librarySync.iCloudCaptureCount == 1 ? "" : "s") still in iCloud")
-                            Text("From before the library moved to a folder. They take up iCloud storage.")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            } header: {
-                Text("Sync")
-            } footer: {
-                Text(syncFooter).font(.caption).foregroundStyle(.secondary)
-            }
             #if !APPSTORE
             CollectSection()
             #endif
@@ -664,11 +577,6 @@ struct LibrarySettings: View {
             }
         }
         .formStyle(.grouped)
-        .confirmationDialog("Remove the library's copies from iCloud?", isPresented: $confirmRemoveICloud) {
-            Button("Remove from iCloud", role: .destructive) { librarySync.removeFromICloud() }
-        } message: {
-            Text("Your captures stay on your Macs and in the sync folder; only the copies in iCloud go. First update SnagAnything to this version on every Mac that syncs: an older version still syncing the library through iCloud would delete those captures too.")
-        }
         .confirmationDialog("Stop encrypting the library on this Mac?", isPresented: $confirmDecrypt) {
             Button("Stop Encrypting", role: .destructive) { store.setEncrypted(false) }
         } message: {
@@ -781,10 +689,14 @@ struct GeneralSettings: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    Toggle(isOn: $prefs.librarySync) {
+                    Picker(selection: LibrarySyncSection.service) {
+                        Text("Don't sync").tag(nil as LibraryBackend?)
+                        Divider()
+                        ForEach(LibraryBackend.allCases, id: \.self) { Text($0.title).tag($0 as LibraryBackend?) }
+                    } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Library")
-                            Text("Your captures, through \(prefs.libraryBackend.title); choose where in Settings › Library")
+                            Text("Your captures; each Mac chooses for itself")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -815,6 +727,9 @@ struct GeneralSettings: View {
             } footer: {
                 Text("Your settings and your library each follow you to every Mac signed in to the same iCloud account with sync turned on; switch either off on this Mac to keep it here. Everything is encrypted on this Mac with your sync passphrase before it leaves. Open at login, the library lock and encryption on this Mac stay on each Mac.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            if sync.isEnabled && prefs.librarySync {
+                LibrarySyncSection()
             }
             #if !APPSTORE
             Section {
@@ -870,6 +785,97 @@ struct GeneralSettings: View {
             }
         } message: {
             Text("Presets, shortcuts and options go back to how SnagAnything started. Your library, where SnagAnything appears and login stay as they are.")
+        }
+    }
+}
+
+/// Where the library syncs through, and how it's going: in General, under the switches
+/// for what syncs, so everything about syncing is in one place.
+struct LibrarySyncSection: View {
+    @State private var prefs = Preferences.shared
+    @State private var settingsSync = SettingsSync.shared
+    @State private var librarySync = LibrarySync.shared
+    @State private var confirmRemoveICloud = false
+
+    /// Off, iCloud or a folder, as one choice.
+    static var service: Binding<LibraryBackend?> {
+        let prefs = Preferences.shared
+        return Binding(get: { prefs.librarySync ? prefs.libraryBackend : nil }, set: { choice in
+            if let choice {
+                prefs.libraryBackend = choice
+                prefs.librarySync = true
+            } else {
+                prefs.librarySync = false
+            }
+        })
+    }
+
+    private var syncFooter: String {
+        switch prefs.libraryBackend {
+        case .iCloud:
+            "Captures, with their names, tags, notes and pictures, go to every Mac where you use SnagAnything with sync on, end-to-end encrypted with your sync passphrase. Deleting a capture removes it everywhere. Captures count against your iCloud storage."
+        case .folder:
+            "Captures go into a folder that Dropbox, OneDrive, Google Drive or any other sync app keeps on all your Macs, each file encrypted with your sync passphrase, so the service can't see them. Each Mac picks where that folder is; settings still sync through iCloud. Each Mac makes this choice for itself, so choose the same on every Mac that shares the library."
+        }
+    }
+
+    var body: some View {
+        Section {
+            if prefs.librarySync {
+                if !settingsSync.isReady {
+                    Text("Waiting for your sync passphrase above.").foregroundStyle(.secondary)
+                } else if prefs.libraryBackend == .folder {
+                    FolderSyncRows()
+                } else if let error = librarySync.lastError {
+                    Text(error).foregroundStyle(.red)
+                } else {
+                    LabeledContent {
+                        Button("Sync Now") { librarySync.syncNow() }
+                    } label: {
+                        if librarySync.pendingUploads > 0 {
+                            Text("Uploading \(librarySync.pendingUploads) capture\(librarySync.pendingUploads == 1 ? "" : "s")…")
+                        } else if let date = librarySync.lastSynced {
+                            Text("Synced \(date.formatted(date: .omitted, time: .shortened))")
+                        } else {
+                            Text("Waiting for iCloud…")
+                        }
+                    }
+                }
+            }
+            if prefs.librarySync {
+                Toggle(isOn: $prefs.syncVideos) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Sync video files")
+                        Text(prefs.syncVideos
+                             ? "Recordings play on every Mac. Long ones take a lot of room\(prefs.libraryBackend == .iCloud ? " in iCloud" : " in the sync folder")."
+                             : "Recordings' names, tags, notes and first frames sync; the videos stay on the Mac that recorded them.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                if let problem = librarySync.videoProblem, prefs.syncVideos, prefs.libraryBackend == .iCloud {
+                    Text(problem).font(.caption).foregroundStyle(.orange)
+                }
+            }
+            if prefs.librarySync && prefs.libraryBackend == .folder && settingsSync.isReady && librarySync.iCloudCaptureCount > 0 {
+                LabeledContent {
+                    Button("Remove from iCloud…") { confirmRemoveICloud = true }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(librarySync.iCloudCaptureCount) capture\(librarySync.iCloudCaptureCount == 1 ? "" : "s") still in iCloud")
+                        Text("From before the library moved to a folder. They take up iCloud storage.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } header: {
+            Text("Library sync")
+        } footer: {
+            Text(syncFooter).font(.caption).foregroundStyle(.secondary)
+        }
+        .confirmationDialog("Remove the library's copies from iCloud?", isPresented: $confirmRemoveICloud) {
+            Button("Remove from iCloud", role: .destructive) { librarySync.removeFromICloud() }
+        } message: {
+            Text("Your captures stay on your Macs and in the sync folder; only the copies in iCloud go. First update SnagAnything to this version on every Mac that syncs: an older version still syncing the library through iCloud would delete those captures too.")
         }
     }
 }

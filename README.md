@@ -7,7 +7,7 @@ need means opening them one by one. SnagAnything keeps every capture in a librar
 named from what's in it ("Quarterly Revenue Chart", "Xcode Build Error") by Apple Intelligence on your Mac, and
 you can find it again by its name, the date, its tags or notes, or any text that appears in the picture.
 
-<p align="center"><img src="docs/images/capturelens-library-editor.webp" width="800" alt="The SnagAnything library with nine sample captures, filters for tags, apps and websites, and a marked-up sales chart beside them with the markup tools, and its name, tags and notes at the right"></p>
+<p align="center"><img src="docs/images/capturelens-library-editor.webp" width="800" alt="The SnagAnything library marking up a sample sales chart at full size, with the markup tools in a slim strip beside it, the other captures in a filmstrip underneath, and its name, tags and notes at the right"></p>
 
 SnagAnything also:
 - **Captures** the whole screen, one window (even where others cover it), an area you drag out, or a frame of an
@@ -67,7 +67,7 @@ Requires macOS 26 or later. Automatic names need Apple Intelligence turned on.
 <table>
 <tr>
 <td width="50%"><img src="docs/images/capturelens-annotate.webp" alt="A sample sales chart marked up with a numbered box, a callout and an arrow, with the markup tools in a strip beside it"><br><sub><b>Markup.</b> Boxes, arrows, callouts and steps that stay editable.</sub></td>
-<td width="50%"><img src="docs/images/capturelens-dial.webp" alt="The markup tools as a radial dial over a capture, with colors inside and line widths underneath"><br><sub><b>Strip or dial.</b> The tools as a radial dial, pinned open.</sub></td>
+<td width="50%"><img src="docs/images/capturelens-dial.webp" alt="The markup tools as a radial dial on a glass disc over a capture, with colors and line widths in a bar underneath"><br><sub><b>Strip or dial.</b> The tools as a radial dial, pinned open.</sub></td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/images/capturelens-smart-move.webp" alt="Smart Move outlining the fields, buttons and lines of text in a sample Account Settings capture"><br><sub><b>Smart Move.</b> Pick up parts of the picture and move them.</sub></td>
@@ -115,9 +115,9 @@ check for updates.
 
 The library is encrypted on your Mac with AES-256, using a key kept in your keychain, and can require Touch ID
 or your password to open. Sync is end-to-end encrypted: with "Sync with your other Macs" on (and its Settings and
-Library switches, which each Mac sets for itself), your settings and library are sealed on your Mac before they reach iCloud, using a key that only your sync
+Library choices, which each Mac sets for itself), your settings and library are sealed on your Mac before they reach iCloud, using a key that only your sync
 passphrase unlocks. Neither Apple nor the developer can read what's synced. The library can sync through a
-folder that Dropbox, OneDrive, Google Drive or another sync app keeps on your Macs instead (Settings › Library);
+folder that Dropbox, OneDrive, Google Drive or another sync app keeps on your Macs instead (Settings › General);
 every file there is encrypted the same way, and settings keep syncing through iCloud. Recordings' video files stay
 on the Mac that recorded them unless you turn on "Sync video files"; their names, tags and notes always sync.
 

@@ -227,7 +227,7 @@ struct ActivitySettings: View {
                 Text("No captures yet. Press \(Preferences.shared.presets.first?.hotKey?.display ?? "the capture shortcut") to take one.")
                     .font(.callout).foregroundStyle(.secondary)
                     .padding(8)
-                    .background(.background, in: RoundedRectangle(cornerRadius: 6))
+                    .background(.background, in: RoundedRectangle(cornerRadius: Radius.sm))
             }
         }
     }

@@ -1016,8 +1016,12 @@ extension AnnotationEditor.Tool {
 
     /// Every tool, select first, in the palette's order.
     static var all: [AnnotationEditor.Tool] {
-        [.select] + ToolPalette.groups.flatMap(\.items).compactMap { item in
-            if case .tool(let tool, _, _) = item { tool } else { nil }
+        [.select] + ToolPalette.groups.flatMap(\.items).flatMap { item -> [AnnotationEditor.Tool] in
+            switch item {
+            case .tool(let tool, _, _): [tool]
+            case .variants(let group): group.tools
+            case .rotate, .adjustMenu: []
+            }
         }
     }
 }
@@ -1240,17 +1244,39 @@ struct AnnotationToolbar: View {
     }
 }
 
-/// The tools, in a column beside the picture, grouped by what they're for. Select is on
-/// top; a line sets each group off.
+/// The tools, in a slim column beside the picture (or a row under it), grouped by what
+/// they're for. Select is on top; a line sets each group off. Tools used less often share a
+/// button with a small triangle in its corner: a click uses the one shown, holding the button
+/// (or right-clicking it) lists the others. Each tool's key is in its tooltip.
 struct ToolPalette: View {
     @State private var editor = AnnotationEditor.shared
 
     enum Item: Hashable {
         case tool(AnnotationEditor.Tool, symbol: String, help: String)
-        case rotate(clockwise: Bool)
+        case variants(Variants)
+        case rotate
         case adjustMenu
-        case smartRedact
-        case simplify
+    }
+
+    /// Tools that share one button.
+    enum Variants: String, Hashable {
+        case hide, smart, cut
+
+        var title: String {
+            switch self {
+            case .hide: "Hide"
+            case .smart: "Smart tools"
+            case .cut: "Cut Out"
+            }
+        }
+
+        var tools: [AnnotationEditor.Tool] {
+            switch self {
+            case .hide: [.draw(.blur), .draw(.pixelate), .draw(.redact)]
+            case .smart: [.draw(.editText), .draw(.move)]
+            case .cut: [.cut(.horizontal), .cut(.vertical)]
+            }
+        }
     }
 
     static let groups: [(title: String, items: [Item])] = [
@@ -1258,77 +1284,88 @@ struct ToolPalette: View {
         ("Text", [.text, .callout, .step, .stamp].map(drawItem)),
         ("Draw", [.pen, .highlighter].map(drawItem)),
         ("Focus", [.spotlight, .magnify].map(drawItem)),
-        ("Hide", [.blur, .pixelate, .redact].map(drawItem) + [.smartRedact]),
-        ("Smart", [.editText, .move].map(drawItem) + [.simplify]),
+        ("Hide and smart tools", [.variants(.hide), .variants(.smart)]),
         ("Adjust", [
             .tool(.crop, symbol: "crop", help: "Crop: drag out the part to keep, drag the corners to adjust, Return when done (Y)"),
-            .tool(.cut(.horizontal), symbol: "rectangle.split.1x2", help: "Cut out a strip across: drag over the rows to take out"),
-            .tool(.cut(.vertical), symbol: "rectangle.split.2x1", help: "Cut out a strip down: drag over the columns to take out"),
-            .rotate(clockwise: false), .rotate(clockwise: true), .adjustMenu,
+            .variants(.cut), .rotate, .adjustMenu,
         ]),
     ]
 
     static func drawItem(_ kind: Annotation.Kind) -> Item {
-        let key = AnnotationLayerView.toolKeys.first { $0.value == .draw(kind) }?.key.uppercased()
-        return .tool(.draw(kind), symbol: kind.symbol, help: kind.title + (key.map { " (\($0))" } ?? ""))
+        .tool(.draw(kind), symbol: kind.symbol, help: help(.draw(kind)))
+    }
+
+    /// A tool's name and its key: "Rectangle (R)".
+    static func help(_ tool: AnnotationEditor.Tool) -> String {
+        let name: String
+        switch tool {
+        case .cut(.horizontal): name = "Cut out a strip across: drag over the rows to take out"
+        case .cut(.vertical): name = "Cut out a strip down: drag over the columns to take out"
+        default: name = tool.title
+        }
+        return name + (tool.shortcut.map { " (\($0))" } ?? "")
     }
 
     /// A row along the bottom of the picture rather than a column at its side.
     var horizontal = false
 
-    private let columns = [GridItem(.fixed(36), spacing: 4), GridItem(.fixed(36), spacing: 4)]
-    private let rows = [GridItem(.fixed(34), spacing: 4), GridItem(.fixed(34), spacing: 4)]
+    private static let button = CGSize(width: 36, height: 34)
     static let selectItem = Item.tool(.select, symbol: "cursorarrow", help: "Select, move and resize (V)")
 
     var body: some View {
         Group {
             if horizontal {
-                // All of it when it fits, else it scrolls sideways.
+                // One row when it fits, else two rows, and only then does it scroll.
                 ViewThatFits(in: .horizontal) {
-                    row
-                    ScrollView(.horizontal, showsIndicators: false) { row }
+                    row(lines: 1)
+                    row(lines: 2)
+                    ScrollView(.horizontal) { row(lines: 2) }
                 }
             } else {
+                // One slim column when it fits, else two, and only then does it scroll.
                 ViewThatFits(in: .vertical) {
-                    column
-                    ScrollView(.vertical, showsIndicators: false) { column }
+                    column(across: 1)
+                    column(across: 2)
+                    ScrollView(.vertical) { column(across: 2) }
                 }
-                .frame(width: 92)
             }
         }
         .buttonStyle(.borderless)
     }
 
-    private var column: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func column(across: Int) -> some View {
+        let columns = Array(repeating: GridItem(.fixed(Self.button.width), spacing: Space.xs), count: across)
+        return VStack(alignment: .leading, spacing: Space.sm) {
             button(Self.selectItem)
             ForEach(Self.groups, id: \.title) { group in
-                Divider().padding(.horizontal, 4)
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 4) {
+                Divider().padding(.horizontal, Space.xs)
+                LazyVGrid(columns: columns, alignment: .leading, spacing: Space.xs) {
                     ForEach(group.items, id: \.self) { item in button(item) }
                 }
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel(group.title)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 10)
+        .padding(.horizontal, Space.sm)
+        .padding(.vertical, Space.md)
+        .fixedSize()
     }
 
-    private var row: some View {
-        HStack(alignment: .center, spacing: 8) {
+    private func row(lines: Int) -> some View {
+        let rows = Array(repeating: GridItem(.fixed(Self.button.height), spacing: Space.xs), count: lines)
+        return HStack(alignment: .center, spacing: Space.sm) {
             button(Self.selectItem)
             ForEach(Self.groups, id: \.title) { group in
-                Divider().frame(height: 60)
-                LazyHGrid(rows: rows, alignment: .top, spacing: 4) {
+                Divider().frame(height: lines == 1 ? Self.button.height : Self.button.height * 2 + Space.xs)
+                LazyHGrid(rows: rows, alignment: .top, spacing: Space.xs) {
                     ForEach(group.items, id: \.self) { item in button(item) }
                 }
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel(group.title)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, Space.md)
+        .padding(.vertical, Space.sm)
         .fixedSize()
     }
 
@@ -1336,58 +1373,147 @@ struct ToolPalette: View {
         switch item {
         case .tool(let tool, let symbol, let help):
             let on = editor.tool == tool
-            Button { editor.pick(tool) } label: { icon(symbol, on: on, key: tool.shortcut) }
+            Button { editor.pick(tool) } label: { Self.face(symbol, on: on) }
                 .help(help)
-        case .rotate(let clockwise):
-            Button {
-                editor.editEdits(clockwise ? "Rotate Right" : "Rotate Left") { $0 = $0.rotated(clockwise: clockwise) }
-            } label: { icon(clockwise ? "rotate.right" : "rotate.left", on: false) }
-                .help(clockwise ? "Rotate right" : "Rotate left")
+        case .variants(let group):
+            VariantsButton(group: group)
+        case .rotate:
+            RotateButton()
         case .adjustMenu:
             AdjustMenu(compact: true)
-        case .smartRedact:
-            Menu {
-                Button("Hide Sensitive Info with Black Boxes") { editor.smartRedact(with: .redact) }
-                Button("Hide Sensitive Info with Blur") { editor.smartRedact(with: .blur) }
-                Button("Hide Sensitive Info with Pixels") { editor.smartRedact(with: .pixelate) }
-            } label: { icon("wand.and.stars", on: false) }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("Smart Redact: find email addresses, phone numbers, card numbers and more, and hide them")
-        case .simplify:
-            Menu {
-                Button("Simplify in Its Own Colors") { editor.simplify(.original) }
-                Button("Simplify in Grays") { editor.simplify(.grays) }
-                if editor.annotations.contains(where: { $0.kind == .simplify }) {
-                    Divider()
-                    Button("Remove Simplify") { editor.removeSimplify() }
-                }
-            } label: {
-                if editor.simplifying { ProgressView().controlSize(.small).frame(width: 36, height: 34) } else { icon("rectangle.3.group", on: false) }
-            }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("Simplify: redraw the picture as plain shapes, a bar for each line of text and a box for each part")
         }
     }
 
-    /// A tool's button face: its symbol, and its key letter small in the corner.
-    private func icon(_ symbol: String, on: Bool, key: String? = nil) -> some View {
+    /// A tool's button face; `more` adds the corner triangle of a button with other tools behind it.
+    static func face(_ symbol: String, on: Bool, more: Bool = false) -> some View {
         Image(systemName: symbol)
             .font(.system(size: 18))
-            .frame(width: 36, height: 34)
-            .background(on ? Color.accentColor.opacity(0.22) : Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+            .frame(width: button.width, height: button.height)
+            .background(on ? Color.accentColor.opacity(0.22) : Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: Radius.control))
             .foregroundStyle(on ? Color.accentColor : .primary)
             .overlay(alignment: .bottomTrailing) {
-                if let key {
-                    Text(key).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary).padding(.trailing, 2).padding(.bottom, 0)
+                if more {
+                    CornerTriangle().fill(.secondary).frame(width: 5, height: 5).padding(Space.xs - 1)
                 }
             }
             .contentShape(Rectangle())
+    }
+}
+
+private struct CornerTriangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { p in
+            p.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+            p.closeSubpath()
+        }
+    }
+}
+
+/// Several tools behind one button: it shows the one in use, or the one used last; a click
+/// picks it, holding the button or right-clicking it lists them all, with the group's
+/// one-off actions (Smart Redact, Simplify).
+private struct VariantsButton: View {
+    let group: ToolPalette.Variants
+    @State private var editor = AnnotationEditor.shared
+    @AppStorage private var lastID: String
+
+    init(group: ToolPalette.Variants) {
+        self.group = group
+        _lastID = AppStorage(wrappedValue: group.tools[0].id, "editor.variants.\(group.rawValue)", store: AppDefaults.store)
+    }
+
+    private var shown: AnnotationEditor.Tool {
+        if group.tools.contains(editor.tool) { return editor.tool }
+        return group.tools.first { $0.id == lastID } ?? group.tools[0]
+    }
+
+    var body: some View {
+        let shown = shown
+        Menu {
+            entries
+        } label: {
+            if group == .smart && editor.simplifying {
+                ProgressView().controlSize(.small).frame(width: 36, height: 34)
+            } else {
+                ToolPalette.face(shown.symbol, on: editor.tool == shown, more: true)
+            }
+        } primaryAction: {
+            pick(shown)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .contextMenu { entries }
+        .help("\(ToolPalette.help(shown)). Hold or right-click for the other \(group.title.lowercased()).")
+        .onChange(of: editor.tool) { _, tool in
+            if group.tools.contains(tool) { lastID = tool.id }
+        }
+    }
+
+    @ViewBuilder private var entries: some View {
+        ForEach(group.tools, id: \.self) { tool in
+            Button { pick(tool) } label: {
+                Label(tool.title + (tool.shortcut.map { "  (\($0))" } ?? ""), systemImage: tool.symbol)
+            }
+        }
+        switch group {
+        case .hide:
+            Divider()
+            Menu("Smart Redact") {
+                Button("Hide Sensitive Info with Black Boxes") { editor.smartRedact(with: .redact) }
+                Button("Hide Sensitive Info with Blur") { editor.smartRedact(with: .blur) }
+                Button("Hide Sensitive Info with Pixels") { editor.smartRedact(with: .pixelate) }
+            }
+        case .smart:
+            Divider()
+            Button("Simplify in Its Own Colors") { editor.simplify(.original) }
+            Button("Simplify in Grays") { editor.simplify(.grays) }
+            if editor.annotations.contains(where: { $0.kind == .simplify }) {
+                Button("Remove Simplify") { editor.removeSimplify() }
+            }
+        case .cut:
+            EmptyView()
+        }
+    }
+
+    private func pick(_ tool: AnnotationEditor.Tool) {
+        lastID = tool.id
+        editor.pick(tool)
+    }
+}
+
+/// Rotate: a click turns the picture the way it last turned; hold or right-click for both ways.
+private struct RotateButton: View {
+    @State private var editor = AnnotationEditor.shared
+    @AppStorage("editor.rotateClockwise", store: AppDefaults.store) private var clockwise = true
+
+    var body: some View {
+        Menu {
+            entries
+        } label: {
+            ToolPalette.face(clockwise ? "rotate.right" : "rotate.left", on: false, more: true)
+        } primaryAction: {
+            rotate(clockwise)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .contextMenu { entries }
+        .help(clockwise ? "Rotate right. Hold or right-click to rotate left." : "Rotate left. Hold or right-click to rotate right.")
+    }
+
+    @ViewBuilder private var entries: some View {
+        Button { rotate(false) } label: { Label("Rotate Left", systemImage: "rotate.left") }
+        Button { rotate(true) } label: { Label("Rotate Right", systemImage: "rotate.right") }
+    }
+
+    private func rotate(_ clockwise: Bool) {
+        self.clockwise = clockwise
+        editor.editEdits(clockwise ? "Rotate Right" : "Rotate Left") { $0 = $0.rotated(clockwise: clockwise) }
     }
 }
 
@@ -1491,10 +1617,8 @@ struct AdjustMenu: View {
             }
         } label: {
             if editor.redacting { ProgressView().controlSize(.small) } else if compact {
-                Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 18))
-                    .frame(width: 36, height: 34)
-                    .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+                // A menu, so it has the corner triangle of the palette's other menus.
+                ToolPalette.face("slider.horizontal.3", on: false, more: true)
             } else { Image(systemName: "slider.horizontal.3") }
         }
         .modifier(MenuLook(tile: compact))

@@ -70,6 +70,12 @@ enum DebugShots {
             AnnotationEditor.shared.showResult = true
             try? await Task.sleep(for: .seconds(1))
             await shoot(window, "library-result-light", out: out, note: note)
+            // A narrower window: the filters fold into one Filters button.
+            place(window, size: CGSize(width: 1100, height: 760), on: screen)
+            try? await Task.sleep(for: .seconds(1.5))
+            await shoot(window, "library-narrow-light", out: out, note: note)
+            place(window, size: CGSize(width: 1440, height: 900), on: screen)
+            try? await Task.sleep(for: .seconds(1))
             AnnotationEditor.shared.showResult = false
             AppDefaults.store.set("dark", forKey: AppAppearance.key)
             library.state.showInfo = false
@@ -197,7 +203,7 @@ enum DebugShots {
             // Settings, as a new install has them.
             prefs.autoName = true
             let small = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_SCREEN_HEIGHT"] != nil
-            for tab in small ? ["Capture", "Presets", "Library", "Privacy", "Activity", "General"] : ["Capture", "Library", "Activity"] {
+            for tab in small ? ["Capture", "Presets", "Library", "Privacy", "Activity", "General"] : ["General", "Capture", "Presets", "Library", "Activity"] {
                 SettingsWindow.shared.show(tab: tab)
                 try? await Task.sleep(for: .seconds(1.5))
                 if let settings = SettingsWindow.shared.debugWindow {
@@ -208,6 +214,23 @@ enum DebugShots {
                     settings.orderOut(nil)
                 }
             }
+
+            // The capture bar, across and down, then in Light.
+            prefs.showCaptureBar = true
+            CaptureBar.shared.start()
+            CaptureBar.shared.refresh()
+            for (name, layout) in [("capture-bar", CaptureBarLayout.horizontal), ("capture-bar-vertical", .vertical)] {
+                prefs.captureBarLayout = layout
+                try? await Task.sleep(for: .seconds(1.5))
+                if let bar = CaptureBar.shared.debugPanel, bar.isVisible { await shoot(bar, name, out: out, note: note) } else { note("\(name): no bar") }
+            }
+            prefs.captureBarLayout = .horizontal
+            AppDefaults.store.set("light", forKey: AppAppearance.key)
+            try? await Task.sleep(for: .seconds(1.5))
+            if let bar = CaptureBar.shared.debugPanel, bar.isVisible { await shoot(bar, "capture-bar-light", out: out, note: note) }
+            prefs.showCaptureBar = false
+            AppDefaults.store.set("dark", forKey: AppAppearance.key)
+            try? await Task.sleep(for: .seconds(1))
 
             // Import from Snagit, with made-up Snagit folders.
             if let folder = await sampleSnagitFolder() {

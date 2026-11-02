@@ -394,7 +394,7 @@ struct CaptureBarView: View {
 
     private var vertical: Bool { prefs.captureBarLayout == .vertical }
     private var size: CaptureBarSize { prefs.captureBarSize }
-    private var stack: AnyLayout { vertical ? AnyLayout(VStackLayout(spacing: 5)) : AnyLayout(HStackLayout(spacing: 5)) }
+    private var stack: AnyLayout { vertical ? AnyLayout(VStackLayout(spacing: Space.xs)) : AnyLayout(HStackLayout(spacing: Space.xs)) }
     private var colored: Bool { prefs.captureBarColors && colorScheme == .light }
     private func tint(_ color: Color) -> Color? { colored ? color : nil }
 
@@ -423,9 +423,12 @@ struct CaptureBarView: View {
                 }
             }
         }
-        .padding(5)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.primary.opacity(0.14), lineWidth: 0.5))
+        .padding(Space.xs)
+        // Liquid Glass, as floating controls are on macOS 26; the segments inside stay
+        // concentric with it (card − 4 pt padding = control).
+        .glassEffect(.regular, in: .rect(cornerRadius: Radius.card))
+        // Glass takes its look when it's made, so it's made again when the bar's look changes.
+        .id(colorScheme)
         .fixedSize()
         .contextMenu {
             Toggle("Color Highlighting", isOn: $prefs.captureBarColors)
@@ -459,8 +462,7 @@ struct BarLabelView: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Color.primary.opacity(0.14), lineWidth: 0.5))
+        .glassEffect(.regular, in: .rect(cornerRadius: Radius.sm))
         .fixedSize()
     }
 }
@@ -549,7 +551,7 @@ private struct CaptureSplitButton: View {
     @State private var hoverMenu = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
         let stack = vertical ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(HStackLayout(spacing: 0))
         let tint = colored ? Color.accentColor : Color.primary
         stack {
@@ -611,7 +613,7 @@ private struct BarSegment<Content: View>: View {
             .padding(1)
             .foregroundStyle(Color.primary)
             .background((tint ?? Color.primary).opacity(tint == nil ? 0.05 : 0.12),
-                        in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
     }
 }
 
@@ -631,7 +633,7 @@ private struct BarButton: View {
             Image(systemName: symbol)
                 .font(.system(size: size.icon))
                 .frame(width: size.button, height: size.button)
-                .background(Color.primary.opacity(hovering ? 0.08 : 0), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .background(Color.primary.opacity(hovering ? 0.08 : 0), in: RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

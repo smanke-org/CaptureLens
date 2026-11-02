@@ -78,8 +78,8 @@ private struct PreviewView: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(maxWidth: 220, maxHeight: 150)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.white.opacity(0.25)))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
+                .overlay(RoundedRectangle(cornerRadius: Radius.sm).strokeBorder(.white.opacity(0.25)))
                 .onDrag { dragProvider() }
                 .onTapGesture { open() }
             HStack(spacing: 4) {
@@ -96,7 +96,7 @@ private struct PreviewView: View {
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .overlay(alignment: .topLeading) {
             if hovered {
                 Button(action: close) {
