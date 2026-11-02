@@ -31,16 +31,15 @@ struct ToolPaletteDock<Content: View>: View {
     private var placement: PalettePlacement { PalettePlacement(rawValue: placementRaw) ?? .left }
 
     var body: some View {
-        Group {
-            if !enabled {
+        // The picture keeps one place in the layout wherever the strip goes (or with the dial):
+        // moving it there would make a new picture view, which loads its capture afresh.
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                if enabled && placement == .left { palette }
                 content()
-            } else {
-                switch placement {
-                case .left: HStack(spacing: 0) { palette; content() }
-                case .right: HStack(spacing: 0) { content(); palette }
-                case .bottom: VStack(spacing: 0) { content(); palette }
-                }
+                if enabled && placement == .right { palette }
             }
+            if enabled && placement == .bottom { palette }
         }
         .coordinateSpace(name: "palette-area")
         .onGeometryChange(for: CGSize.self) { $0.size } action: { area = $0 }
