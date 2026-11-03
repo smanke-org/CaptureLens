@@ -51,6 +51,9 @@ enum AgentSocket {
         unlink(path)
         let server = socket(AF_UNIX, SOCK_STREAM, 0)
         guard server >= 0, var address = try? address(path) else { return }
+        // A client that hangs up before its answer (Ctrl-C, or the CLI giving up after 30 s)
+        // must not end the app: writing to it would raise SIGPIPE. Accepted sockets inherit this.
+        noSigPipe(server)
         let bound = withUnsafePointer(to: &address) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(server, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
         }
@@ -64,6 +67,7 @@ enum AgentSocket {
             while true {
                 let client = accept(server, nil, nil)
                 guard client >= 0 else { continue }
+                noSigPipe(client)
                 Thread.detachNewThread { serve(client, handle: handle) }
             }
         }
@@ -101,6 +105,7 @@ enum AgentSocket {
         let client = socket(AF_UNIX, SOCK_STREAM, 0)
         guard client >= 0 else { throw AgentError.unavailable("no socket") }
         defer { close(client) }
+        noSigPipe(client)
         var address = try address(path)
         let connected = withUnsafePointer(to: &address) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(client, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
@@ -140,6 +145,11 @@ enum AgentSocket {
     }
 
     // MARK: Bytes
+
+    private static func noSigPipe(_ socket: Int32) {
+        var on: Int32 = 1
+        setsockopt(socket, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+    }
 
     private static func readLine(_ socket: Int32) -> Data {
         var data = Data()
