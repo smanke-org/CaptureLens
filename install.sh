@@ -20,5 +20,9 @@ else
   cp -R "$SRC" "$DEST"
 fi
 
+# The command line tool: the app's own binary under a short name (see Agent/AgentCLI.swift).
+mkdir -p "$HOME/.local/bin"
+ln -sf "$DEST/Contents/MacOS/SnagAnything" "$HOME/.local/bin/snag"
+
 open "$DEST"
 echo "Installed $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$DEST/Contents/Info.plist")"

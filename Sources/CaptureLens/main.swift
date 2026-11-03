@@ -3,6 +3,10 @@ import CaptureLensKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+// `snag <command>` (the app binary under a short name): run it against the running app and
+// exit, without starting a second copy. See Agent/AgentCLI.swift.
+if let code = AgentCLI.runIfRequested() { exit(code) }
+
 MainActor.assumeIsolated {
     // Tooltips after 0.375 s instead of the system's 1.5 s. AppKit reads this once, as it
     // starts, so it's registered first; a value set with `defaults write` still wins.
@@ -99,6 +103,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         NSApp.helpMenu = help
         NSApp.mainMenu = mainMenu
         #if DEBUG
+        // A test run of the agent CLI (APP_STORE): its own library and settings, and the agent
+        // socket. Nothing else starts: no sync, shortcuts, menu bar item or updater.
+        if AgentSocket.isTestRun {
+            AppDefaults.store.set(false, forKey: "library.encrypt")
+            _ = LibraryStore.shared
+            AgentSocket.listen { AgentRouter.handle($0) }
+            return
+        }
         // A test run shares the installed app's settings, so it checks Help and stops
         // before sync or anything else starts.
         if let snapshot = ProcessInfo.processInfo.environment["CAPTURELENS_DEBUG_HELP_TEST"] {
@@ -131,6 +143,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         let newInstall = !AppDefaults.store.bool(forKey: "welcomed")
         _ = LibraryStore.shared
         _ = LibraryLock.shared
+        // `snag` and the MCP server talk to the app through this.
+        AgentSocket.listen { AgentRouter.handle($0) }
         if newInstall { SettingsSync.shared.adoptOnNewInstall() }
         SettingsSync.shared.start()
         CaptureCollector.shared.start()

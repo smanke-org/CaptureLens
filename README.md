@@ -109,6 +109,30 @@ Actions can also be run from a URL, for ToolHUD, Shortcuts or scripts: `snaganyt
 `window`, `area`, `scrolling`, `steps`, `record`, `recapture`, `library` and `preset/<name>` (for example
 `open snaganything://screen`).
 
+### Command line and AI agents
+
+SnagAnything is also a command line tool, so scripts and AI agents (Claude Code, Codex) can search the library,
+read the text in captures, export, tag and rename them, and start captures. Commands run in the open app, and the
+library window shows each change at once. Link it once to type `snag`:
+
+```bash
+ln -s /Applications/SnagAnything.app/Contents/MacOS/SnagAnything ~/.local/bin/snag
+```
+
+```bash
+snag help
+snag captures list --search invoice --json
+snag captures export 3f2a9c1e --to ~/Desktop
+```
+
+Every command takes `--json`. Deleting only shows what it would delete until you add `--yes`, and a locked library
+stays locked until you unlock it. For MCP apps such as Claude Desktop, the same commands are served by
+`/Applications/SnagAnything.app/Contents/MacOS/SnagAnything mcp`:
+
+```bash
+claude mcp add --scope user snag -- /Applications/SnagAnything.app/Contents/MacOS/SnagAnything mcp
+```
+
 ## Privacy
 
 Naming captures and reading their text run entirely on your Mac. SnagAnything has no account, analytics or

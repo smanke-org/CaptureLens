@@ -52,6 +52,12 @@ final class LibraryStore {
         if let override = ProcessInfo.processInfo.environment["CAPTURELENS_LIBRARY_FOLDER"] {
             return URL(fileURLWithPath: override, isDirectory: true)
         }
+        #if DEBUG
+        // An agent CLI test copy keeps its library in the APP_STORE folder.
+        if AgentSocket.isTestRun, let store = ProcessInfo.processInfo.environment["APP_STORE"] {
+            return URL(fileURLWithPath: store, isDirectory: true)
+        }
+        #endif
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appending(path: "CaptureLens", directoryHint: .isDirectory)
     }()

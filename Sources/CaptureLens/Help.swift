@@ -324,6 +324,15 @@ enum Help {
                 ("snaganything://preset/<name>", "Run a preset by its name"),
             ]),
             .text("Use these links from Shortcuts, scripts or a launcher. Links starting capturelens://, from before SnagAnything was renamed, still work. ToolHUD's SnagAnything buttons use them. Pictures dropped on SnagAnything's Dock icon are added to the library."),
+            .heading("Command line and AI agents"),
+            .text("SnagAnything is also a command line tool, so scripts and AI agents such as Claude Code or Codex can search the library, read the text in captures, export, tag and rename them, and start captures. Commands run in the open app, and the library window shows each change at once. Deleting needs --yes, and a locked library stays locked until you unlock it."),
+            .keys([
+                ("snag help", "List every command and its options"),
+                ("snag captures list --search invoice", "Find captures, as the library's search does"),
+                ("snag captures export <id> --to ~/Desktop", "Save a capture as a PNG, markup included"),
+                ("snag mcp", "Offer the same commands to MCP apps, such as Claude Desktop"),
+            ]),
+            .text("To type snag in Terminal, link it once: ln -s /Applications/SnagAnything.app/Contents/MacOS/SnagAnything ~/.local/bin/snag (with ~/.local/bin on your PATH). MCP apps take the full path to that program, followed by mcp."),
         ]),
 
         HelpTopic(id: "troubleshooting", title: "Troubleshooting", symbol: "wrench.and.screwdriver", blocks: [
