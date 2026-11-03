@@ -319,11 +319,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             menu.addItem(stop)
             menu.addItem(.separator())
         }
-        for item in captureItems() { menu.addItem(item) }
+        for (index, item) in captureItems().enumerated() {
+            // The first preset is the main capture (the library's Capture button uses it too).
+            if index == 0, let symbol = prefs.presets.first?.mode.symbol { feature(item, symbol) }
+            menu.addItem(item)
+        }
         let again = item("Capture Same Area Again", #selector(captureAgain), hotKey: prefs.captureAgainHotKey)
         again.isEnabled = engine.lastRegion != nil
         menu.addItem(again)
-        menu.addItem(item("Capture Text", #selector(captureText), hotKey: prefs.captureTextHotKey, symbol: "text.viewfinder"))
+        menu.addItem(feature(item("Capture Text", #selector(captureText), hotKey: prefs.captureTextHotKey), "text.viewfinder"))
 
         let recorder = StepRecorder.shared
         menu.addItem(item(recorder.isRecording ? "Stop Recording Steps" : "Record Steps…", #selector(toggleSteps),
@@ -333,10 +337,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             bar.keyEquivalent = shortcut.key
             bar.keyEquivalentModifierMask = shortcut.mask
         }
-        menu.addItem(bar)
+        menu.addItem(feature(bar, "rectangle.split.3x1"))
 
         menu.addItem(.separator())
-        menu.addItem(item("Open Library…", #selector(showLibrary), hotKey: prefs.libraryHotKey, symbol: "photo.on.rectangle"))
+        menu.addItem(feature(item("Open Library…", #selector(showLibrary), hotKey: prefs.libraryHotKey), "photo.on.rectangle"))
         let recent = LibraryStore.shared.items.prefix(5)
         if !recent.isEmpty && !LibraryLock.shared.isLocked {
             let recentItem = NSMenuItem(title: "Recent Captures", action: nil, keyEquivalent: "")
@@ -365,14 +369,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         helpEntry.target = self
         helpEntry.image = NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: nil)
         menu.addItem(helpEntry)
-        menu.addItem(item("Settings…", #selector(showSettings), key: ","))
+        menu.addItem(feature(item("Settings…", #selector(showSettings), key: ","), "gearshape"))
         #if !APPSTORE
         if let staged = AutoUpdater.shared.staged {
-            menu.addItem(item("Update to \(staged.version) Now (Otherwise Installs When Idle)", #selector(installUpdateNow)))
+            menu.addItem(feature(item("Update to \(staged.version) Now (Otherwise Installs When Idle)", #selector(installUpdateNow)), "arrow.down.circle"))
         } else if let pending = UpdateAvailability.shared.pending {
-            menu.addItem(item("Update to \(pending)…", #selector(checkForUpdates)))
+            menu.addItem(feature(item("Update to \(pending)…", #selector(checkForUpdates)), "arrow.down.circle"))
         } else {
-            menu.addItem(item("Check for Updates…", #selector(checkForUpdates)))
+            menu.addItem(feature(item("Check for Updates…", #selector(checkForUpdates)), "arrow.down.circle"))
         }
         #endif
         menu.addItem(item("About \(AppInfo.name)", #selector(showAbout)))
@@ -404,6 +408,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             item.keyEquivalentModifierMask = shortcut.mask
         }
         if let symbol { item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
+        return item
+    }
+
+    /// Marks one of the menu's most-used items with an icon. macOS 27 draws no item images in
+    /// menus, so the icon goes in the title, in a slot of fixed width so the titles line up. It
+    /// is a template, so it turns white with the text when the item is highlighted.
+    @discardableResult
+    private func feature(_ item: NSMenuItem, _ symbol: String) -> NSMenuItem {
+        let font = NSFont.menuFont(ofSize: 0)
+        guard let symbolImage = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: font.pointSize, weight: .regular)) else { return item }
+        let slot = NSSize(width: (font.pointSize * 1.5).rounded(), height: symbolImage.size.height)
+        let icon = NSImage(size: slot, flipped: false) { rect in
+            let size = symbolImage.size
+            symbolImage.draw(in: NSRect(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2, width: size.width, height: size.height))
+            return true
+        }
+        icon.isTemplate = true
+        let attachment = NSTextAttachment()
+        attachment.image = icon
+        attachment.bounds = CGRect(x: 0, y: (font.capHeight - slot.height) / 2, width: slot.width, height: slot.height)
+        let title = NSMutableAttributedString(attachment: attachment)
+        title.append(NSAttributedString(string: " " + item.title))
+        title.addAttribute(.font, value: font, range: NSRange(location: 0, length: title.length))
+        item.attributedTitle = title
+        // An image as well would show twice if menus draw images again.
+        item.image = nil
         return item
     }
 

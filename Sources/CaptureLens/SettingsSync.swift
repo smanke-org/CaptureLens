@@ -783,7 +783,7 @@ enum DebugCommands {
                 case "menu":
                     let menu = NSMenu()
                     (NSApp.delegate as? AppDelegate)?.menuNeedsUpdate(menu)
-                    let item = menu.items.first { $0.title == "Show Capture Bar" }
+                    let item = menu.items.first { $0.title.hasSuffix("Show Capture Bar") }
                     let viewItem = NSApp.mainMenu?.items.first { $0.submenu?.title == "View" }?.submenu?.items.first
                     if let viewItem { NSApp.mainMenu?.items.first { $0.submenu?.title == "View" }?.submenu?.update() }
                     result = "menu bar item \(item.map { "\($0.state == .on) key \($0.keyEquivalent)" } ?? "missing"), view item \(viewItem.map { "\($0.state == .on)" } ?? "missing") ; "
@@ -1014,6 +1014,17 @@ enum DebugCommands {
             case "tool-style": prefs.toolStyle = ToolStyle(rawValue: arg) ?? .toolbar
             case "dial-trigger": prefs.dialTrigger = DialTrigger(rawValue: arg) ?? .rightClick
             case "dial-layout": prefs.dialLayout = DialLayout(rawValue: arg) ?? .slices
+            case "status-menu":
+                // `status-menu`: pops the menu bar menu up on the 2× screen for 4 s, so the shell can
+                // shoot it (it is the app's window at layer 101).
+                let menu = NSMenu()
+                (NSApp.delegate as? AppDelegate)?.menuNeedsUpdate(menu)
+                DispatchQueue.main.async {
+                    let close = Timer(timeInterval: 4, repeats: false) { _ in menu.cancelTracking() }
+                    RunLoop.main.add(close, forMode: .common)
+                    let screen = NSScreen.screens.first { $0.backingScaleFactor >= 2 } ?? NSScreen.main!
+                    menu.popUp(positioning: nil, at: CGPoint(x: screen.frame.maxX - 420, y: screen.frame.maxY - 120), in: nil)
+                }
             case "dial-group":
                 // `dial-group:<n>`: the open dial shows group n's tools, as pointing at it would.
                 if let window = LibraryWindow.shared.window, let scroll = PanTest.find(window.contentView), let n = Int(arg),

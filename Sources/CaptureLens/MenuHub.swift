@@ -213,7 +213,9 @@ struct HubItem: Codable, Sendable {
             guard item.view == nil || picture != nil || !item.title.isEmpty else { return nil }
             let path = path.isEmpty ? "\(index)" : "\(path).\(index)"
             item.submenu?.update()
-            return HubItem(title: picture == nil ? item.title : "", path: path, isSeparator: item.isSeparatorItem, isEnabled: item.isEnabled,
+            // An icon in an attributed title shows in the title as an attachment character.
+            let title = item.title.replacingOccurrences(of: "\u{FFFC} ", with: "")
+            return HubItem(title: picture == nil ? title : "", path: path, isSeparator: item.isSeparatorItem, isEnabled: item.isEnabled,
                            state: item.state.rawValue, key: item.keyEquivalent,
                            modifiers: item.keyEquivalentModifierMask.rawValue, isAlternate: item.isAlternate,
                            indentation: item.indentationLevel, toolTip: item.toolTip,
